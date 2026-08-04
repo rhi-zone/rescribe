@@ -61,9 +61,11 @@
 //! arrives — bounded by that embedded blob's own size, not the document's,
 //! but real for documents with very large embedded binary objects.
 //!
-//! **`StartDocument.fonts`/`colors` diverge from `events()`'s in general —
-//! a structural conflict, not a chunking bug.** [`crate::sem_events::events`]
-//! computes these fields by walking the *entire* parsed document
+//! **`StartDocument.fonts`/`colors` can diverge from `events()`'s, but the
+//! true values are always recoverable via `Event::TableOrderResolved` —
+//! fixed 2026-08-04, see below for what was structural and what wasn't.**
+//! [`crate::sem_events::events`] computes `StartDocument`'s `fonts`/`colors`
+//! by walking the *entire* parsed document
 //! ([`crate::tables::build_font_map`]/[`build_color_map`]: the font/color
 //! table an emitter should treat as canonical, deduplicated, in
 //! first-*use* order, with an implicit "Times New Roman" default always at
@@ -71,35 +73,57 @@
 //! font/color reference anywhere in the body has been seen. A genuinely
 //! incremental reader cannot compute that before emitting `StartDocument`
 //! (which must be the first event) without buffering the whole document
-//! first, which is exactly what this rewrite exists to avoid. So
-//! `StreamingParser` emits the document's own *declared* header tables
-//! instead (`parse_font_table`/`parse_color_table`'s output — the same
-//! tables `Parser` itself resolves body `\f<n>`/`\cf<n>` references against,
-//! and the same convention `RtfDoc.color_table` uses), available after
-//! `O(header size)` bytes. Every font/color a body `StartFont`/`StartColor`
-//! event carries is guaranteed to already be present in this table (that's
-//! where the reader resolved its name/RGB value from in the first place) —
-//! the divergence is only in *set completeness* (the header may declare
-//! fonts/colors the body never uses) and *order* (declaration order vs.
-//! first-use order), and, for fonts specifically, in the implicit-default
-//! convention (`build_font_map` always prepends `"Times New Roman"` at index
-//! 0 regardless of what — if anything — the header declares there;
-//! `parse_font_table` returns whatever the header's `\fonttbl` actually
-//! declares, or `[""]` if there is none). Concretely: `events(br"{\rtf1}")`
-//! yields `StartDocument { fonts: vec!["Times New Roman"], colors: vec![] }`
-//! (proven by `sem_events::tests::test_semantic_events_empty_doc`), while
-//! `StreamingParser` for the same input yields `StartDocument { fonts:
-//! vec![""], colors: vec![] }`. This is the "narrower correctness boundary"
-//! CLAUDE.md's fixture-of-work process asks a reader to document precisely
-//! when the general case is genuinely unreachable rather than declare defeat
-//! early: the body event stream (everything after `StartDocument`) is
-//! verified byte-for-byte identical to `events()` under adversarial chunking
-//! (see `tests/streaming_apis.rs`'s `rtf_streaming_parser_matches_events_under_adversarial_chunking`);
-//! only `StartDocument`'s own two fields differ, and only when a document's
-//! header declares different fonts/colors (or a different order) than its
-//! body actually uses — which does not happen for any fixture in this
-//! repository's `fixtures/rtf/` corpus, but is not guaranteed never to
-//! happen for a document from elsewhere.
+//! first, which is exactly what this rewrite exists to avoid. This part is a
+//! genuine, structural limit — not fixable without either buffering the
+//! whole document (defeating the point of this rewrite) or delaying
+//! `StartDocument` past the point RTF requires it (also not an option: the
+//! header must precede the body).
+//!
+//! So `StreamingParser` emits the document's own *declared* header tables in
+//! `StartDocument` (`parse_font_table`/`parse_color_table`'s output — the
+//! same tables `Parser` itself resolves body `\f<n>`/`\cf<n>` references
+//! against, and the same convention `RtfDoc.color_table` uses), available
+//! after `O(header size)` bytes. Every font/color a body `StartFont`/
+//! `StartColor` event carries is guaranteed to already be present in this
+//! table (that's where the reader resolved its name/RGB value from in the
+//! first place), so the output is always valid RTF regardless — but the
+//! *order* (declaration order vs. first-use order) and *set* (the header may
+//! declare fonts/colors the body never uses) can differ from what
+//! `events()` reports.
+//!
+//! What *was* fixable, and is: two independent things used to compound this
+//! into a false "this is unrecoverable" impression.
+//!
+//! 1. **The true first-use table is never lost — only delayed.**
+//!    `used_fonts`/`used_colors` on [`BodyState`] accumulate first-occurrence
+//!    order incrementally, one increment at a time
+//!    ([`crate::tables::collect_used_fonts_incremental`]/
+//!    [`collect_used_colors_incremental`]) — bounded state, proportional to
+//!    the number of distinct fonts/colors actually used, not document size.
+//!    By `finish()`, the whole body has been seen, so this accumulator is
+//!    byte-identical to what `build_font_map`/`build_color_map` would
+//!    compute over the whole parsed document. `finish()` reports it via
+//!    [`crate::sem_events::Event::TableOrderResolved`], emitted right before
+//!    `EndDocument` — a consumer that needs the true order (e.g. to
+//!    reproduce `events()`'s exact header) gets it there, just later than
+//!    `StartDocument` rather than never.
+//! 2. **The "no `\fonttbl` at all" case was a plain convention mismatch, not
+//!    a structural one, and has been fixed directly.** `parse_font_table`
+//!    used to default to `[""]` for a document with no `\fonttbl` group,
+//!    while `build_font_map` always defaults to `["Times New Roman"]`. That
+//!    default is never observable in parsed `Inline::Font` output (see
+//!    `parse_font_table`'s doc comment), so it was safe to change
+//!    `parse_font_table`'s fallback to match `build_font_map`'s convention
+//!    directly — eliminating this divergence rather than working around it.
+//!
+//! After both fixes, the only *remaining* `StartDocument` divergence is a
+//! document whose header genuinely declares fonts/colors in a different
+//! order, or a different set, than the body actually uses — a real
+//! document shape RTF permits, not present in any fixture in this
+//! repository's `fixtures/rtf/` corpus, but not guaranteed to be absent from
+//! a document produced by some other tool. For such a document,
+//! `StartDocument` still reports the declared table; `TableOrderResolved`
+//! still recovers the true one.
 //!
 //! **Degenerate fallback**: if the header is never confirmed complete even
 //! at `finish()` (malformed/truncated input — e.g. an `\fonttbl` or `\binN`
@@ -222,6 +246,20 @@ struct BodyState {
     buf: Vec<u8>,
     scan_pos: usize,
     carry: crate::parse::BodyCarry,
+    /// First-occurrence-order fonts actually referenced by the body so far,
+    /// accumulated one increment at a time via
+    /// [`crate::tables::collect_used_fonts_incremental`] as each increment's
+    /// blocks are produced — the same accumulator threaded across every
+    /// `pump()` iteration and `finish()`, so its final state (after the last
+    /// increment) is byte-identical to `crate::tables::collect_used_fonts`
+    /// run once over the whole parsed document. Reported (with the implicit
+    /// `"Times New Roman"` default prepended, matching `build_font_map`) via
+    /// `Event::TableOrderResolved` at `finish()`. Bounded by the number of
+    /// distinct fonts actually used, not document size.
+    used_fonts: Vec<String>,
+    /// Same accumulation as `used_fonts`, for colors — see
+    /// [`crate::tables::collect_used_colors_incremental`].
+    used_colors: Vec<(u8, u8, u8)>,
     /// True only for the very first increment carved out of this document's
     /// `buf`. That increment still has the leading `{\rtf<N>...` bytes in
     /// front of it (the header phase only buffers long enough to compute the
@@ -337,6 +375,8 @@ impl<H: Handler> StreamingParser<H> {
                                 buf,
                                 scan_pos: 0,
                                 carry: crate::parse::BodyCarry::new(0),
+                                used_fonts: Vec::new(),
+                                used_colors: Vec::new(),
                                 first_increment: true,
                             }));
                             // loop again — body increments may already be available
@@ -366,6 +406,14 @@ impl<H: Handler> StreamingParser<H> {
                             }
                             let blocks =
                                 crate::parse::normalize_blocks(sub.run_body_step(&mut state.carry));
+                            crate::tables::collect_used_fonts_incremental(
+                                &blocks,
+                                &mut state.used_fonts,
+                            );
+                            crate::tables::collect_used_colors_incremental(
+                                &blocks,
+                                &mut state.used_colors,
+                            );
                             for ev in crate::sem_events::SemanticEventIter::from_blocks(blocks) {
                                 self.handler.handle(ev);
                             }
@@ -417,11 +465,23 @@ impl<H: Handler> StreamingParser<H> {
                 }
                 let mut blocks = sub.run_body_step(&mut state.carry);
                 blocks.extend(sub.finalize_body(state.carry));
-                for ev in crate::sem_events::SemanticEventIter::from_blocks(
-                    crate::parse::normalize_blocks(blocks),
-                ) {
+                let blocks = crate::parse::normalize_blocks(blocks);
+                crate::tables::collect_used_fonts_incremental(&blocks, &mut state.used_fonts);
+                crate::tables::collect_used_colors_incremental(&blocks, &mut state.used_colors);
+                for ev in crate::sem_events::SemanticEventIter::from_blocks(blocks) {
                     self.handler.handle(ev);
                 }
+                // The whole body has now been seen: `used_fonts`/`used_colors`
+                // are complete and byte-identical to what
+                // `crate::tables::build_font_map`/`build_color_map` would
+                // compute over the whole parsed document — see
+                // `Event::TableOrderResolved`'s doc comment.
+                let mut fonts = vec!["Times New Roman".to_string()];
+                fonts.extend(state.used_fonts);
+                self.handler.handle(OwnedEvent::TableOrderResolved {
+                    fonts,
+                    colors: state.used_colors,
+                });
                 self.handler.handle(OwnedEvent::EndDocument);
             }
         }
@@ -599,21 +659,20 @@ mod tests {
 
     #[test]
     fn test_streaming_parser_fixture_like_matches_exactly() {
-        // For a document with no `\fonttbl`/`\colortbl` at all and no
-        // explicit font/color usage in the body, `parse_font_table`'s "no
-        // \fonttbl" default (`[""]`) still differs from `build_font_map`'s
-        // hardcoded `["Times New Roman"]` default — so even this simple case
-        // does not reach exact equality; see the module doc. This test
-        // exists to make that boundary explicit and pinned down, rather than
-        // asserting exact equality and being surprised when it fails.
+        // For a document with no `\fonttbl`/`\colortbl` at all,
+        // `parse_font_table`'s "no \fonttbl" default now matches
+        // `build_font_map`'s hardcoded `["Times New Roman"]` default (see the
+        // module doc's item 2) — so `StartDocument` itself now matches
+        // exactly here too, not just the body events. This test exists to
+        // pin that down, since it used to be the concrete example of the
+        // (now-fixed) mismatch.
         let input = br"{\rtf1 {\b bold}\par}";
         let bulk: Vec<_> = crate::sem_events::events(input).collect();
         let streamed = stream_events(&[input]);
-        assert_ne!(
-            bulk[0], streamed[0],
-            "expected the documented StartDocument.fonts divergence for a fonttbl-less document"
+        assert_eq!(
+            bulk, streamed,
+            "fonttbl-less document should now match events() exactly, including StartDocument"
         );
-        assert_eq!(&bulk[1..], &streamed[1..]);
     }
 
     #[test]

@@ -258,7 +258,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| rtf-fmt | ✓ | ~ | ✓§Δ | ✓¥ | ✓ |
+| rtf-fmt | ✓ | ~ | ✓Δ | ✓¥ | ✓ |
 | rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
 | asciidoc | ✓ | ✓ | ✓§ | ✓ | ✓ |
 | org-fmt | ✓ | ✓ | ✓ | ✓§ | ✓ |
@@ -290,15 +290,27 @@ per item instead of one list spanning all items. Tracked as a `KnownFailure` in
 to a genuinely incremental reader (`O(header size + largest single paragraph or still-open
 table/list + nesting depth)`, verified via `alloc_probe`: peak bytes 1372 @200 paragraphs vs.
 1376 @20,000, ratio 1.00) — see `crates/formats/rtf-fmt/src/batch.rs`'s module doc and
-`crates/formats/rtf-fmt/src/incremental.rs` for the design. One structural (not a chunking bug)
-divergence from `events()` remains, in `Event::StartDocument.fonts`/`colors` only: `events()`
-computes these by walking the entire already-parsed document, information that provably cannot
-exist before `StartDocument`, which must be the first event a genuinely incremental reader
-emits; `StreamingParser` reports the header's own declared `\fonttbl`/`\colortbl` tables instead
-(available in `O(header size)` bytes). Confirmed against all 38 `fixtures/rtf/*` fixtures: 0
-body-event mismatches, 33/38 differ only in `StartDocument`, 5/38 match exactly. Tracked as a
-narrowed `KnownFailure` in `streaming_harness.rs` (`rtf`/`streaming_parser`), not `NotApplicable`
-(the divergence is real and field-specific, not "this API doesn't apply here").
+`crates/formats/rtf-fmt/src/incremental.rs` for the design. That same day, in a second pass, the
+one remaining divergence from `events()` (`Event::StartDocument.fonts`/`colors`: `events()`
+computes these by walking the entire already-parsed document — first-use order — while
+`StartDocument`, which must be the first event a genuinely incremental reader emits, can only
+know the header's own *declared* `\fonttbl`/`\colortbl` tables) was closed without sacrificing
+the incremental rewrite's bounded-memory property. Two independent fixes: (1) a new
+`Event::TableOrderResolved { fonts, colors }`, emitted right before `EndDocument`, carries the
+true first-use-order table — `StreamingParser` accumulates it incrementally across body
+increments (bounded by the number of distinct fonts/colors used, not document size), and
+`events()` emits the same value its own `StartDocument` already carries, for a uniform two-path
+contract; (2) `parse_font_table`'s "no `\fonttbl` at all" fallback was changed from `[""]` to
+`["Times New Roman"]`, matching `build_font_map`'s own default convention — a plain naming-
+convention mismatch, not a structural one (that string is never read into parsed `Inline::Font`
+output). Net result, confirmed against all 38 `fixtures/rtf/*` fixtures under adversarial
+chunking: `events()` and `StreamingParser` now produce byte-for-byte **identical** event
+vectors, including `StartDocument`, for every fixture in this repository's corpus.
+`streaming_harness.rs`'s `rtf`/`streaming_parser` `KnownFailure` entry has been removed
+accordingly (now `Wired`). A document whose header declares a genuinely different font/color set
+or order than its body's actual usage (not present in this corpus, but not excluded by the RTF
+grammar) would still see `StartDocument` diverge — recoverable via `TableOrderResolved`, which is
+why that event exists rather than declaring the gap permanently closed.
 
 ¥ rtf-fmt's `w-stream` is now `crate::sem_writer::Writer` (fixed 2026-08-03), a new module
 consuming the crate's own semantic `Event`/`OwnedEvent` type directly — the low-level

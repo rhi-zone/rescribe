@@ -6822,3 +6822,66 @@ both pass; `cargo test -q` passes across the workspace (the only failures seen,
 `ooxml-codegen`'s `test_eg_definitions`/`test_generate_wml`, are a pre-existing environment gap —
 a missing `spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc` external file, unrelated to this
 change and untouched by it).
+
+**2026-08-04: rtf/streaming_parser's last remaining `Event::StartDocument.fonts`/`colors`
+divergence closed — was tracked as "structural, not further fixable," which was wrong.** The
+2026-08-04 incremental rewrite (`crates/formats/rtf-fmt/src/batch.rs`) had left one documented
+gap: `events()` computes `StartDocument.fonts`/`colors` from `build_font_map`/`build_color_map`
+(first-*use* order, walking the whole parsed document), but `StreamingParser` must emit
+`StartDocument` before any body content is parsed, so it could only report the header's own
+*declared* `\fonttbl`/`\colortbl` order — a real structural conflict for `StartDocument` itself,
+since RTF requires the header before the body and first-use order isn't knowable until the body
+has been fully seen. The human confirmed this was fixable without sacrificing the rewrite's
+bounded-memory property, and it was: two independent fixes, not one.
+
+1. **`Event::TableOrderResolved { fonts, colors }`** (new variant, `sem_events.rs`), emitted
+   right before `EndDocument` in both `events()` and `StreamingParser`. `events()` emits the same
+   value as its own `StartDocument` (it already has the whole document, so this is free).
+   `StreamingParser` accumulates real first-use order incrementally: `tables.rs` gained
+   `collect_used_fonts_incremental`/`collect_used_colors_incremental`, appending into a
+   persistent `used_fonts`/`used_colors` accumulator on `BodyState`, called once per body
+   increment (bounded by the number of distinct fonts/colors actually used, not document size —
+   not a reintroduction of whole-document buffering). By `finish()`, this accumulator is
+   byte-identical to what `build_font_map`/`build_color_map` would compute over the whole parsed
+   document, so `TableOrderResolved`'s payload always matches `events()`'s exactly. This makes
+   the true first-use table *recoverable*, just delayed relative to `StartDocument`, rather than
+   permanently lost. `sem_writer::Writer` treats it as a no-op (the header is already flushed by
+   then and can't be retroactively corrected without buffering — documented on the match arm).
+2. **`parse::parse_font_table`'s "no `\fonttbl` at all" fallback changed from `[""]` to
+   `["Times New Roman"]`**, matching `build_font_map`'s own default convention. This was a plain
+   naming-convention mismatch, not a structural one: `make_inline` only ever reads
+   `font_table[idx]` when `idx != 0`, so index 0's string value was never observable in parsed
+   `Inline::Font` output — it only surfaced via this table being echoed back out
+   (`RtfDoc.font_table`, `StartDocument.fonts`). Safe to change unilaterally; verified no test
+   depended on the old `[""]` value.
+
+Net result, confirmed against all 38 `fixtures/rtf/*` fixtures under adversarial chunking
+(`rtf_streaming_parser_matches_events_under_adversarial_chunking` in
+`crates/rescribe-fixtures/tests/streaming_apis.rs`): `events()` and `StreamingParser` now produce
+byte-for-byte **identical** event vectors, including `StartDocument`, for every fixture in this
+repository's corpus — not just "the remaining divergence is now recoverable," full equality.
+`streaming_harness.rs`'s `rtf`/`streaming_parser` `KnownFailure` entry was removed (a fixed check
+left there would silently mask a future regression) and `CAPABILITIES`'s `streaming_parser` field
+promoted to `ApiState::Wired`. `docs/format-audit.md`'s rtf row and Δ footnote updated to match.
+A document whose header genuinely declares a different font/color order or set than its body's
+actual usage (not present in this corpus, but not excluded by the RTF grammar) would still see
+`StartDocument` diverge from `events()` — that part remains a real, structural, unavoidable
+consequence of RTF's header-before-body grammar — but it is now always recoverable via
+`TableOrderResolved` instead of silently unavailable, which is the actual fix: unrecoverable
+information became recoverable-but-delayed information.
+
+**API change note (rtf-fmt, semver-relevant for the standalone crate):** `sem_events::Event`
+(and `OwnedEvent`) gained a new variant, `TableOrderResolved { fonts: Vec<String>, colors:
+Vec<(u8, u8, u8)> }`. Any external consumer matching on `Event` exhaustively (outside this repo)
+will need a new arm; within this repo, `sem_writer::Writer` and the two manual event-projection
+test helpers (`crates/formats/rtf-fmt/src/batch.rs`'s test module,
+`crates/rescribe-fixtures/tests/streaming_apis.rs::rtf_ast_to_events`) were updated.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings` (exit 0), `cargo test -q`
+across the whole workspace (exit 0, captured directly — not through a `tail` pipe, which would
+mask the real exit code), and `cargo fmt --check` (exit 0) all pass. `cargo test -q -p rtf-fmt`:
+86 passed, 1 (pre-existing) ignored, 0 failed, plus 4 doctests passed.
+`cargo test -q -p rescribe-fixtures --test streaming_apis rtf`: all 3 rtf cross-API tests pass
+(`rtf_events_equals_ast_projection_over_all_fixtures`,
+`rtf_streaming_parser_matches_events_under_adversarial_chunking`,
+`rtf_streaming_writer_matches_builder_over_all_fixtures`).

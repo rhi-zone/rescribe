@@ -194,6 +194,19 @@ impl<W: Write> Writer<W> {
                 }
                 self.out.push('\n');
             }
+            // `Writer` has already written and (per `maybe_flush`) likely
+            // already flushed the `\fonttbl`/`\colortbl` header by the time
+            // this arrives (it's the second-to-last event) — correcting it
+            // in place would require buffering the header, exactly what this
+            // writer exists to avoid. No-op: every body `StartFont`/
+            // `StartColor`/`StartBgColor` event already resolved its index
+            // against `StartDocument`'s table, and that resolution is
+            // self-consistent by construction (the header was written from
+            // the same table), so the output RTF is valid regardless of
+            // whether it used the true first-use order. See
+            // `Event::TableOrderResolved`'s doc comment.
+            Event::TableOrderResolved { .. } => {}
+
             Event::EndDocument => {
                 self.out.push('}');
             }

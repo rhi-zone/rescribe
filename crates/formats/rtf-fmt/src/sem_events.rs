@@ -45,6 +45,35 @@ pub enum Event<'a> {
         fonts: Vec<String>,
         colors: Vec<(u8, u8, u8)>,
     },
+    /// Emitted once, immediately before `EndDocument` — always the
+    /// second-to-last event.
+    ///
+    /// Carries the *true* first-occurrence-order font/color tables
+    /// ([`crate::tables::build_font_map`]/[`crate::tables::build_color_map`]
+    /// computed over the whole document), which is by definition only
+    /// knowable once every font/color reference anywhere in the body has
+    /// been seen. [`events`] already has the whole document parsed before
+    /// its first event, so its `StartDocument` and `TableOrderResolved`
+    /// always carry identical `fonts`/`colors`.
+    /// [`crate::batch::StreamingParser`] cannot: it must emit `StartDocument`
+    /// (the required first event) using only the header's own *declared*
+    /// `\fonttbl`/`\colortbl` — available after `O(header size)` bytes, not
+    /// `O(document size)` — so its `StartDocument.fonts`/`colors` may list a
+    /// different order or set than the document's actual usage. It tracks
+    /// real first-use order incrementally as each body increment is parsed
+    /// (bounded state — proportional to the number of distinct fonts/colors,
+    /// not document size) and emits the fully-resolved table here, once the
+    /// whole body has in fact been seen. A consumer that needs the *true*
+    /// first-use table (e.g. to reproduce `events()`'s exact output) should
+    /// use this event's payload in preference to `StartDocument`'s once it
+    /// arrives; a consumer that only needs a valid RTF document doesn't need
+    /// to do anything with this event at all, since `StartDocument`'s
+    /// declared table is already self-consistent with every `StartFont`/
+    /// `StartColor`/`StartBgColor` body event's index resolution.
+    TableOrderResolved {
+        fonts: Vec<String>,
+        colors: Vec<(u8, u8, u8)>,
+    },
     /// Always the last event.
     EndDocument,
 
@@ -194,6 +223,11 @@ impl SemanticEventIter {
             frame_stack: Vec::new(),
         };
         iter.frame_stack.push(Frame::Emit(Event::EndDocument));
+        iter.frame_stack
+            .push(Frame::Emit(Event::TableOrderResolved {
+                fonts: fonts.clone(),
+                colors: colors.clone(),
+            }));
         iter.frame_stack.push(Frame::Blocks(doc.blocks.into_iter()));
         iter.frame_stack
             .push(Frame::Emit(Event::StartDocument { fonts, colors }));
@@ -513,6 +547,10 @@ mod tests {
             evs,
             vec![
                 OwnedEvent::StartDocument {
+                    fonts: vec!["Times New Roman".to_string()],
+                    colors: vec![],
+                },
+                OwnedEvent::TableOrderResolved {
                     fonts: vec!["Times New Roman".to_string()],
                     colors: vec![],
                 },

@@ -1443,25 +1443,42 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // suite, and over every fixture in `fixtures/rtf/` via this file's own adversarial-chunking
     // test below.
     //
-    // One structural, not-further-fixable divergence remains, in `Event::StartDocument` only:
-    // `events()`'s `StartDocument.fonts`/`colors` are computed by `build_font_map`/
-    // `build_color_map` walking the *entire already-parsed* document (first-*use* order,
-    // deduplicated, with an implicit "Times New Roman" default at font index 0 regardless of
-    // what the source declares) — information that by definition doesn't exist until the last
-    // font/color reference anywhere in the body has been seen, which conflicts directly with
-    // `StartDocument` needing to be the *first* event a genuinely incremental reader emits.
-    // `StreamingParser` instead reports the header's own *declared* `\fonttbl`/`\colortbl`
-    // tables (available after O(header size) bytes, the same tables `Parser` itself resolves
-    // body `\f<n>`/`\cf<n>` references against) — every font/color a body event carries is
-    // guaranteed present in this table, but its *order* (declared vs. first-use) and *set*
-    // (declared-but-unused entries) can differ from `events()`'s, and, for fonts specifically,
-    // the "no \fonttbl" case (`[""]` vs. `events()`'s hardcoded `["Times New Roman"]`) always
-    // differs. This is why `streaming_parser` below is `KnownFailure`, not `Wired`, despite the
-    // reader now being genuinely incremental: the harness's equality check is exact-vector, and
-    // this one field provably cannot match in general. Confirmed empirically against every
-    // fixture in `fixtures/rtf/` (38 fixtures): 0 body-event mismatches, 33/38 differ only in
-    // `StartDocument`, 5/38 match exactly (documents whose declared tables happen to equal the
-    // usage-based ones).
+    // Fixed 2026-08-04 (second pass, same day): `Event::StartDocument`'s divergence from
+    // `events()` used to be described as structural and not-further-fixable. It wasn't — two
+    // independent things were compounded together:
+    //
+    // 1. `events()`'s `StartDocument.fonts`/`colors` are computed by `build_font_map`/
+    //    `build_color_map` walking the *entire already-parsed* document (first-*use* order,
+    //    deduplicated) — information that by definition doesn't exist until the last font/color
+    //    reference anywhere in the body has been seen, which conflicts directly with
+    //    `StartDocument` needing to be the *first* event a genuinely incremental reader emits.
+    //    This part *is* structural: `StreamingParser` still reports the header's own *declared*
+    //    `\fonttbl`/`\colortbl` tables in `StartDocument` (available after O(header size) bytes),
+    //    which can differ in order/set from the body's actual usage. But the true, first-use-order
+    //    table is no longer *unrecoverable* — a new `Event::TableOrderResolved { fonts, colors }`
+    //    (sem_events.rs) is emitted right before `EndDocument`, carrying the same value
+    //    `events()`'s `StartDocument` carries, computed by accumulating first-use order
+    //    incrementally across body increments (`tables::collect_used_fonts_incremental`/
+    //    `collect_used_colors_incremental`, threaded through `BodyState` — bounded by the number
+    //    of distinct fonts/colors used, not document size). `events()` now also emits
+    //    `TableOrderResolved` (with the same value as its own `StartDocument`, trivially, since it
+    //    has the whole document up front either way) for a uniform two-path contract.
+    // 2. The "no `\fonttbl` at all" case (`parse_font_table` defaulting to `[""]` vs.
+    //    `build_font_map`'s hardcoded `["Times New Roman"]`) was a plain convention mismatch, not
+    //    a structural one — that default string is never read into any `Inline::Font` output
+    //    (`make_inline` only consults `font_table[idx]` when `idx != 0`), so `parse_font_table`'s
+    //    fallback was changed to `["Times New Roman"]` directly, eliminating the mismatch instead
+    //    of working around it.
+    //
+    // Net effect, confirmed empirically across all 38 `fixtures/rtf/` fixtures under adversarial
+    // chunking (`rtf_streaming_parser_matches_events_under_adversarial_chunking`): `events()` and
+    // `StreamingParser` now produce **exactly identical** event vectors, including
+    // `StartDocument`, for every fixture in this repository's corpus. A document whose header
+    // declares fonts/colors in a different order or set than its body actually uses (not present
+    // in this corpus, but not excluded by the RTF grammar) would still show a `StartDocument`-only
+    // divergence — recoverable via `TableOrderResolved`, same as before. `streaming_parser` moves
+    // from `KnownFailure` to `Wired` below; this KNOWN_FAILURES-table entry has been removed
+    // accordingly (a fixed bug must not keep masking future regressions).
     //
     // streaming_writer is now Wired via a new src/sem_writer.rs Writer that
     // consumes Event/OwnedEvent directly (not TokenEvent) — the gap this
@@ -1486,26 +1503,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "rtf",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "Fixed 2026-08-04: batch::StreamingParser is now genuinely incremental (see the \
-             CAPABILITIES comment above for the full writeup) — bounded O(header size + \
-             largest single paragraph or still-open table/list + nesting depth) memory, \
-             verified via alloc_probe (peak bytes 1372 @200 paragraphs vs. 1376 @20,000, ratio \
-             1.00) and adversarial chunking against every fixtures/rtf/ fixture. One narrower, \
-             structural (not a chunking artifact) divergence remains: Event::StartDocument's \
-             fonts/colors fields. events() computes them by walking the entire already-parsed \
-             document (build_font_map/build_color_map: first-*use* order, deduplicated, an \
-             implicit \"Times New Roman\" default always at font index 0) — unavailable before \
-             StartDocument, which must be the first event a genuinely incremental reader \
-             emits. StreamingParser instead reports the header's own declared \\fonttbl/\
-             \\colortbl tables (available after O(header size) bytes) — every font/color a \
-             body event carries is guaranteed present there, but the *order* (declared vs. \
-             first-use) and *set* (declared-but-unused entries) can differ, and a \
-             fonttbl-less document always differs (`[\"\"]` vs. events()'s hardcoded \
-             `[\"Times New Roman\"]`). Confirmed empirically: across all 38 fixtures/rtf/ \
-             fixtures, 0 body-event mismatches, 33 differ only in StartDocument, 5 match \
-             exactly. See src/batch.rs's module doc for the full design.",
-        ),
+        // Wired 2026-08-04 (was KnownFailure): see the module-doc-referencing comment above this
+        // struct entry for the full writeup of both fixes (the TableOrderResolved correction
+        // event plus the parse_font_table fontless-default fix). `events()` and `StreamingParser`
+        // now produce byte-for-byte identical event vectors, including StartDocument, for every
+        // fixture in fixtures/rtf/, under adversarial chunking.
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
     // native/csv-fmt/tsv-fmt/ris audited 2026-08-01 (fourth pass on this
@@ -1730,22 +1733,45 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        href=\"#...\"> was never recognized as a footnote reference — always \
                        built as a generic Link — unlike parse()'s AST, which treats it as \
                        FootnoteRef structurally regardless of whether the target actually \
-                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures still \
-                       diverge and are NOT fixed by this pass: fixtures/fb2/adv-malformed is a \
-                       genuine architectural divergence, not a bug — its input has an unclosed \
-                       <FictionBook ...> start tag that swallows the following <body> text \
-                       (confirmed directly against quick_xml's own tokenization), so quick_xml \
-                       only errors once it reaches the orphaned </body> end tag, by which point \
-                       a Section/Paragraph had already been fully tokenized; parse()'s AST \
-                       builder defers attaching a Body's sections to the document until its \
-                       </body> End event is actually dispatched, so it silently drops the \
-                       whole orphaned subtree when the reader errors first, while events() is a \
-                       true pull iterator that had already irrevocably yielded \
-                       StartSection/StartParagraph/EndParagraph/EndSection to the caller before \
-                       the error surfaced — recovering this would require events() to buffer \
-                       and defer emission until validated, which is exactly the \
-                       pre-materialization this crate's EventIter is designed not to do. \
-                       fixtures/fb2/annotation is a genuine, real gap: the book's own \
+                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures diverged \
+                       and were NOT fixed by this 2026-08-03 pass; one is now fixed (2026-08-04): \
+                       fixtures/fb2/adv-malformed's input has an unclosed <FictionBook ...> \
+                       start tag that swallows the following <body> text (confirmed directly \
+                       against quick_xml's own tokenization), so quick_xml never emits a real \
+                       Start(\"body\") token at all and only errors once it reaches the orphaned \
+                       </body> end tag. This was previously mis-scoped as \"genuine architectural \
+                       divergence... would require events() to buffer and defer emission until \
+                       validated\" — that was checked directly and found false: ancestor validity \
+                       (does a <section> have a <body>/<section> already open?) is a property of \
+                       the already-tracked ParseState stack *before* the <section> Start token is \
+                       even dispatched, so the orphan is knowable the instant it opens, with zero \
+                       lookahead. Fixed via a `suppress_depth` counter on SemanticState: an \
+                       orphaned <section> (and everything nested inside it) is suppressed from \
+                       the moment its Start tag is seen, mirroring parse()'s StackItem::Section \
+                       finalize arm, which silently drops a Section it can't attach to a Body/ \
+                       Section ancestor when it (and everything already folded into it) is \
+                       popped. Fixing the suppression surfaced one more gap it depended on: \
+                       events()/EventIter never synthesized a matching EndFictionBook when the \
+                       token stream terminates early (Eof or a fatal Err) with FictionBook still \
+                       open — parse()'s AST always implicitly \"closes\" the whole document by \
+                       construction, but events()'s XmlEventIter::step and StreamingParser::drain \
+                       previously just stopped, mirroring docbook-fmt/jats-fmt/tei-fmt's own \
+                       malformed-XML gap before their 2026-08-03 fix (see the FormatCapabilities \
+                       comment for those three formats above) rather than the fixed state. Fixed \
+                       the same way: `close_item` was extracted from handle_end's per-element \
+                       closing match and reused by a new `finalize_open_elements`, called at \
+                       every point XmlEventIter::step/StreamingParser::drain/finish can terminate \
+                       for good (Eof, a fatal Err, and StreamingParser's own hand-tracked \
+                       tag-mismatch branch) — pops whatever's still on `self.stack`, innermost \
+                       first, synthesizing the same End event(s) each item's own End tag would \
+                       have produced. No lookahead needed there either: everything required is \
+                       already sitting on the (already O(nesting depth)) stack. Confirmed via \
+                       fixtures/fb2/adv-malformed no longer diverging in either \
+                       fb2_events_equals_ast_projection_over_all_fixtures or \
+                       fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures, and via \
+                       fb2_streaming_parser_matches_events_and_is_incremental (adversarial \
+                       chunking) continuing to pass. fixtures/fb2/annotation remains open, a \
+                       genuine, real gap: the book's own \
                        <description><title-info><annotation> (with <p>/<poem>/<cite>/ \
                        <subtitle>/<table>/empty-line sub-content) is not modeled at all in \
                        events.rs's description parsing — SemanticState's DescState has no \
@@ -1882,28 +1908,11 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     // parse()/events() themselves, and an EOF-fence trailing-newline mismatch); all three are
     // now fixed and the FormatCapabilities entry above reflects it as Wired — no entry left
     // here per assert_or_known_failure's own rule against masking a fixed bug.
-    KnownFailure {
-        format: "rtf",
-        api: "streaming_parser",
-        description: "Narrowed 2026-08-04 (was: StreamingParser buffers all fed bytes and only \
-                       calls events() inside finish() — now fixed, see the CAPABILITIES entry \
-                       above for the full incremental-rewrite writeup). The one residual, \
-                       structural gap: rtf_fmt::batch::StreamingParser's StartDocument.fonts/ \
-                       colors report the header's own declared \\fonttbl/\\colortbl tables \
-                       (all that's available in O(header size) bytes before the first event \
-                       must be emitted), while sem_events::events() reports build_font_map/ \
-                       build_color_map's usage-based, first-use-order, deduplicated tables — \
-                       information that provably doesn't exist until the whole document has \
-                       been walked. Every body Start*/End* event after StartDocument matches \
-                       events() exactly under adversarial chunking, for every fixtures/rtf/ \
-                       fixture. Current failure example: fixture adjacent_bold ({\\rtf1 {\\b \
-                       first}{\\b second}\\par}, no \\fonttbl at all) diverges only in \
-                       StartDocument.fonts ([\"\"] vs. events()'s hardcoded [\"Times New \
-                       Roman\"]), even under whole-input (unchunked) feeding — proving this is \
-                       not a chunk-boundary bug. See src/batch.rs's module doc for the full \
-                       explanation and src/batch.rs's own test suite for the adversarial \
-                       chunking + alloc_probe memory-bound verification.",
-    },
+    // rtf/streaming_parser was a KnownFailure entry here (StartDocument.fonts/colors reported the
+    // header's declared table instead of events()'s usage-based, first-use-order table). Fixed
+    // 2026-08-04 via a new Event::TableOrderResolved correction event plus a parse_font_table
+    // convention fix (see the FormatCapabilities entry above for the full writeup) — no entry
+    // left here per assert_or_known_failure's own rule against masking a fixed bug.
 ];
 
 /// Run a check's `result` against the [`KNOWN_FAILURES`] table for

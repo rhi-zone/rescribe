@@ -10963,6 +10963,17 @@ fn rtf_ast_to_events(doc: &rtf_fmt::RtfDoc) -> Vec<rtf_fmt::OwnedEvent> {
     for b in &doc.blocks {
         rtf_block_events(b, &mut out);
     }
+    // events() emits TableOrderResolved (carrying the same already-known
+    // tables as StartDocument, since the whole-document path has them up
+    // front either way) right before EndDocument — see
+    // rtf_fmt::sem_events::Event::TableOrderResolved's doc comment for why
+    // this event exists (StreamingParser's incremental path needs it to
+    // report the true first-use table once the whole body has been seen;
+    // events() reports the same value twice for a uniform contract).
+    out.push(rtf_fmt::Event::TableOrderResolved {
+        fonts: rtf_fmt::build_font_map(doc),
+        colors: rtf_fmt::build_color_map(doc),
+    });
     out.push(rtf_fmt::Event::EndDocument);
     out
 }

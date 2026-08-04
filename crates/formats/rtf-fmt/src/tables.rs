@@ -202,6 +202,30 @@ fn collect_fonts_in_inline(inline: &Inline, out: &mut Vec<String>) {
     }
 }
 
+/// Incremental variant of [`collect_used_fonts`]: appends first-occurrence
+/// fonts found in `blocks` into an existing `out` accumulator (already
+/// containing whatever was found in earlier blocks), so a caller that only
+/// has the document available piece-by-piece (e.g.
+/// [`crate::batch::StreamingParser`], which parses one paragraph/table/list
+/// increment at a time) can reproduce the exact same first-occurrence order
+/// [`collect_used_fonts`] computes from a fully-parsed [`RtfDoc`] — by
+/// calling this once per increment, in document order, with the same `out`
+/// vector threaded through. The result after the last increment is
+/// byte-identical to `collect_used_fonts(&whole_doc)`.
+pub(crate) fn collect_used_fonts_incremental(blocks: &[Block], out: &mut Vec<String>) {
+    for block in blocks {
+        collect_fonts_in_block(block, out);
+    }
+}
+
+/// Incremental variant of [`collect_used_colors`] — see
+/// [`collect_used_fonts_incremental`]'s doc comment for the exact contract.
+pub(crate) fn collect_used_colors_incremental(blocks: &[Block], out: &mut Vec<(u8, u8, u8)>) {
+    for block in blocks {
+        collect_colors_in_block(block, out);
+    }
+}
+
 /// The full, indexed font table an emitter should write to `\fonttbl` and
 /// look `Inline::Font { name }` up against: index 0 is always the implicit
 /// default (`"Times New Roman"`), followed by [`collect_used_fonts`] in

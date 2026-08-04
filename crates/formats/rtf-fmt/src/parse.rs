@@ -1765,7 +1765,20 @@ pub(crate) fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
 pub(crate) fn parse_font_table(input: &[u8]) -> Vec<String> {
     let pattern = b"{\\fonttbl";
     let Some(start) = input.windows(pattern.len()).position(|w| w == pattern) else {
-        return vec![String::new()]; // index 0 = default (empty)
+        // No `\fonttbl` group at all: index 0 gets the same implicit
+        // default name `crate::tables::build_font_map` always prepends for
+        // a document with no declared table — matching that convention here
+        // means `batch::StreamingParser`'s `StartDocument.fonts` (built from
+        // this table's declared contents) agrees with
+        // `sem_events::events()`'s `StartDocument.fonts` (built from
+        // `build_font_map`) for the common "no \fonttbl" case, without
+        // requiring the whole document to have been parsed first. Safe to
+        // change unilaterally: `make_inline` (this module) only reads
+        // `font_table[idx]` when `state.font_idx != 0`, so index 0's string
+        // value is never used to build an `Inline::Font` — it only ever
+        // surfaces via this table being echoed back out (`RtfDoc.font_table`,
+        // `StartDocument.fonts`).
+        return vec!["Times New Roman".to_string()];
     };
     let rest = &input[start + 1..]; // skip opening '{'
     let mut depth = 1usize;
