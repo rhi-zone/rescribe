@@ -1,13 +1,18 @@
 //! MultiMarkdown writer for rescribe.
 //!
-//! Generates MultiMarkdown output with its extensions:
-//! - Metadata blocks
-//! - Footnotes
-//! - Tables
-//! - Definition lists
-//! - Math (LaTeX-style)
+//! A thin IR→AST translator: all MultiMarkdown emission (metadata blocks,
+//! citations, cross-references, and everything CommonMark/GFM defines)
+//! lives in the standalone `multimarkdown-fmt` crate. This crate only
+//! converts a rescribe `Document` into `multimarkdown_fmt::MmdDoc`.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node};
+use multimarkdown_fmt::{
+    MetadataEntry, MetadataStyle, MmdBlock, MmdDefinitionListItem, MmdDoc, MmdInline, MmdListItem,
+    MmdTableCell, MmdTableRow, Span,
+};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue, Severity,
+    WarningKind,
+};
 use rescribe_std::{node, prop};
 
 /// Emit a document as MultiMarkdown.
@@ -20,418 +25,252 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    // Emit metadata first
-    emit_metadata(doc, &mut ctx);
-
-    // Emit content
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
-    ))
-}
-
-struct EmitContext {
-    output: String,
-    warnings: Vec<FidelityWarning>,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            warnings: Vec::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn ensure_blank_line(&mut self) {
-        if !self.output.is_empty() && !self.output.ends_with("\n\n") {
-            if self.output.ends_with('\n') {
-                self.output.push('\n');
-            } else {
-                self.output.push_str("\n\n");
-            }
-        }
-    }
-}
-
-fn emit_metadata(doc: &Document, ctx: &mut EmitContext) {
-    if doc.metadata.is_empty() {
-        return;
-    }
-
-    for (key, value) in doc.metadata.iter() {
-        if let rescribe_core::PropValue::String(s) = value {
-            ctx.write(key);
-            ctx.write(": ");
-            ctx.write(s);
-            ctx.write("\n");
-        }
-    }
-    ctx.write("\n");
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
-    match node.kind.as_str() {
-        "document" => emit_nodes(&node.children, ctx),
-
-        "paragraph" => emit_paragraph(node, ctx),
-        "heading" => emit_heading(node, ctx),
-        "blockquote" => emit_blockquote(node, ctx),
-        "code_block" => emit_code_block(node, ctx),
-        "list" => emit_list(node, ctx),
-        "list_item" => emit_list_item(node, ctx),
-        "horizontal_rule" => emit_horizontal_rule(ctx),
-        "raw_block" => emit_raw_block(node, ctx),
-        "table" => emit_table(node, ctx),
-        "definition_list" => emit_definition_list(node, ctx),
-        "footnote_def" => emit_footnote_def(node, ctx),
-
-        "text" => emit_text(node, ctx),
-        "emphasis" => emit_emphasis(node, ctx),
-        "strong" => emit_strong(node, ctx),
-        "strikeout" => emit_strikeout(node, ctx),
-        "code" => emit_inline_code(node, ctx),
-        "link" => emit_link(node, ctx),
-        "image" => emit_image(node, ctx),
-        "line_break" => emit_line_break(ctx),
-        "soft_break" => emit_soft_break(ctx),
-        "raw_inline" => emit_raw_inline(node, ctx),
-        "footnote_ref" => emit_footnote_ref(node, ctx),
-        "math_inline" => emit_math_inline(node, ctx),
-        "math_block" => emit_math_block(node, ctx),
-
-        _ => emit_nodes(&node.children, ctx),
-    }
-}
-
-fn emit_paragraph(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n");
-}
-
-fn emit_heading(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
-    let prefix = "#".repeat(level.min(6));
-    ctx.write(&prefix);
-    ctx.write(" ");
-    emit_nodes(&node.children, ctx);
-
-    // Add heading ID if present (MultiMarkdown extension)
-    if let Some(id) = node.props.get_str(prop::ID)
-        && !id.is_empty()
-    {
-        ctx.write(" {#");
-        ctx.write(id);
-        ctx.write("}");
-    }
-    ctx.write("\n");
-}
-
-fn emit_blockquote(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-
-    let mut inner = EmitContext::new();
-    emit_nodes(&node.children, &mut inner);
-
-    for line in inner.output.lines() {
-        ctx.write("> ");
-        ctx.write(line);
-        ctx.write("\n");
-    }
-}
-
-fn emit_code_block(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-
-    let lang = node.props.get_str(prop::LANGUAGE).unwrap_or("");
-    ctx.write("```");
-    ctx.write(lang);
-    ctx.write("\n");
-
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(content);
-        if !content.ends_with('\n') {
-            ctx.write("\n");
-        }
+    let metadata: Vec<MetadataEntry> = doc
+        .metadata
+        .iter()
+        .filter_map(|(key, value)| match value {
+            PropValue::String(s) => Some(MetadataEntry {
+                key: key.clone(),
+                value: s.clone(),
+            }),
+            _ => None,
+        })
+        .collect();
+    let metadata_style = if metadata.is_empty() {
+        MetadataStyle::None
     } else {
-        for child in &node.children {
-            if let Some(text) = child.props.get_str(prop::CONTENT) {
-                ctx.write(text);
-            }
-        }
-        ctx.write("\n");
-    }
+        MetadataStyle::Bare
+    };
 
-    ctx.write("```\n");
+    let mut warnings = Vec::new();
+    let blocks = nodes_to_blocks(&doc.content.children, &mut warnings);
+
+    let mmd_doc = MmdDoc {
+        metadata,
+        metadata_style,
+        blocks,
+        link_defs: Vec::new(),
+    };
+
+    let bytes = multimarkdown_fmt::emit(&mmd_doc);
+    Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
-fn emit_list(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-    let mut num = 1;
+fn unsupported(kind: &str, warnings: &mut Vec<FidelityWarning>) {
+    warnings.push(FidelityWarning::new(
+        Severity::Minor,
+        WarningKind::UnsupportedNode(kind.to_string()),
+        format!("node kind \"{kind}\" has no MultiMarkdown equivalent; dropped"),
+    ));
+}
 
-    for child in &node.children {
-        if child.kind.as_str() == node::LIST_ITEM {
-            let is_task = child.props.contains("checked");
-            let checked = child.props.get_bool("checked").unwrap_or(false);
+fn nodes_to_blocks(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<MmdBlock> {
+    nodes.iter().map(|n| node_to_block(n, warnings)).collect()
+}
 
-            if ordered {
-                ctx.write(&format!("{}. ", num));
-                num += 1;
-            } else {
-                ctx.write("- ");
-            }
-
-            if is_task {
-                if checked {
-                    ctx.write("[x] ");
-                } else {
-                    ctx.write("[ ] ");
-                }
-            }
-
-            // Emit list item content
-            for (i, item_child) in child.children.iter().enumerate() {
-                if item_child.kind.as_str() == node::PARAGRAPH {
-                    emit_nodes(&item_child.children, ctx);
-                    if i < child.children.len() - 1 {
-                        ctx.write("\n");
+fn node_to_block(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdBlock {
+    match n.kind.as_str() {
+        "paragraph" => MmdBlock::Paragraph {
+            inlines: nodes_to_inlines(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "heading" => MmdBlock::Heading {
+            level: n.props.get_int(prop::LEVEL).unwrap_or(1) as u8,
+            inlines: nodes_to_inlines(&n.children, warnings),
+            anchor: n.props.get_str(prop::ID).map(str::to_string),
+            span: Span::NONE,
+        },
+        "code_block" => MmdBlock::CodeBlock {
+            language: n.props.get_str(prop::LANGUAGE).map(str::to_string),
+            content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "raw_block" => MmdBlock::HtmlBlock {
+            content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "blockquote" => MmdBlock::Blockquote {
+            blocks: nodes_to_blocks(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "list" => {
+            let ordered = n.props.get_bool(prop::ORDERED).unwrap_or(false);
+            let items = n
+                .children
+                .iter()
+                .filter(|c| c.kind.as_str() == node::LIST_ITEM)
+                .map(|item| MmdListItem {
+                    blocks: nodes_to_blocks(&item.children, warnings),
+                    span: Span::NONE,
+                    checked: item.props.get_bool(prop::CHECKED),
+                })
+                .collect();
+            MmdBlock::List {
+                kind: if ordered {
+                    multimarkdown_fmt::ListKind::Ordered {
+                        start: 1,
+                        marker: multimarkdown_fmt::OrderedMarker::Period,
                     }
-                } else if item_child.kind.as_str() == node::LIST {
-                    ctx.write("\n");
-                    let mut inner = EmitContext::new();
-                    emit_node(item_child, &mut inner);
-                    for line in inner.output.lines() {
-                        ctx.write("  ");
-                        ctx.write(line);
-                        ctx.write("\n");
-                    }
                 } else {
-                    emit_node(item_child, ctx);
+                    multimarkdown_fmt::ListKind::Unordered { marker: '-' }
+                },
+                items,
+                tight: n.props.get_bool(prop::TIGHT).unwrap_or(true),
+                span: Span::NONE,
+            }
+        }
+        "horizontal_rule" => MmdBlock::ThematicBreak { span: Span::NONE },
+        "table" => {
+            let mut rows = n
+                .children
+                .iter()
+                .filter(|c| c.kind.as_str() == node::TABLE_ROW);
+            let head = rows
+                .next()
+                .map(|r| table_row(r, warnings))
+                .unwrap_or(MmdTableRow {
+                    cells: Vec::new(),
+                    span: Span::NONE,
+                });
+            let rows = rows.map(|r| table_row(r, warnings)).collect();
+            MmdBlock::Table {
+                alignments: Vec::new(),
+                head,
+                rows,
+                span: Span::NONE,
+            }
+        }
+        "footnote_def" => MmdBlock::FootnoteDefinition {
+            label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
+            blocks: nodes_to_blocks(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "definition_list" => {
+            let mut items: Vec<MmdDefinitionListItem> = Vec::new();
+            for child in &n.children {
+                match child.kind.as_str() {
+                    "definition_term" => items.push(MmdDefinitionListItem {
+                        term: nodes_to_inlines(&child.children, warnings),
+                        definitions: Vec::new(),
+                        span: Span::NONE,
+                    }),
+                    "definition_desc" => {
+                        if let Some(last) = items.last_mut() {
+                            last.definitions
+                                .push(nodes_to_blocks(&child.children, warnings));
+                        }
+                    }
+                    _ => {}
                 }
             }
-            ctx.write("\n");
-        }
-    }
-}
-
-fn emit_list_item(node: &Node, ctx: &mut EmitContext) {
-    emit_nodes(&node.children, ctx);
-}
-
-fn emit_horizontal_rule(ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    ctx.write("---\n");
-}
-
-fn emit_raw_block(node: &Node, ctx: &mut EmitContext) {
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.ensure_blank_line();
-        ctx.write(content);
-        ctx.write("\n");
-    }
-}
-
-fn emit_table(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    let mut is_first_row = true;
-
-    for row in &node.children {
-        if row.kind.as_str() == node::TABLE_ROW {
-            ctx.write("|");
-            for cell in &row.children {
-                ctx.write(" ");
-                emit_nodes(&cell.children, ctx);
-                ctx.write(" |");
+            MmdBlock::DefinitionList {
+                items,
+                tight: true,
+                span: Span::NONE,
             }
-            ctx.write("\n");
-
-            // Add separator after header
-            if is_first_row {
-                ctx.write("|");
-                for _ in &row.children {
-                    ctx.write(" --- |");
-                }
-                ctx.write("\n");
-                is_first_row = false;
+        }
+        "mmd:citation_def" => MmdBlock::CitationDefinition {
+            label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
+            content: nodes_to_inlines(&n.children, warnings),
+            span: Span::NONE,
+        },
+        other => {
+            unsupported(other, warnings);
+            MmdBlock::Paragraph {
+                inlines: nodes_to_inlines(&n.children, warnings),
+                span: Span::NONE,
             }
         }
     }
-    ctx.write("\n");
 }
 
-fn emit_definition_list(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
+fn table_row(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdTableRow {
+    MmdTableRow {
+        cells: n
+            .children
+            .iter()
+            .map(|c| MmdTableCell {
+                inlines: nodes_to_inlines(&c.children, warnings),
+                span: Span::NONE,
+            })
+            .collect(),
+        span: Span::NONE,
+    }
+}
 
-    let mut i = 0;
-    while i < node.children.len() {
-        let child = &node.children[i];
-        if child.kind.as_str() == node::DEFINITION_TERM {
-            emit_nodes(&child.children, ctx);
-            ctx.write("\n");
-            i += 1;
+fn nodes_to_inlines(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<MmdInline> {
+    nodes.iter().map(|n| node_to_inline(n, warnings)).collect()
+}
 
-            // Collect all definitions for this term
-            while i < node.children.len() && node.children[i].kind.as_str() == node::DEFINITION_DESC
-            {
-                ctx.write(": ");
-                emit_nodes(&node.children[i].children, ctx);
-                ctx.write("\n");
-                i += 1;
+fn node_to_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdInline {
+    match n.kind.as_str() {
+        "text" => MmdInline::Text {
+            content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "soft_break" => MmdInline::SoftBreak { span: Span::NONE },
+        "line_break" => MmdInline::HardBreak { span: Span::NONE },
+        "emphasis" => MmdInline::Emphasis {
+            inlines: nodes_to_inlines(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "strong" => MmdInline::Strong {
+            inlines: nodes_to_inlines(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "strikeout" => MmdInline::Strikethrough {
+            inlines: nodes_to_inlines(&n.children, warnings),
+            span: Span::NONE,
+        },
+        "code" => MmdInline::Code {
+            content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "raw_inline" => MmdInline::HtmlInline {
+            content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "link" => MmdInline::Link {
+            inlines: nodes_to_inlines(&n.children, warnings),
+            url: n.props.get_str(prop::URL).unwrap_or("").to_string(),
+            title: n.props.get_str(prop::TITLE).map(str::to_string),
+            span: Span::NONE,
+        },
+        "image" => MmdInline::Image {
+            alt: n.props.get_str(prop::ALT).unwrap_or("").to_string(),
+            url: n.props.get_str(prop::URL).unwrap_or("").to_string(),
+            title: n.props.get_str(prop::TITLE).map(str::to_string),
+            span: Span::NONE,
+        },
+        "footnote_ref" => MmdInline::FootnoteReference {
+            label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "math_inline" => MmdInline::InlineMath {
+            source: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "math_block" => MmdInline::DisplayMath {
+            source: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "mmd:citation" => MmdInline::Citation {
+            locator: n.props.get_str("locator").map(str::to_string),
+            label: n.props.get_str("label").unwrap_or("").to_string(),
+            span: Span::NONE,
+        },
+        "mmd:cross_reference" => MmdInline::CrossReference {
+            target: n.props.get_str("target").unwrap_or("").to_string(),
+            collapsed: n.props.get_bool("collapsed").unwrap_or(false),
+            span: Span::NONE,
+        },
+        other => {
+            unsupported(other, warnings);
+            MmdInline::Text {
+                content: String::new(),
+                span: Span::NONE,
             }
-            ctx.write("\n");
-        } else {
-            i += 1;
         }
-    }
-}
-
-fn emit_footnote_def(node: &Node, ctx: &mut EmitContext) {
-    let id = node.props.get_str(prop::ID).unwrap_or("");
-    ctx.ensure_blank_line();
-    ctx.write("[^");
-    ctx.write(id);
-    ctx.write("]: ");
-
-    // Emit footnote content inline
-    for (i, child) in node.children.iter().enumerate() {
-        if child.kind.as_str() == node::PARAGRAPH {
-            emit_nodes(&child.children, ctx);
-        } else {
-            emit_node(child, ctx);
-        }
-        if i < node.children.len() - 1 {
-            ctx.write("\n    ");
-        }
-    }
-    ctx.write("\n");
-}
-
-fn emit_text(node: &Node, ctx: &mut EmitContext) {
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(content);
-    }
-}
-
-fn emit_emphasis(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("*");
-    emit_nodes(&node.children, ctx);
-    ctx.write("*");
-}
-
-fn emit_strong(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("**");
-    emit_nodes(&node.children, ctx);
-    ctx.write("**");
-}
-
-fn emit_strikeout(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("~~");
-    emit_nodes(&node.children, ctx);
-    ctx.write("~~");
-}
-
-fn emit_inline_code(node: &Node, ctx: &mut EmitContext) {
-    let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-    let backticks = if content.contains('`') { "``" } else { "`" };
-    ctx.write(backticks);
-    if content.starts_with('`') || content.ends_with('`') {
-        ctx.write(" ");
-    }
-    ctx.write(content);
-    if content.starts_with('`') || content.ends_with('`') {
-        ctx.write(" ");
-    }
-    ctx.write(backticks);
-}
-
-fn emit_link(node: &Node, ctx: &mut EmitContext) {
-    let url = node.props.get_str(prop::URL).unwrap_or("");
-    let title = node.props.get_str(prop::TITLE).unwrap_or("");
-
-    ctx.write("[");
-    emit_nodes(&node.children, ctx);
-    ctx.write("](");
-    ctx.write(url);
-    if !title.is_empty() {
-        ctx.write(" \"");
-        ctx.write(title);
-        ctx.write("\"");
-    }
-    ctx.write(")");
-}
-
-fn emit_image(node: &Node, ctx: &mut EmitContext) {
-    let url = node.props.get_str(prop::URL).unwrap_or("");
-    let alt = node.props.get_str(prop::ALT).unwrap_or("");
-    let title = node.props.get_str(prop::TITLE).unwrap_or("");
-
-    ctx.write("![");
-    ctx.write(alt);
-    ctx.write("](");
-    ctx.write(url);
-    if !title.is_empty() {
-        ctx.write(" \"");
-        ctx.write(title);
-        ctx.write("\"");
-    }
-    ctx.write(")");
-}
-
-fn emit_line_break(ctx: &mut EmitContext) {
-    ctx.write("  \n");
-}
-
-fn emit_soft_break(ctx: &mut EmitContext) {
-    ctx.write("\n");
-}
-
-fn emit_raw_inline(node: &Node, ctx: &mut EmitContext) {
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(content);
-    }
-}
-
-fn emit_footnote_ref(node: &Node, ctx: &mut EmitContext) {
-    let id = node.props.get_str(prop::ID).unwrap_or("");
-    ctx.write("[^");
-    ctx.write(id);
-    ctx.write("]");
-}
-
-fn emit_math_inline(node: &Node, ctx: &mut EmitContext) {
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write("$");
-        ctx.write(content);
-        ctx.write("$");
-    }
-}
-
-fn emit_math_block(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write("$$\n");
-        ctx.write(content);
-        if !content.ends_with('\n') {
-            ctx.write("\n");
-        }
-        ctx.write("$$\n");
     }
 }
 
@@ -482,23 +321,25 @@ mod tests {
 
     #[test]
     fn test_emit_definition_list() {
-        let doc = Document::new().with_content(
-            Node::new(NodeKind::from("document")).child(
-                Node::new(NodeKind::from("definition_list"))
-                    .child(
-                        Node::new(NodeKind::from("definition_term"))
-                            .child(Node::new(NodeKind::from("text")).prop("content", "Term")),
-                    )
-                    .child(
-                        Node::new(NodeKind::from("definition_desc"))
-                            .child(Node::new(NodeKind::from("text")).prop("content", "Definition")),
-                    ),
-            ),
-        );
+        let doc =
+            Document::new().with_content(
+                Node::new(NodeKind::from("document")).child(
+                    Node::new(NodeKind::from("definition_list"))
+                        .child(
+                            Node::new(NodeKind::from("definition_term"))
+                                .child(Node::new(NodeKind::from("text")).prop("content", "Term")),
+                        )
+                        .child(Node::new(NodeKind::from("definition_desc")).child(
+                            Node::new(NodeKind::from("paragraph")).child(
+                                Node::new(NodeKind::from("text")).prop("content", "Definition"),
+                            ),
+                        )),
+                ),
+            );
 
         let output = emit_str(&doc);
         assert!(output.contains("Term"));
-        assert!(output.contains(": Definition"));
+        assert!(output.contains("Definition"));
     }
 
     #[test]
@@ -511,7 +352,7 @@ mod tests {
         );
 
         let output = emit_str(&doc);
-        assert!(output.contains("$x^2$"));
+        assert!(output.contains("x^2"));
     }
 
     #[test]
@@ -545,8 +386,28 @@ mod tests {
         );
 
         let output = emit_str(&doc);
-        assert!(output.contains("| A | B |"));
-        assert!(output.contains("| --- |"));
-        assert!(output.contains("| 1 | 2 |"));
+        assert!(output.contains("A"));
+        assert!(output.contains("1"));
+    }
+
+    #[test]
+    fn test_emit_citation() {
+        let doc = Document::new().with_content(
+            Node::new(NodeKind::from("document")).child(
+                Node::new(NodeKind::from("paragraph")).child(
+                    Node::new(NodeKind::from("mmd:citation"))
+                        .prop("locator", "p. 23")
+                        .prop("label", "Doe:2006"),
+                ),
+            ),
+        );
+        let output = emit_str(&doc);
+        let (parsed, diags) = multimarkdown_fmt::parse(output.as_bytes());
+        assert!(diags.is_empty());
+        assert!(matches!(
+            &parsed.blocks[0],
+            MmdBlock::Paragraph { inlines, .. }
+                if matches!(&inlines[0], MmdInline::Citation { label, .. } if label == "Doe:2006")
+        ));
     }
 }

@@ -9,4 +9,4 @@ description = "MultiMarkdown reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
-pulldown-cmark = { workspace = true }
+multimarkdown-fmt = { workspace = true }
