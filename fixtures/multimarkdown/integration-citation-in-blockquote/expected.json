@@ -1,0 +1,9 @@
+{
+  "description": "Citation recognized inside a blockquote's paragraph content",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "mmd:citation", "props": { "label": "Doe:2006", "locator": null } }
+  ]
+}

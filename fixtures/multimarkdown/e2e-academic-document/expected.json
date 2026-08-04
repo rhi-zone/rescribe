@@ -1,0 +1,20 @@
+{
+  "description": "Realistic academic document: metadata, heading anchor, citation, cross-reference, math, table, footnote, and a citation definition all together",
+  "category": "e2e",
+  "metadata": {
+    "Title": "A Study of Things",
+    "Author": "Jane Doe"
+  },
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 6 },
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "id": "Introduction" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/1", "kind": "mmd:citation", "props": { "label": "Doe:2006", "locator": "p. 12" } },
+    { "path": "/1/5", "kind": "mmd:cross_reference", "props": { "target": "Introduction", "collapsed": true } },
+    { "path": "/2", "kind": "table" },
+    { "path": "/3", "kind": "paragraph" },
+    { "path": "/3/1", "kind": "footnote_ref", "props": { "id": "note" } },
+    { "path": "/4", "kind": "footnote_def", "props": { "id": "note" } },
+    { "path": "/5", "kind": "mmd:citation_def", "props": { "id": "Doe:2006" } }
+  ]
+}

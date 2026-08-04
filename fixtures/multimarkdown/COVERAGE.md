@@ -16,6 +16,29 @@ spec.
 MultiMarkdown (MMD) extends Markdown with tables, footnotes, definition lists,
 math, metadata, cross-references, glossaries, abbreviations, and more.
 
+**2026-08-04: backed by `multimarkdown-fmt`** (was previously a hand-rolled
+`pulldown-cmark` wrapper directly in `rescribe-read-multimarkdown`, a
+CLAUDE.md "adapter layer must never contain parsing logic" violation).
+`multimarkdown-fmt` depends on `commonmark-fmt` for every CommonMark/GFM/
+footnotes/definition-lists/math construct and implements only genuine
+MMD-uniques (metadata blocks, citations, cross-references) itself — see that
+crate's module docs. Two known, confirmed gaps from this rework:
+- **subscript/superscript are no longer supported.** `~sub~`/`^sup^` are
+  pulldown-cmark's own `ENABLE_SUBSCRIPT`/`ENABLE_SUPERSCRIPT` extensions,
+  which `commonmark-fmt` does not expose (its feature set is tables/
+  task-lists/strikethrough/frontmatter/footnotes/definition-lists/math —
+  confirmed by reading its `Cargo.toml`). Single-tilde `~sub~` additionally
+  collides with `commonmark-fmt`'s own strikethrough feature. Fixing this
+  requires adding subscript/superscript to `commonmark-fmt` itself (a
+  separate vertical), not something achievable inside `multimarkdown-fmt`.
+  `fixtures/multimarkdown/subscript` and `.../superscript` still exist and
+  are still correct fixtures for the *format* — they are skipped by name in
+  `rescribe-fixtures/tests/run.rs`'s `multimarkdown()` test with a comment
+  explaining why, not deleted. Tracked in `TODO.md`.
+- **The inline citation-content form** (`text.[#Full citation content.]`,
+  defining a citation's content inline rather than via a separate
+  `[#refname]:` line) is not implemented. Tracked in `TODO.md`.
+
 ## Block constructs (Markdown baseline)
 - [x] paragraph — `paragraph`
 - [x] heading — `heading`
@@ -34,7 +57,9 @@ math, metadata, cross-references, glossaries, abbreviations, and more.
 - [x] table (with alignment) — `table`
 - [x] footnote definition — `footnote`
 - [x] definition list — `definition-list`
-- [ ] metadata block (MMD front matter, key: value) — (missing)
+- [x] metadata block, bare (`Key: value`) — `metadata-bare`
+- [x] metadata block, `---`-delimited — `metadata-delimited`
+- [x] citation definition (`[#refname]: content`) — `citation-definition`
 - [ ] table of contents placeholder (`{{TOC}}`) — (missing)
 - [ ] abbreviation definition — (missing)
 - [ ] glossary term definition — (missing)
@@ -57,11 +82,16 @@ math, metadata, cross-references, glossaries, abbreviations, and more.
 
 ## Inline constructs (MMD extensions)
 - [x] footnote reference — `footnote`
-- [x] subscript — `subscript`
-- [x] superscript — `superscript`
+- [ ] subscript — not supported by `commonmark-fmt`; see caveat above (`subscript` fixture skipped, tracked in TODO.md)
+- [ ] superscript — not supported by `commonmark-fmt`; see caveat above (`superscript` fixture skipped, tracked in TODO.md)
 - [x] inline math — `math-inline`
 - [x] display math — `math-display`
-- [ ] cross-reference (heading anchor link) — (missing)
+- [x] citation with locator (`[locator][#refname]`) — `citation-with-locator`
+- [x] citation without locator (`[][#refname]`) — `citation-no-locator`
+- [ ] citation, inline-content form (`text.[#content]`) — (missing; not yet implemented, see caveat above)
+- [x] cross-reference, shortcut form (`[Anchor]`) — `cross-reference-shortcut`
+- [x] cross-reference, collapsed form (`[Header Text][]`) — `cross-reference-collapsed`
+- [x] heading anchor label (`### Heading [Anchor] ###`) — `heading-anchor`
 - [ ] image with dimensions (`![alt][ref]{width=...}`) — (missing)
 - [ ] critic markup (addition/deletion/substitution) — (missing)
 - [ ] abbreviation inline — (missing)
@@ -88,10 +118,12 @@ math, metadata, cross-references, glossaries, abbreviations, and more.
 - [ ] definition list inside blockquote — (missing)
 - [ ] nested list with footnotes — (missing)
 - [ ] table with formatted cells — (missing)
-- [ ] cross-reference to heading — (missing)
+- [x] cross-reference to heading — `cross-reference-shortcut` (also exercised in `e2e-academic-document`)
+- [x] citation inside a list item — `integration-citation-in-list`
+- [x] citation inside a blockquote — `integration-citation-in-blockquote`
 
 ## End-to-end
-- [ ] realistic academic document (metadata, footnotes, math, table) — (missing)
+- [x] realistic academic document (metadata, heading anchor, citation, cross-reference, math, table, footnote, citation definition) — `e2e-academic-document`
 
 ## Rare
 - [ ] setext heading — (missing)
@@ -113,6 +145,8 @@ math, metadata, cross-references, glossaries, abbreviations, and more.
 - [ ] footnote reference with no definition — (missing)
 - [ ] malformed math (unclosed `$`) — (missing)
 - [ ] malformed table — (missing)
+- [x] unclosed citation-definition bracket — `adv-malformed-citation-def`
+- [x] citation with empty label — `adv-empty-citation-label`
 
 ## Pathological
 - [ ] 1000-item list — (missing)

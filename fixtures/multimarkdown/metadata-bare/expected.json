@@ -1,0 +1,13 @@
+{
+  "description": "Bare Key: value metadata block at document start populates document metadata",
+  "category": "happy",
+  "metadata": {
+    "Title": "My Document",
+    "Author": "Jane Doe"
+  },
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "heading" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

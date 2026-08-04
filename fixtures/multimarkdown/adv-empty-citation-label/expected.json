@@ -1,0 +1,7 @@
+{
+  "description": "Citation with an empty label ([loc][#]) does not panic; parses as a citation with an empty label rather than being rejected",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

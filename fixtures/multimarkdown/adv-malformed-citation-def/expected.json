@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed citation-definition bracket (no closing ]) does not panic and falls back to plain paragraph text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

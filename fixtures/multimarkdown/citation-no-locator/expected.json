@@ -1,0 +1,8 @@
+{
+  "description": "[][#refname] citation with an empty locator has no locator prop (null)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "mmd:citation", "props": { "locator": null, "label": "Doe:2006" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "[target][] collapsed cross-reference becomes an mmd:cross_reference node with collapsed: true",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "mmd:cross_reference", "props": { "target": "Metadata", "collapsed": true } }
+  ]
+}

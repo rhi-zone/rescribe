@@ -1,0 +1,10 @@
+{
+  "description": "Citation recognized inside a list item paragraph, not just top-level",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/1", "kind": "mmd:citation", "props": { "label": "Doe:2006", "locator": "p. 1" } }
+  ]
+}

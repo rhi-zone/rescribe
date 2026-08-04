@@ -1,0 +1,9 @@
+{
+  "description": "[target] shortcut cross-reference becomes an mmd:cross_reference node with collapsed: false",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "mmd:cross_reference", "props": { "target": "Overview", "collapsed": false } },
+    { "path": "/1", "kind": "heading" }
+  ]
+}

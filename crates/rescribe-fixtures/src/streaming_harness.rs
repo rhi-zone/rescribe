@@ -546,6 +546,60 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
+        format: "multimarkdown",
+        // multimarkdown-fmt is a from-scratch crate (2026-08-04), extracted
+        // from rescribe-read-multimarkdown/rescribe-write-multimarkdown
+        // (which called pulldown-cmark directly and hand-wrote Markdown
+        // strings — a CLAUDE.md "adapter layer must never contain parsing/
+        // writing logic" violation). Per this repository's decision for
+        // this vertical, multimarkdown-fmt depends on commonmark-fmt for
+        // every CommonMark/GFM/footnotes/definition-lists/math construct
+        // and implements only genuine MMD-uniques (metadata blocks,
+        // citations, cross-references) itself — see multimarkdown-fmt's
+        // module docs for the full design.
+        //
+        // `events()` is Wired: EventIter is a real incremental wrapper over
+        // commonmark_fmt::events::EventIter (not parse()-then-replay) —
+        // metadata is extracted via a bounded prefix scan at construction,
+        // citation-definition paragraphs are recognized with exactly one
+        // token of lookahead (a single-slot `deferred` buffer, not
+        // paragraph- or document-buffering), and citation/cross-reference
+        // patterns are split out of each Text event as it is pulled. See
+        // multimarkdown-fmt/src/events.rs's module doc for the full
+        // mechanism.
+        events: ApiState::Wired,
+        // Inherits commonmark-fmt's own documented pulldown-cmark
+        // buffer-all-input exemption (see the "commonmark" entry above) for
+        // the same reason: multimarkdown-fmt's own metadata/citation-def
+        // extraction adds no additional requirement to buffer beyond what
+        // the CommonMark body underneath already must. Restated in
+        // multimarkdown-fmt's own crate docs and batch.rs module doc (not
+        // silently inherited) per CLAUDE.md.
+        streaming_parser: ApiState::NotApplicable(
+            "shares commonmark-fmt's sanctioned pulldown-cmark StreamingParser exemption for \
+             its CommonMark-derived body content; restated explicitly in multimarkdown-fmt's \
+             own crate docs and src/batch.rs, not silently inherited — see \
+             crates/formats/multimarkdown-fmt/src/lib.rs and src/batch.rs",
+        ),
+        // Writer forwards Event::Cm(_) straight to commonmark_fmt::Writer
+        // (which does the real incremental per-event writing) and
+        // translates MMD-unique events to literal text via the same
+        // spelling crate::transform uses on the AST path — verified via
+        // multimarkdown-fmt's own in-crate tests (writer_round_trips_via_events)
+        // and rescribe-fixtures' multimarkdown() fixture test.
+        //
+        // Known, confirmed gap (not a streaming-API defect): subscript/
+        // superscript (`~sub~`/`^sup^`) are pulldown-cmark's own
+        // ENABLE_SUBSCRIPT/ENABLE_SUPERSCRIPT extensions, which
+        // commonmark-fmt does not expose as a feature — closing this
+        // requires adding subscript/superscript support to commonmark-fmt
+        // itself (a separate vertical). fixtures/multimarkdown/subscript
+        // and .../superscript are skipped by name in tests/run.rs's
+        // multimarkdown() test with a comment explaining why; see
+        // fixtures/multimarkdown/COVERAGE.md and TODO.md.
+        streaming_writer: ApiState::Wired,
+    },
+    FormatCapabilities {
         format: "gfm",
         events: ApiState::Wired,
         streaming_parser: ApiState::NotApplicable(
@@ -1739,17 +1793,12 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "bibtex",
     "biblatex",
     "epub",
-    // `multimarkdown` and `pdf` have NO standalone {format}-fmt crate:
-    // `rescribe-read-multimarkdown`'s Cargo.toml depends on `pulldown-cmark`
-    // directly (not on `commonmark-fmt`), so its parsing logic lives in the
-    // adapter crate itself — a further CLAUDE.md "adapter layer must never
-    // contain parsing logic" candidate beyond latex, confirmed by reading
-    // its Cargo.toml but not further investigated here (out of scope for
-    // this pass; see TODO.md). `pdf` likewise has no standalone `pdf-fmt`
-    // crate (only `rescribe-read-pdf`) — confirmed by directory listing
-    // `crates/formats/`; not further investigated in this pass. `rtf` was
-    // audited this pass — see its `CAPABILITIES` entry below.
-    "multimarkdown",
+    // `multimarkdown` moved to `CAPABILITIES` below (2026-08-04):
+    // `multimarkdown-fmt` now exists, built on `commonmark-fmt`. `pdf` has
+    // NO standalone {format}-fmt crate (only `rescribe-read-pdf`) —
+    // confirmed by directory listing `crates/formats/`; not further
+    // investigated in this pass. `rtf` was audited this pass — see its
+    // `CAPABILITIES` entry below.
     "pdf",
     // Ten Pandoc output-format variants (beamer, revealjs, slidy, s5,
     // dzslides, slideous, context, ms, icml, chunkedhtml) — write-only

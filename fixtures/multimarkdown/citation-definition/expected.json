@@ -1,0 +1,9 @@
+{
+  "description": "[#refname]: content citation definition line becomes an mmd:citation_def node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "mmd:citation_def", "props": { "id": "Doe:2006" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "John Doe. " } },
+    { "path": "/0/1", "kind": "emphasis" }
+  ]
+}

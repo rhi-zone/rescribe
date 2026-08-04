@@ -1,0 +1,2 @@
+- See[p. 1][#Doe:2006] for details.
+- Another item.

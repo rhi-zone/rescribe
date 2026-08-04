@@ -1,0 +1,8 @@
+{
+  "description": "[locator][#refname] citation becomes an mmd:citation node with locator and label props",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "mmd:citation", "props": { "locator": "p. 23", "label": "Doe:2006" } }
+  ]
+}

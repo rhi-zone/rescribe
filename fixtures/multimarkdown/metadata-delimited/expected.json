@@ -1,0 +1,11 @@
+{
+  "description": "--- delimited metadata block (YAML-tooling-compatible form) parses the same as bare form",
+  "category": "rare",
+  "metadata": {
+    "Title": "My Document"
+  },
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

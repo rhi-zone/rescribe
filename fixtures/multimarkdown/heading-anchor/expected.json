@@ -1,0 +1,8 @@
+{
+  "description": "Trailing [Anchor] on a heading becomes the heading's id prop, not inline content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3, "id": "MultiMarkdownOverview" }, "children_count": 1 },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Overview" } }
+  ]
+}
