@@ -902,6 +902,50 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
+    FormatCapabilities {
+        format: "typst",
+        // typst-fmt is a from-scratch crate (2026-08-04) extracted from
+        // rescribe-read-typst/rescribe-write-typst (which called
+        // typst_syntax::parse and hand-emitted Typst markup text directly in
+        // production code, a pre-existing CLAUDE.md violation logged in
+        // TODO.md). Unlike opml-fmt/endnotexml-fmt (hand-rolled quick_xml-
+        // backed parsers with a genuinely independent events() pull
+        // iterator), typst-fmt wraps `typst-syntax`, which has no native
+        // event/SAX parsing mode at all — there is no way to produce
+        // IR-shaped events without parsing to a tree first. `events()`
+        // (EventIter) is therefore a cursor-based walk over the already-
+        // parsed structure (an explicit `Vec<Task>` work stack, each
+        // `next()` call doing O(1) work — a legitimate streaming
+        // *iteration* API, honest about being a post-parse walk, not a fake
+        // one) — the same "events() = parse() + tree walk" shape as
+        // bbcode-fmt below, wired for the identical reason: no format-spec
+        // restriction forces it, it is what the upstream parser makes
+        // possible. `StreamingParser`/`BatchParser` (batch.rs) buffer all
+        // input until `finish()` for the same underlying reason (no
+        // chunk-fed from-scratch parse API exists in typst-syntax — only
+        // edit-based *re*parsing of an already-built tree, an editor use
+        // case) — the second sanctioned "buffer all input" exemption
+        // alongside commonmark-fmt's pulldown-cmark, documented in
+        // CLAUDE.md and in batch.rs's own module docs.
+        //
+        // Verified via this harness's own checks over all `fixtures/typst`
+        // fixtures (rescribe-fixtures' typst() test, tests/run.rs), plus
+        // typst-fmt's own in-crate smoke tests (events() == events_from_doc
+        // projection, StreamingParser == events(), streaming Writer ==
+        // builder emit() over a construct sample) and its two fuzz targets
+        // (no-panic, native-AST roundtrip). Two genuine bugs surfaced and
+        // were fixed while adding the roundtrip test, both inherited
+        // unnoticed from the pre-extraction rescribe-write-typst emitter
+        // (never roundtrip-tested before): a `Block::DefinitionList` was
+        // emitted wrapped in `#terms(...)`, which is not valid Typst syntax
+        // at all; and equation/unknown-function-call source text was
+        // extracted via `SyntaxNode::text()`, which is empty for any
+        // composite node (text only lives on leaf tokens) — both fixed, see
+        // typst-fmt's own commit history for the full detail.
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::Wired,
+    },
     // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
     // (events.rs's `events()` literally calls `crate::parse::parse(input)`
     // then walks the resulting `BbcodeDoc`) — the same non-independent shape
@@ -1694,7 +1738,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "ipynb",
     "bibtex",
     "biblatex",
-    "typst",
     "epub",
     // `multimarkdown` and `pdf` have NO standalone {format}-fmt crate:
     // `rescribe-read-multimarkdown`'s Cargo.toml depends on `pulldown-cmark`
