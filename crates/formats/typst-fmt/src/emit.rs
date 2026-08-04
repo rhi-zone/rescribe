@@ -84,18 +84,24 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             }
         }
         Block::DefinitionList(entries) => {
-            ctx.write("#terms(\n");
+            // Term-list markup (`/ term: desc`) is valid directly in Typst
+            // markup, one line per entry — it is not a `#terms(...)`
+            // function call (that was a pre-existing bug in this crate's
+            // predecessor, `rescribe-write-typst`'s hand-rolled emitter:
+            // `#terms(...)` is not valid Typst syntax at all, so no
+            // roundtrip test ever caught it — see this crate's own
+            // `roundtrip_covers_every_construct` test, which does).
             for (term, desc) in entries {
-                ctx.write("  / ");
+                ctx.write("/ ");
                 emit_inlines(term, ctx);
                 ctx.write(": ");
                 emit_inlines(desc, ctx);
-                ctx.write(",\n");
+                ctx.write("\n");
             }
-            ctx.write(")\n\n");
+            ctx.write("\n");
         }
         Block::Quote(body) => {
-            ctx.write("#quote[\n");
+            ctx.write("#quote[");
             emit_blocks(body, ctx);
             ctx.write("]\n\n");
         }
@@ -121,7 +127,7 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
                     ctx.write("\"),\n");
                 }
                 Some(other) => {
-                    ctx.write("  [\n");
+                    ctx.write("  [");
                     emit_block(other, ctx);
                     ctx.write("  ],\n");
                 }

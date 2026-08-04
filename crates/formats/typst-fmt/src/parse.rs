@@ -103,12 +103,12 @@ fn convert_markup_to_blocks(markup: Markup) -> Vec<Block> {
                 let content = raw_lines_to_string(raw);
                 let lang = raw
                     .lang()
-                    .map(|l| l.to_untyped().text().to_string())
+                    .map(|l| l.to_untyped().clone().into_text().to_string())
                     .filter(|l| !l.is_empty());
                 blocks.push(Block::CodeBlock { lang, content });
             }
             Expr::FuncCall(call) => {
-                let callee_text = call.callee().to_untyped().text().to_string();
+                let callee_text = call.callee().to_untyped().clone().into_text().to_string();
                 if is_inline_func(callee_text.as_str()) {
                     if let Some(n) = convert_func_call_inline(call) {
                         inline_buf.push(n);
@@ -169,11 +169,11 @@ fn convert_expr_to_inlines(expr: Expr) -> Vec<Inline> {
             vec![Inline::Text(ch.to_owned())]
         }
         Expr::Escape(e) => {
-            let text = e.to_untyped().text().to_string();
+            let text = e.to_untyped().clone().into_text().to_string();
             let content = text.strip_prefix('\\').map(str::to_owned).unwrap_or(text);
             vec![Inline::Text(content)]
         }
-        Expr::Shorthand(s) => vec![Inline::Text(s.to_untyped().text().to_string())],
+        Expr::Shorthand(s) => vec![Inline::Text(s.to_untyped().clone().into_text().to_string())],
         Expr::Strong(s) => vec![Inline::Strong(convert_markup_to_inlines(s.body()))],
         Expr::Emph(e) => vec![Inline::Emph(convert_markup_to_inlines(e.body()))],
         Expr::Raw(raw) => vec![Inline::Code(raw_lines_to_string(raw))],
@@ -185,7 +185,7 @@ fn convert_expr_to_inlines(expr: Expr) -> Vec<Inline> {
             }]
         }
         Expr::Equation(eq) => {
-            let math_source = eq.to_untyped().text().to_string();
+            let math_source = eq.to_untyped().clone().into_text().to_string();
             let src = math_source.trim_matches('$').trim().to_owned();
             if eq.block() {
                 vec![Inline::MathDisplay(src)]
@@ -200,7 +200,7 @@ fn convert_expr_to_inlines(expr: Expr) -> Vec<Inline> {
         | Expr::EnumItem(_)
         | Expr::TermItem(_) => vec![],
         other => {
-            let text = other.to_untyped().text().to_string();
+            let text = other.to_untyped().clone().into_text().to_string();
             if text.is_empty() {
                 vec![]
             } else {
@@ -226,12 +226,13 @@ fn is_inline_func(name: &str) -> bool {
             | "footnote"
             | "link"
             | "linebreak"
+            | "smallcaps"
     )
 }
 
 /// Handle a Typst function call that appears in inline (paragraph) context.
 fn convert_func_call_inline(call: typst_syntax::ast::FuncCall) -> Option<Inline> {
-    let func_name = call.callee().to_untyped().text().to_string();
+    let func_name = call.callee().to_untyped().clone().into_text().to_string();
     match func_name.as_str() {
         "link" => {
             let url = first_str_arg(call.args());
@@ -267,8 +268,11 @@ fn convert_func_call_inline(call: typst_syntax::ast::FuncCall) -> Option<Inline>
             first_content_arg(call.args()).unwrap_or_default(),
         )),
         "linebreak" => Some(Inline::LineBreak),
+        "smallcaps" => Some(Inline::SmallCaps(
+            first_content_arg(call.args()).unwrap_or_default(),
+        )),
         _ => {
-            let text = call.to_untyped().text().to_string();
+            let text = call.to_untyped().clone().into_text().to_string();
             if text.is_empty() {
                 None
             } else {
@@ -280,7 +284,7 @@ fn convert_func_call_inline(call: typst_syntax::ast::FuncCall) -> Option<Inline>
 
 /// Handle a Typst function call that appears at block level.
 fn convert_func_call_block(call: typst_syntax::ast::FuncCall) -> Option<Block> {
-    let func_name = call.callee().to_untyped().text().to_string();
+    let func_name = call.callee().to_untyped().clone().into_text().to_string();
     match func_name.as_str() {
         "image" => first_str_arg(call.args()).map(|url| Block::Image { url }),
         "raw" => Some(Block::CodeBlock {
@@ -342,7 +346,7 @@ fn convert_func_call_block(call: typst_syntax::ast::FuncCall) -> Option<Block> {
             first_content_arg(call.args()).unwrap_or_default(),
         )])),
         _ => {
-            let text = call.to_untyped().text().to_string();
+            let text = call.to_untyped().clone().into_text().to_string();
             Some(Block::Raw(text))
         }
     }

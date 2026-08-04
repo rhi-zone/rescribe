@@ -131,7 +131,7 @@ impl<W: Write> Writer<W> {
                 }
                 return true; // fully handled, caller should not also emit generic Image text
             }
-            self.write("  [\n");
+            self.write("  [");
             if let Some(OpenKind::Figure {
                 body_seen, wrapped, ..
             }) = self.stack.last_mut()
@@ -258,16 +258,15 @@ impl<W: Write> Writer<W> {
 
             Event::StartDefinitionList => {
                 self.enter_block_slot(false, None);
-                self.write("#terms(\n");
                 self.stack.push(OpenKind::DefinitionList);
             }
             Event::EndDefinitionList => {
                 self.stack.pop();
-                self.write(")\n\n");
+                self.write("\n");
                 self.after_pop();
             }
             Event::StartDefinitionTerm => {
-                self.write("  / ");
+                self.write("/ ");
                 self.stack.push(OpenKind::DefinitionTerm);
             }
             Event::EndDefinitionTerm => {
@@ -279,12 +278,12 @@ impl<W: Write> Writer<W> {
             }
             Event::EndDefinitionDesc => {
                 self.stack.pop();
-                self.write(",\n");
+                self.write("\n");
             }
 
             Event::StartQuote => {
                 self.enter_block_slot(false, None);
-                self.write("#quote[\n");
+                self.write("#quote[");
                 self.stack.push(OpenKind::Quote);
             }
             Event::EndQuote => {

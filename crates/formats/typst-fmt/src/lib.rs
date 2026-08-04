@@ -153,6 +153,138 @@ mod smoke {
         assert!(evts.contains(&Event::StartHeading { level: 1 }));
     }
 
+    /// Directly exercises the same roundtrip property the crate's
+    /// `typst_fmt_roundtrip` fuzz target checks
+    /// (`parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast`), once
+    /// per construct, as a fast in-tree sanity check that does not depend
+    /// on `cargo-fuzz` being installed.
+    #[test]
+    fn roundtrip_covers_every_construct() {
+        let cases: Vec<TypstDoc> = vec![
+            TypstDoc {
+                blocks: vec![Block::Heading {
+                    level: 3,
+                    body: vec![Inline::Text("Hi".into())],
+                }],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::CodeBlock {
+                    lang: Some("rust".into()),
+                    content: "fn main() {}".into(),
+                }],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::List {
+                    ordered: true,
+                    items: vec![
+                        vec![Block::Paragraph(vec![Inline::Text("a".into())])],
+                        vec![Block::Paragraph(vec![Inline::Text("b".into())])],
+                    ],
+                }],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::DefinitionList(vec![(
+                    vec![Inline::Text("term".into())],
+                    vec![Inline::Text("desc".into())],
+                )])],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::Quote(vec![Block::Paragraph(vec![Inline::Text(
+                    "quoted".into(),
+                )])])],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::Table {
+                    columns: 2,
+                    rows: vec![vec![
+                        vec![Inline::Text("a".into())],
+                        vec![Inline::Text("b".into())],
+                    ]],
+                }],
+                span: Span::NONE,
+            },
+            TypstDoc {
+                blocks: vec![Block::Figure {
+                    body: Some(Box::new(Block::Image {
+                        url: "cat.png".into(),
+                    })),
+                    caption: Some(vec![Inline::Text("A cat".into())]),
+                }],
+                span: Span::NONE,
+            },
+            // Block::HorizontalRule is intentionally excluded here: parse()
+            // has no construct-recognition path that produces it (an
+            // unrecognized `#line(...)` function call currently falls
+            // through the generic "unknown function" raw-block capture,
+            // which does not reliably preserve a horizontal-rule-shaped
+            // Raw payload) — a real, already-documented gap (see
+            // `fixtures/typst/COVERAGE.md`'s "horizontal line" row and
+            // `ast.rs`'s module docs), not something to paper over here.
+            // Block::MathDisplay is likewise excluded: a standalone
+            // block-level `$ ... $` is parsed as a paragraph containing an
+            // *inline*-positioned `Inline::MathDisplay` (see that variant's
+            // doc comment — it preserves the pre-existing adapter's
+            // "don't split the paragraph around a block equation"
+            // behavior), never as its own top-level `Block::MathDisplay`.
+            // That variant exists for the writer side only today.
+            TypstDoc {
+                blocks: vec![Block::Paragraph(vec![
+                    Inline::Strong(vec![Inline::Text("b".into())]),
+                    Inline::Emph(vec![Inline::Text("i".into())]),
+                    Inline::Underline(vec![Inline::Text("u".into())]),
+                    Inline::Strike(vec![Inline::Text("s".into())]),
+                    Inline::Subscript(vec![Inline::Text("sub".into())]),
+                    Inline::Superscript(vec![Inline::Text("sup".into())]),
+                    Inline::Code("code".into()),
+                    Inline::Link {
+                        url: "https://example.com".into(),
+                        body: vec![Inline::Text("link".into())],
+                    },
+                    // A `\` linebreak in Typst source must be followed by
+                    // whitespace to be recognized at all, and that
+                    // whitespace is *itself* re-tokenized as a separate
+                    // space on reparse — an inherent Typst grammar
+                    // property, not a bug here. The explicit `Text(" ")`
+                    // below is what a roundtrip actually produces; leaving
+                    // it implicit would make this test assert something
+                    // Typst's own syntax cannot roundtrip.
+                    Inline::LineBreak,
+                    Inline::Text(" ".into()),
+                    Inline::MathInline("y".into()),
+                    Inline::Footnote(vec![Inline::Text("note".into())]),
+                    Inline::SmallCaps(vec![Inline::Text("caps".into())]),
+                    // Inline::Quoted is intentionally not exercised here —
+                    // see its doc comment in ast.rs: it is a writer-only
+                    // construct with no reader-side production path, so it
+                    // fails the "parse(emit(x)) == x" property by
+                    // construction, not by bug. `rescribe-write-typst`'s
+                    // own tests cover its emit output directly instead.
+                ])],
+                span: Span::NONE,
+            },
+        ];
+
+        for doc in cases {
+            let emitted = emit(&doc);
+            let emitted_str = std::str::from_utf8(&emitted).unwrap();
+            let (doc2, diags) = parse(emitted_str);
+            assert!(
+                diags.is_empty(),
+                "diagnostics for {emitted_str:?}: {diags:?}"
+            );
+            assert_eq!(
+                doc.strip_spans(),
+                doc2.strip_spans(),
+                "roundtrip mismatch for {emitted_str:?}"
+            );
+        }
+    }
+
     #[test]
     fn smoke_writer() {
         let mut w = Writer::new(Vec::<u8>::new());

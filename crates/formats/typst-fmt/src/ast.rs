@@ -143,6 +143,11 @@ pub enum Inline {
     SmallCaps(Vec<Inline>),
     /// A quoted span. `double` selects `"..."` vs `'...'` — matches
     /// rescribe's `style:quote_type` property (`"double"`/`"single"`).
+    /// Writer-only today: `"..."`/`'...'` in Typst source is
+    /// `typst-syntax`'s `SmartQuote` token wrapping plain text, not a
+    /// nestable span construct, so [`crate::parse::parse`] has no path
+    /// that produces a grouped `Quoted` node (it produces standalone quote-
+    /// character `Text` nodes instead, matching the pre-existing adapter).
     Quoted {
         double: bool,
         body: Vec<Inline>,
