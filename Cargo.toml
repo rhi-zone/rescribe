@@ -119,6 +119,7 @@ docbook-fmt = { path = "crates/formats/docbook-fmt" }
 jats-fmt = { path = "crates/formats/jats-fmt" }
 tei-fmt = { path = "crates/formats/tei-fmt" }
 opml-fmt = { path = "crates/formats/opml-fmt" }
+endnotexml-fmt = { path = "crates/formats/endnotexml-fmt" }
 ris = { path = "crates/formats/ris" }
 native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }

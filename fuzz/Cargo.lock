@@ -384,6 +384,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "endnotexml-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
+
+[[package]]
 name = "entities"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,6 +1363,7 @@ dependencies = [
  "csv-fmt",
  "djot-fmt",
  "docbook-fmt",
+ "endnotexml-fmt",
  "jats-fmt",
  "libfuzzer-sys",
  "mediawiki-fmt",
@@ -1576,7 +1584,7 @@ dependencies = [
 name = "rescribe-read-endnotexml"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "endnotexml-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
