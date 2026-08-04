@@ -28,7 +28,7 @@ reasonably recover, not what a full PDF renderer would handle.
 - [ ] whitespace-only page — (missing)
 
 ## Structure inference (heuristic)
-- [ ] heading detection (larger font size = heading) — (missing)
+- [x] heading detection (larger font size = heading) — `heading-font-size`
 - [ ] list item detection (bullet prefix) — (missing)
 - [ ] table detection (column-aligned text blocks) — (missing)
 - [ ] multi-column layout — (missing)

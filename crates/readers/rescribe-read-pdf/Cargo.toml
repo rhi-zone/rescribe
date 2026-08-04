@@ -10,3 +10,16 @@ description = "PDF reader for rescribe"
 rescribe-core.workspace = true
 rescribe-std.workspace = true
 pdf-extract = "0.10"
+# Required to implement pdf_extract's `OutputDev` trait: character transforms
+# (`pdf_extract::Transform`) are a type alias over `euclid::Transform2D`, and
+# pdf_extract does not re-export euclid's constructors/free functions.
+euclid = "0.20"
+# Used only by the `gen_pdf_fixtures` fixture-generator binary (not by any
+# library code) to construct real PDF bytes via lopdf's low-level
+# Document/Content API. Same version pdf-extract itself depends on
+# transitively.
+lopdf = { version = "0.38", default-features = false }
+
+[[bin]]
+name = "gen_pdf_fixtures"
+path = "src/bin/gen_pdf_fixtures.rs"

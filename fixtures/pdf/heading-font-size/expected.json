@@ -1,0 +1,33 @@
+{
+  "description": "Font-size heuristic detects two heading levels (24pt and 18pt) against a 12pt body-text mode across a two-page document; wrapped paragraph lines merge into one block, and a page break is inserted between pages",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Introduction" } },
+    {
+      "path": "/1",
+      "kind": "paragraph",
+      "children_count": 1
+    },
+    {
+      "path": "/1/0",
+      "kind": "text",
+      "props": {
+        "content": "This is the first paragraph of body text. It continues onto a second line."
+      }
+    },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Background" } },
+    {
+      "path": "/3/0",
+      "kind": "text",
+      "props": { "content": "More body text at the same body size follows here." }
+    },
+    { "path": "/4", "kind": "horizontal_rule", "props": { "layout:page_break": true } },
+    {
+      "path": "/5/0",
+      "kind": "text",
+      "props": { "content": "Text continues on the second page." }
+    }
+  ]
+}

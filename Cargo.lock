@@ -3677,6 +3677,8 @@ dependencies = [
 name = "rescribe-read-pdf"
 version = "0.1.0"
 dependencies = [
+ "euclid 0.20.14",
+ "lopdf",
  "pdf-extract",
  "rescribe-core",
  "rescribe-std",
