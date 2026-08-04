@@ -56,7 +56,7 @@ Reference: Typst documentation — https://typst.app/docs/
 - [ ] smartquote ("..." / '...') — (missing)
 - [ ] highlight (#highlight[...]) — (missing)
 - [ ] overline (#overline[...]) — (missing)
-- [ ] small caps (#smallcaps[...]) — (missing)
+- [x] small caps (#smallcaps[...]) — `small-caps`
 - [ ] text color (#text(fill: ...)[...]) — (missing)
 - [ ] font size (#text(size: ...)[...]) — (missing)
 - [ ] raw inline (`code`) — (missing; covered partially by code-inline)

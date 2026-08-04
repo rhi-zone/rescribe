@@ -1,0 +1,1 @@
+#smallcaps[small caps text]
