@@ -4014,6 +4014,41 @@ fn commonmark_block_events(
             }
             out.push(Event::EndTable);
         }
+        Block::FootnoteDefinition { label, blocks, .. } => {
+            out.push(Event::StartFootnoteDefinition {
+                label: Cow::Owned(label.clone()),
+            });
+            for c in blocks {
+                commonmark_block_events(c, out);
+            }
+            out.push(Event::EndFootnoteDefinition);
+        }
+        Block::DefinitionList { items, tight, .. } => {
+            out.push(Event::StartDefinitionList);
+            for item in items {
+                out.push(Event::StartDefinitionListTitle);
+                for i in &item.term {
+                    commonmark_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionListTitle);
+                for def_blocks in &item.definitions {
+                    out.push(Event::StartDefinitionListDefinition);
+                    for c in def_blocks {
+                        commonmark_block_events(c, out);
+                    }
+                    out.push(Event::EndDefinitionListDefinition);
+                }
+            }
+            // EventIter always emits StartDefinitionList optimistically and,
+            // only for a loose list, corrects it once right before
+            // EndDefinitionList — see
+            // commonmark_fmt::events::Event::DefinitionListTightnessResolved's
+            // doc comment (mirrors ListTightnessResolved).
+            if !*tight {
+                out.push(Event::DefinitionListTightnessResolved { tight: false });
+            }
+            out.push(Event::EndDefinitionList);
+        }
     }
 }
 
@@ -4080,6 +4115,15 @@ fn commonmark_inline_events(
                 out.push(Event::Text(Cow::Owned(alt.clone())));
             }
             out.push(Event::EndImage);
+        }
+        Inline::FootnoteReference { label, .. } => out.push(Event::FootnoteReference {
+            label: Cow::Owned(label.clone()),
+        }),
+        Inline::InlineMath { source, .. } => {
+            out.push(Event::InlineMath(Cow::Owned(source.clone())))
+        }
+        Inline::DisplayMath { source, .. } => {
+            out.push(Event::DisplayMath(Cow::Owned(source.clone())));
         }
     }
 }

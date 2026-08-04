@@ -11,6 +11,9 @@ commonmark-fmt = { path = "../../formats/commonmark-fmt", features = [
     "tables",
     "task-lists",
     "strikethrough",
+    "footnotes",
+    "definition-lists",
+    "math",
 ] }
 serde_yaml.workspace = true
 toml.workspace = true

@@ -18,6 +18,9 @@ commonmark-fmt = { workspace = true, features = [
     "tables",
     "task-lists",
     "strikethrough",
+    "footnotes",
+    "definition-lists",
+    "math",
 ] }
 pulldown-cmark = { version = "0.12", optional = true }
 serde_yaml.workspace = true

@@ -221,46 +221,19 @@ fn toml_to_prop_value(value: &toml::Value) -> Option<rescribe_core::PropValue> {
 /// currency sign would false-positive as math). Callers who need these
 /// constructs modeled should use `backend_pulldown::parse` (the `pulldown`
 /// feature), which supports them natively. Tracked in TODO.md.
-fn detect_unsupported_extensions(input: &[u8], warnings: &mut Vec<FidelityWarning>) {
-    let Ok(s) = std::str::from_utf8(input) else {
-        return;
-    };
-
-    if s.lines().any(|l| {
-        let t = l.trim_start();
-        t.starts_with("[^") && t[2..].find("]:").is_some_and(|i| !t[2..2 + i].is_empty())
-    }) {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::FeatureLost("footnotes".to_string()),
-            "possible footnote syntax ([^label]: ...) found but not supported by the default \
-             backend; it will render as plain text. Use the `pulldown` feature for footnote support.",
-        ));
-    }
-
-    let lines: Vec<&str> = s.lines().collect();
-    if lines.windows(2).any(|w| {
-        let term = w[0].trim();
-        let def = w[1].trim_start();
-        !term.is_empty() && def.starts_with(": ")
-    }) {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::FeatureLost("definition_lists".to_string()),
-            "possible definition-list syntax (term / \": definition\") found but not supported \
-             by the default backend; it will render as plain text.",
-        ));
-    }
-
-    if s.contains('$') {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::FeatureLost("math".to_string()),
-            "input contains '$', which may be TeX math syntax; math is not supported by the \
-             default backend and will render as plain text if so.",
-        ));
-    }
-}
+/// Historically scanned raw source for footnote/definition-list/math syntax
+/// the default backend couldn't yet parse, emitting a heuristic fidelity
+/// warning instead of silently dropping the construct. Now a no-op: as of
+/// this pass `commonmark-fmt`'s `footnotes`/`definition-lists`/`math`
+/// features are real and requested by this crate's `Cargo.toml`, so
+/// `convert_block`/`convert_inline` (via `Block::FootnoteDefinition`/
+/// `DefinitionList`, `Inline::FootnoteReference`/`InlineMath`/`DisplayMath`)
+/// genuinely parse and convert all three — a heuristic "possibly unsupported"
+/// warning here would now be a false positive on correctly-converted input.
+/// Kept as a named function (rather than deleting the call site in
+/// `parse_with_options`) in case a future, still-unsupported extension needs
+/// the same kind of heuristic detection.
+fn detect_unsupported_extensions(_input: &[u8], _warnings: &mut Vec<FidelityWarning>) {}
 
 fn convert_doc(doc: &CmDoc, warnings: &mut Vec<FidelityWarning>) -> Vec<Node> {
     doc.blocks
@@ -367,6 +340,36 @@ fn convert_block(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 span,
             )
         }
+        Block::FootnoteDefinition {
+            label,
+            blocks,
+            span,
+        } => {
+            let children: Vec<Node> = blocks.iter().map(|b| convert_block(b, warnings)).collect();
+            maybe_span(
+                Node::new(node::FOOTNOTE_DEF)
+                    .prop(prop::LABEL, label.clone())
+                    .children(children),
+                span,
+            )
+        }
+        Block::DefinitionList { items, span, .. } => {
+            let mut children: Vec<Node> = Vec::new();
+            for item in items {
+                children.push(
+                    Node::new(node::DEFINITION_TERM)
+                        .children(convert_inlines(&item.term, warnings)),
+                );
+                for def_blocks in &item.definitions {
+                    let def_children: Vec<Node> = def_blocks
+                        .iter()
+                        .map(|b| convert_block(b, warnings))
+                        .collect();
+                    children.push(Node::new(node::DEFINITION_DESC).children(def_children));
+                }
+            }
+            maybe_span(Node::new(node::DEFINITION_LIST).children(children), span)
+        }
     }
 }
 
@@ -466,6 +469,22 @@ fn convert_inline(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node 
             }
             maybe_span(n, span)
         }
+        Inline::FootnoteReference { label, span } => maybe_span(
+            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone()),
+            span,
+        ),
+        Inline::InlineMath { source, span } => maybe_span(
+            Node::new("math_inline")
+                .prop("math:format", "latex")
+                .prop("math:source", source.clone()),
+            span,
+        ),
+        Inline::DisplayMath { source, span } => maybe_span(
+            Node::new("math_display")
+                .prop("math:format", "latex")
+                .prop("math:source", source.clone()),
+            span,
+        ),
     }
 }
 

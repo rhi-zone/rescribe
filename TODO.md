@@ -3406,6 +3406,26 @@ those rows should be aware `events()` is not yet at parity for `docx`/`pptx`, an
   (`rescribe-read-markdown`/`rescribe-write-markdown` named directly;
   `rescribe-read-commonmark`/`rescribe-fixtures` not named but the same category).
 
+  **Closed same day, on explicit direction:** `rescribe-read-commonmark/src/lib.rs` and
+  `rescribe-read-markdown/src/commonmark.rs` both gained real (not `todo!()`) match
+  arms for `Block::FootnoteDefinition`/`DefinitionList` and `Inline::FootnoteReference`/
+  `InlineMath`/`DisplayMath`, matching `pulldown.rs`'s established convention exactly
+  (`footnote_ref`/`footnote_def`/`definition_list`/`definition_term`/`definition_desc`
+  IR nodes; `math_inline`/`math_display` with `math:format="latex"` + `math:source`).
+  Both adapters' `Cargo.toml`s now request `footnotes`/`definition-lists`/`math` from
+  `commonmark-fmt` directly, so each is standalone-buildable without relying on
+  `rescribe-fixtures`'s `extensions` request to pull the features in.
+  `rescribe-read-markdown`'s `detect_unsupported_extensions` heuristic (the source-text
+  scan mentioned below) is now a documented no-op — those three constructs are no
+  longer unsupported, so the heuristic's warnings would be false positives.
+  `rescribe-fixtures/tests/streaming_apis.rs`'s AST→events projection helpers
+  (`commonmark_block_events`/`commonmark_inline_events`) gained matching arms too.
+  Writer side (`rescribe-write-commonmark`/`rescribe-write-markdown`) needed no
+  changes — neither depends on `commonmark-fmt` at all. Full workspace
+  `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test -q`, and
+  `cargo fmt --check` all clean; see `docs/format-audit.md`'s matching entry for
+  the fuller writeup.
+
   **Two real, pre-existing bugs found (not introduced) and fixed while building the
   `markdown_backends_agree` parity test, since that's what parity tests are for:**
   1. `commonmark-fmt`'s tight-list-item builder (`parse.rs`) only flushed accumulated

@@ -328,6 +328,36 @@ fn convert_block(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 span,
             )
         }
+        Block::FootnoteDefinition {
+            label,
+            blocks,
+            span,
+        } => {
+            let children: Vec<Node> = blocks.iter().map(|b| convert_block(b, warnings)).collect();
+            span_node(
+                Node::new(node::FOOTNOTE_DEF)
+                    .prop(prop::LABEL, label.clone())
+                    .children(children),
+                span,
+            )
+        }
+        Block::DefinitionList { items, span, .. } => {
+            let mut children: Vec<Node> = Vec::new();
+            for item in items {
+                children.push(
+                    Node::new(node::DEFINITION_TERM)
+                        .children(convert_inlines(&item.term, warnings)),
+                );
+                for def_blocks in &item.definitions {
+                    let def_children: Vec<Node> = def_blocks
+                        .iter()
+                        .map(|b| convert_block(b, warnings))
+                        .collect();
+                    children.push(Node::new(node::DEFINITION_DESC).children(def_children));
+                }
+            }
+            span_node(Node::new(node::DEFINITION_LIST).children(children), span)
+        }
     }
 }
 
@@ -417,6 +447,22 @@ fn convert_inline(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node 
             }
             span_node(n, span)
         }
+        Inline::FootnoteReference { label, span } => span_node(
+            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone()),
+            span,
+        ),
+        Inline::InlineMath { source, span } => span_node(
+            Node::new("math_inline")
+                .prop("math:format", "latex")
+                .prop("math:source", source.clone()),
+            span,
+        ),
+        Inline::DisplayMath { source, span } => span_node(
+            Node::new("math_display")
+                .prop("math:format", "latex")
+                .prop("math:source", source.clone()),
+            span,
+        ),
     }
 }
 
