@@ -125,8 +125,17 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
   that funnels everything through the tree builder is a fake streaming API.
   **If a library cannot support all five APIs at full performance, we cannot use
   that library.** The library must enable performance, not constrain it.
-  pulldown-cmark is the sole exception (superseding 77M weekly downloads is a
-  non-goal); its `StreamingParser` buffering limitation is documented explicitly.
+  Two sanctioned exceptions exist, each for its own reason, each documented
+  explicitly in the crate it applies to: pulldown-cmark (`commonmark-fmt`) — its
+  `StreamingParser` buffers all input because pulldown-cmark requires the full
+  input as a `&str`, and superseding pulldown-cmark (77M+ weekly downloads) is a
+  non-goal; and typst-syntax (`typst-fmt`) — its `StreamingParser` buffers all
+  input because typst-syntax has no chunk-fed parse API at all (`parse`,
+  `parse_code`, `parse_math` all require the full input up front; `reparse`/
+  `Source::edit` are edit-based *re*parsing of an already-built tree for
+  editor-style incremental updates, not applicable to parsing from nothing).
+  No other library gets this treatment without the same kind of documented,
+  upstream-verified justification.
 
 - **`ooxml-fmt` is the priority target for the full three-API architecture.** DOCX,
   XLSX, and PPTX routinely exceed RAM on large corpora; `StreamingParser` is not
