@@ -1,0 +1,13 @@
+{
+  "description": "An unrecognized <head> child element is raw-preserved via an opml:head_extra: metadata key rather than dropped",
+  "category": "rare",
+  "metadata": {
+    "title": "T",
+    "opml:head_extra:futureField": "abc"
+  },
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "An item" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "OPML outline with isComment=\"true\", raw-preserved as opml:attr:isComment",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "opml:attr:isComment": "true" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Commented out item" } }
+  ]
+}

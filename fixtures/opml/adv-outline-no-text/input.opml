@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>No text</title></head>
+  <body>
+    <outline xmlUrl="https://example.com/feed.xml"/>
+  </body>
+</opml>

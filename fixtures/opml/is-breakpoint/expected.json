@@ -1,0 +1,8 @@
+{
+  "description": "OPML outline with isBreakpoint=\"true\" (used by outliners representing source code), raw-preserved as opml:attr:isBreakpoint",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "opml:attr:isBreakpoint": "true" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Line with a breakpoint" } }
+  ]
+}

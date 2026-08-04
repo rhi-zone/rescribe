@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Link outline</title></head>
+  <body>
+    <outline text="Example Page" type="link" url="https://example.com/page"/>
+  </body>
+</opml>

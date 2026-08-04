@@ -1,0 +1,10 @@
+{
+  "description": "OPML outline with type=\"rss\" (subscription list item); type attribute raw-preserved",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "opml:attr:type": "rss" } },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/feed.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Example Feed" } }
+  ]
+}

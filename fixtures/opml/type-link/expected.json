@@ -1,0 +1,12 @@
+{
+  "description": "OPML outline with type=\"link\" and a general url attribute (distinct from xmlUrl/htmlUrl); type/url raw-preserved as opml:attr:*, text rendered plain since only xmlUrl/htmlUrl are promoted to a semantic link node",
+  "category": "rare",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": { "opml:attr:type": "link", "opml:attr:url": "https://example.com/page" }
+    },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Example Page" } }
+  ]
+}

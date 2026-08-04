@@ -1,0 +1,10 @@
+{
+  "description": "1000 flat top-level outline items; parser must not blow up on a wide (not deep) document",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Item 1" } },
+    { "path": "/999", "kind": "paragraph" },
+    { "path": "/999/0", "kind": "text", "props": { "content": "Item 1000" } }
+  ]
+}

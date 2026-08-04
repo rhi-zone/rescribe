@@ -1,0 +1,18 @@
+{
+  "description": "A mix of flat (paragraph) and nested (list) top-level outlines, interleaved",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Flat one" } },
+    { "path": "/1", "kind": "list" },
+    { "path": "/1/0", "kind": "list_item" },
+    { "path": "/1/0/0", "kind": "paragraph" },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "Group" } },
+    { "path": "/1/0/1", "kind": "list" },
+    { "path": "/1/0/1/0", "kind": "list_item" },
+    { "path": "/1/0/1/0/0", "kind": "paragraph" },
+    { "path": "/1/0/1/0/0/0", "kind": "text", "props": { "content": "Nested child" } },
+    { "path": "/2", "kind": "paragraph" },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Flat two" } }
+  ]
+}

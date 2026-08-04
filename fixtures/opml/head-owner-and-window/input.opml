@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Owner and Window</title>
+    <ownerName>Alice</ownerName>
+    <ownerEmail>alice@example.com</ownerEmail>
+    <ownerId>http://example.com/alice</ownerId>
+    <docs>http://dev.opml.org/spec2.html</docs>
+    <expansionState>1,3</expansionState>
+    <vertScrollState>1</vertScrollState>
+    <windowTop>50</windowTop>
+    <windowLeft>60</windowLeft>
+    <windowBottom>400</windowBottom>
+    <windowRight>300</windowRight>
+  </head>
+  <body>
+    <outline text="An item"/>
+  </body>
+</opml>

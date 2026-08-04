@@ -1,0 +1,14 @@
+{
+  "description": "OPML head dateCreated/dateModified are raw-preserved as opml: namespaced metadata",
+  "category": "happy",
+  "metadata": {
+    "title": "Dates",
+    "opml:date_created": "Mon, 1 Jan 2024 00:00:00 GMT",
+    "opml:date_modified": "Tue, 2 Jan 2024 00:00:00 GMT"
+  },
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "An item" } }
+  ]
+}

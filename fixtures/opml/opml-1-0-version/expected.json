@@ -1,0 +1,12 @@
+{
+  "description": "OPML version=\"1.0\" root attribute is preserved verbatim (not normalized to 2.0)",
+  "category": "adversarial",
+  "metadata": {
+    "title": "Old version",
+    "opml:version": "1.0"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "An item" } }
+  ]
+}

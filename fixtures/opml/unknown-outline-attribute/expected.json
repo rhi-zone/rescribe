@@ -1,0 +1,12 @@
+{
+  "description": "Application-specific/custom outline attributes (including a namespace-prefixed one) round-trip via opml:attr: raw preservation",
+  "category": "rare",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": { "opml:attr:app:custom": "v", "opml:attr:myFlag": "1" }
+    },
+    { "path": "/0/0", "kind": "text", "props": { "content": "X" } }
+  ]
+}

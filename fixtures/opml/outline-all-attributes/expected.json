@@ -1,0 +1,23 @@
+{
+  "description": "An outline with every well-known OPML 2.0 attribute at once, all raw-preserved",
+  "category": "integration",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": {
+        "opml:attr:text": "Everything",
+        "opml:attr:title": "Alt Title",
+        "opml:attr:type": "rss",
+        "opml:attr:isComment": "false",
+        "opml:attr:isBreakpoint": "false",
+        "opml:attr:created": "Mon, 1 Jan 2024 00:00:00 GMT",
+        "opml:attr:category": "/A/B",
+        "opml:attr:xmlUrl": "https://example.com/feed.xml",
+        "opml:attr:htmlUrl": "https://example.com/"
+      }
+    },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/feed.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Everything" } }
+  ]
+}

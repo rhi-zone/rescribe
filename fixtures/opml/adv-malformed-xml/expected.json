@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed <outline> tag: malformed XML must not panic; recovered structure is best-effort",
+  "category": "adversarial",
+  "expect_error": true
+}

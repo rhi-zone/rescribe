@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>All attributes</title></head>
+  <body>
+    <outline text="Everything" title="Alt Title" type="rss" isComment="false" isBreakpoint="false" created="Mon, 1 Jan 2024 00:00:00 GMT" category="/A/B" xmlUrl="https://example.com/feed.xml" htmlUrl="https://example.com/"/>
+  </body>
+</opml>

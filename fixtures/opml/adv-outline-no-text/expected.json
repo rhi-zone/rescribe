@@ -1,0 +1,9 @@
+{
+  "description": "Outline missing the (spec-required) text attribute must not panic; renders with empty display text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "opml:attr:xmlUrl": "https://example.com/feed.xml" } },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/feed.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "" } }
+  ]
+}

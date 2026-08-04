@@ -1,0 +1,15 @@
+{
+  "description": "OPML outline with created and category attributes, raw-preserved",
+  "category": "happy",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": {
+        "opml:attr:created": "Mon, 1 Jan 2024 00:00:00 GMT",
+        "opml:attr:category": "/Reference/Tech"
+      }
+    },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Categorized item" } }
+  ]
+}

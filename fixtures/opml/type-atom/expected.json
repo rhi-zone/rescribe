@@ -1,0 +1,10 @@
+{
+  "description": "OPML outline with type=\"atom\"",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "opml:attr:type": "atom" } },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/atom.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Example Atom Feed" } }
+  ]
+}

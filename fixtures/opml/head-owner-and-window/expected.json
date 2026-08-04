@@ -1,0 +1,22 @@
+{
+  "description": "OPML head owner*/docs/expansionState/vertScrollState/window* fields are raw-preserved as opml: namespaced metadata",
+  "category": "happy",
+  "metadata": {
+    "title": "Owner and Window",
+    "author": "Alice",
+    "opml:owner_email": "alice@example.com",
+    "opml:owner_id": "http://example.com/alice",
+    "opml:docs": "http://dev.opml.org/spec2.html",
+    "opml:expansion_state": "1,3",
+    "opml:vert_scroll_state": "1",
+    "opml:window_top": "50",
+    "opml:window_left": "60",
+    "opml:window_bottom": "400",
+    "opml:window_right": "300"
+  },
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "An item" } }
+  ]
+}
