@@ -4262,8 +4262,9 @@ only:
 - **Worst violation: `latex`** — `rescribe-read-latex/src/handwritten.rs` is an 895-line
   recursive-descent LaTeX parser living inside the reader adapter, plus a 662-line
   tree-sitter backend and a 717-line hand-written emitter in the writer. No `latex-fmt`.
-- **No standalone crate at all**: latex, endnotexml, bibtex, biblatex, csl-json,
-  pandoc-json, ipynb, typst (writer side). (opml got one 2026-08-04: `opml-fmt`.)
+- **No standalone crate at all**: latex, bibtex, biblatex, csl-json,
+  pandoc-json, ipynb, typst (writer side). (opml got one 2026-08-04: `opml-fmt`;
+  endnotexml got one 2026-08-04: `endnotexml-fmt` — see the dedicated writeup below.)
 - **New findings beyond the bibliographic four**: `pandoc-json` has the same
   schema-in-adapter shape as `csl-json` (not previously listed); the whole markdown
   writer family (`markdown`, `gfm`, `markdown-strict`, `multimarkdown`) plus `typst`'s
@@ -5543,6 +5544,40 @@ extract `bibtex-fmt` (wrapping or replacing `biblatex`), a `csl-json-fmt` crate 
 each becoming a general-purpose Rust library, not just an internal rescribe helper, per
 CLAUDE.md's "the -fmt crates are not rescribe internals" principle. Not attempted here since
 it was explicitly out of scope for this task.
+
+**Resolved (2026-08-04): `endnotexml-fmt` extracted, closing the EndNote XML piece of the
+violation above.** `rescribe-read-endnotexml`/`rescribe-write-endnotexml` no longer call
+`quick_xml` directly — both are now thin `endnotexml_fmt::EndNoteDoc` <-> IR translators.
+The new `crates/formats/endnotexml-fmt` crate follows the `opml-fmt` template
+(`5f14f14fee`..`51e43fb96d`): a domain-typed native AST (`Record` with named fields for
+`ref-type`/`contributors`/`titles`/`periodical`/`urls`/`dates`/`foreign-keys`/..., an
+`Inline` enum for field content that models `<style>` runs as `Style{face,children}` and
+any other nested element as `Other{name,attrs,children}` rather than flattening it away —
+strictly more general than the adapter this replaces, which only ever flattened unknown
+nested elements), all five reader/writer APIs independently implemented (`parse`/
+`events`/`StreamingParser`/`emit`/streaming `Writer` — verified via
+`crates/rescribe-fixtures/tests/streaming_apis.rs`'s three new checks, all green), a fuzz
+no-panic gate plus a native-AST roundtrip fuzz target (`fuzz_endnotexml_fmt_reader`/
+`fuzz_endnotexml_fmt_roundtrip`, compile-clean but not run for N iterations in this
+session's sandbox — no `cargo-fuzz` binary available), and 10 new fixtures closing gaps
+`fixtures/endnotexml/COVERAGE.md` had flagged as "supported, no dedicated fixture" (editors/
+tertiary/subsidiary authors, all three title variants, `periodical`, isbn+issn together,
+`pdf-urls`, multiple keywords, abstract+notes, `pub-dates`/`date`, exporter-specific custom
+fields, underline/superscript/subscript style runs, and a malformed-XML adversarial case).
+
+Two genuine (if narrow) losslessness gaps remain, both pre-existing (not introduced by this
+relocation, so left as documented debt rather than fixed under this task's "behavior-
+preserving relocation" mandate): (1) `<style face="...">` attributes other than `face`
+(e.g. `font`, `size`, present in `rare-style-markup`'s own input) are not captured anywhere
+— `endnotexml-fmt`'s `Inline::Style` only models `face`, matching the old reader's identical
+scope; (2) EndNote's schema also permits unknown children of `<contributors>`/`<titles>`/
+`<periodical>`/`<urls>`/`<dates>`/`<foreign-keys>` (e.g. `<translated-authors>`,
+`<titles>/<short-title>`, `<periodical>/<abbr-1>`) — the new AST's per-container `extra:
+Vec<Element>` buckets now raw-preserve these (a fix beyond pure relocation, since the old
+reader silently dropped them entirely — SPECIAL_ELEMENTS treated the whole wrapper as
+"handled" and never looked at its unrecognized children), and the rescribe adapter routes
+them into `misc` bibliography fields, but no fixture exercises this path yet since no known
+real-world exporter has been observed emitting these specific combinations.
 
 **Resolved by investigation (2026-07-28): RIS's `SN`/`TY` ambiguity is genuine, not an
 oversight — `field:scheme = "sn"` stays.** The open question above (whether RIS's `TY`
