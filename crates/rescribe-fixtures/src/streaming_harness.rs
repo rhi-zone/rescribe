@@ -1696,22 +1696,45 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        href=\"#...\"> was never recognized as a footnote reference — always \
                        built as a generic Link — unlike parse()'s AST, which treats it as \
                        FootnoteRef structurally regardless of whether the target actually \
-                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures still \
-                       diverge and are NOT fixed by this pass: fixtures/fb2/adv-malformed is a \
-                       genuine architectural divergence, not a bug — its input has an unclosed \
-                       <FictionBook ...> start tag that swallows the following <body> text \
-                       (confirmed directly against quick_xml's own tokenization), so quick_xml \
-                       only errors once it reaches the orphaned </body> end tag, by which point \
-                       a Section/Paragraph had already been fully tokenized; parse()'s AST \
-                       builder defers attaching a Body's sections to the document until its \
-                       </body> End event is actually dispatched, so it silently drops the \
-                       whole orphaned subtree when the reader errors first, while events() is a \
-                       true pull iterator that had already irrevocably yielded \
-                       StartSection/StartParagraph/EndParagraph/EndSection to the caller before \
-                       the error surfaced — recovering this would require events() to buffer \
-                       and defer emission until validated, which is exactly the \
-                       pre-materialization this crate's EventIter is designed not to do. \
-                       fixtures/fb2/annotation is a genuine, real gap: the book's own \
+                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures diverged \
+                       and were NOT fixed by this 2026-08-03 pass; one is now fixed (2026-08-04): \
+                       fixtures/fb2/adv-malformed's input has an unclosed <FictionBook ...> \
+                       start tag that swallows the following <body> text (confirmed directly \
+                       against quick_xml's own tokenization), so quick_xml never emits a real \
+                       Start(\"body\") token at all and only errors once it reaches the orphaned \
+                       </body> end tag. This was previously mis-scoped as \"genuine architectural \
+                       divergence... would require events() to buffer and defer emission until \
+                       validated\" — that was checked directly and found false: ancestor validity \
+                       (does a <section> have a <body>/<section> already open?) is a property of \
+                       the already-tracked ParseState stack *before* the <section> Start token is \
+                       even dispatched, so the orphan is knowable the instant it opens, with zero \
+                       lookahead. Fixed via a `suppress_depth` counter on SemanticState: an \
+                       orphaned <section> (and everything nested inside it) is suppressed from \
+                       the moment its Start tag is seen, mirroring parse()'s StackItem::Section \
+                       finalize arm, which silently drops a Section it can't attach to a Body/ \
+                       Section ancestor when it (and everything already folded into it) is \
+                       popped. Fixing the suppression surfaced one more gap it depended on: \
+                       events()/EventIter never synthesized a matching EndFictionBook when the \
+                       token stream terminates early (Eof or a fatal Err) with FictionBook still \
+                       open — parse()'s AST always implicitly \"closes\" the whole document by \
+                       construction, but events()'s XmlEventIter::step and StreamingParser::drain \
+                       previously just stopped, mirroring docbook-fmt/jats-fmt/tei-fmt's own \
+                       malformed-XML gap before their 2026-08-03 fix (see the FormatCapabilities \
+                       comment for those three formats above) rather than the fixed state. Fixed \
+                       the same way: `close_item` was extracted from handle_end's per-element \
+                       closing match and reused by a new `finalize_open_elements`, called at \
+                       every point XmlEventIter::step/StreamingParser::drain/finish can terminate \
+                       for good (Eof, a fatal Err, and StreamingParser's own hand-tracked \
+                       tag-mismatch branch) — pops whatever's still on `self.stack`, innermost \
+                       first, synthesizing the same End event(s) each item's own End tag would \
+                       have produced. No lookahead needed there either: everything required is \
+                       already sitting on the (already O(nesting depth)) stack. Confirmed via \
+                       fixtures/fb2/adv-malformed no longer diverging in either \
+                       fb2_events_equals_ast_projection_over_all_fixtures or \
+                       fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures, and via \
+                       fb2_streaming_parser_matches_events_and_is_incremental (adversarial \
+                       chunking) continuing to pass. fixtures/fb2/annotation remains open, a \
+                       genuine, real gap: the book's own \
                        <description><title-info><annotation> (with <p>/<poem>/<cite>/ \
                        <subtitle>/<table>/empty-line sub-content) is not modeled at all in \
                        events.rs's description parsing — SemanticState's DescState has no \
