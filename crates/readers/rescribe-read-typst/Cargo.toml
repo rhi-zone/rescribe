@@ -9,12 +9,13 @@ description = "Typst reader for rescribe"
 [features]
 default = ["syntax"]
 syntax = []
-eval = ["dep:typst", "dep:typst-kit", "dep:typst-html"]
+eval = ["dep:typst", "dep:typst-kit", "dep:typst-html", "dep:typst-syntax"]
 
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
-typst-syntax.workspace = true
+typst-fmt.workspace = true
 typst = { workspace = true, optional = true }
 typst-kit = { workspace = true, optional = true }
 typst-html = { workspace = true, optional = true }
+typst-syntax = { workspace = true, optional = true }

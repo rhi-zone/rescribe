@@ -129,7 +129,24 @@ pub enum Inline {
     },
     LineBreak,
     MathInline(String),
+    /// A block-style equation (`$ ... $`, `eq.block() == true` in
+    /// `typst-syntax`) that appears in inline/paragraph position rather
+    /// than as its own top-level block — matches the pre-existing
+    /// `rescribe-read-typst` behavior of placing such equations inside the
+    /// enclosing paragraph rather than splitting the paragraph around them.
+    /// Distinct from [`Block::MathDisplay`], which the *writer* side uses
+    /// for a standalone block-level `$ ... $` construct (never produced by
+    /// [`crate::parse::parse`] today — see `fixtures/typst/COVERAGE.md`).
+    MathDisplay(String),
     Footnote(Vec<Inline>),
+    /// `#smallcaps[...]`.
+    SmallCaps(Vec<Inline>),
+    /// A quoted span. `double` selects `"..."` vs `'...'` — matches
+    /// rescribe's `style:quote_type` property (`"double"`/`"single"`).
+    Quoted {
+        double: bool,
+        body: Vec<Inline>,
+    },
     /// An inline construct this AST has no dedicated variant for, captured
     /// as its exact Typst source text.
     Raw(String),

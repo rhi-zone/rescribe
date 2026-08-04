@@ -49,6 +49,10 @@ enum OpenKind {
     Superscript,
     Link,
     Footnote,
+    SmallCaps,
+    Quoted {
+        double: bool,
+    },
 }
 
 /// Event-driven Typst writer.
@@ -103,6 +107,8 @@ impl<W: Write> Writer<W> {
                     | OpenKind::Superscript
                     | OpenKind::Link
                     | OpenKind::Footnote
+                    | OpenKind::SmallCaps
+                    | OpenKind::Quoted { .. }
             )
         )
     }
@@ -429,6 +435,11 @@ impl<W: Write> Writer<W> {
                 self.write(&source);
                 self.write("$");
             }
+            Event::InlineMathDisplay(source) => {
+                self.write("$ ");
+                self.write(&source);
+                self.write(" $");
+            }
             Event::StartFootnote => {
                 self.write("#footnote[");
                 self.stack.push(OpenKind::Footnote);
@@ -436,6 +447,22 @@ impl<W: Write> Writer<W> {
             Event::EndFootnote => {
                 self.stack.pop();
                 self.write("]");
+            }
+            Event::StartSmallCaps => {
+                self.write("#smallcaps[");
+                self.stack.push(OpenKind::SmallCaps);
+            }
+            Event::EndSmallCaps => {
+                self.stack.pop();
+                self.write("]");
+            }
+            Event::StartQuoted { double } => {
+                self.write(if double { "\"" } else { "'" });
+                self.stack.push(OpenKind::Quoted { double });
+            }
+            Event::EndQuoted => {
+                let double = matches!(self.stack.pop(), Some(OpenKind::Quoted { double: true }));
+                self.write(if double { "\"" } else { "'" });
             }
             Event::Raw(text) => {
                 if self.in_inline_context() {

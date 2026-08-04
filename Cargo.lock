@@ -3794,6 +3794,7 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "typst",
+ "typst-fmt",
  "typst-html",
  "typst-kit",
  "typst-syntax",
@@ -4383,6 +4384,7 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+ "typst-fmt",
 ]
 
 [[package]]

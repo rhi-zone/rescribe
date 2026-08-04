@@ -1,14 +1,19 @@
 //! Typst reader for rescribe.
 //!
-//! Parses Typst markup into rescribe documents using the official `typst-syntax` crate.
+//! Thin AST→IR translator over `typst-fmt`'s `TypstDoc`/`Block`/`Inline` —
+//! all Typst parsing lives in that standalone crate now (see its module
+//! docs), not here. This adapter's only job is mapping `typst-fmt`'s
+//! domain-typed AST onto rescribe's `Node` tree; the construct mapping
+//! (which node kind/property each `Block`/`Inline` variant becomes) is
+//! unchanged from the pre-extraction version of this file.
 //!
 //! # Features
-//! - `syntax` (default): fast parse-only path using `typst-syntax` AST directly
+//! - `syntax` (default): fast parse-only path via `typst-fmt`
 //! - `eval`: full compiler path via the `typst` crate; adds `parse_evaluated()`
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
-use typst_syntax::ast::{AstNode, Expr, Markup};
+use typst_fmt::{Block, Inline};
 
 /// Parse Typst source into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -20,469 +25,110 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let root = typst_syntax::parse(input);
-    let markup = root
-        .cast::<Markup>()
-        .ok_or_else(|| ParseError::Invalid("Failed to cast root to Markup".to_owned()))?;
-
-    let children = convert_markup_to_blocks(markup, input);
+    let (doc, _diags) = typst_fmt::parse(input);
+    let children: Vec<Node> = doc.blocks.iter().map(convert_block).collect();
     let doc_node = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(doc_node);
     Ok(ConversionResult::ok(doc))
 }
 
-/// Convert a `Markup` node to a list of block-level rescribe nodes.
-///
-/// Typst does not have explicit paragraph nodes; consecutive inline exprs are
-/// grouped into paragraphs, separated by `Parbreak`.
-fn convert_markup_to_blocks(markup: Markup, source: &str) -> Vec<Node> {
-    let mut blocks: Vec<Node> = Vec::new();
-    let mut inline_buf: Vec<Node> = Vec::new();
-
-    for expr in markup.exprs() {
-        match expr {
-            // --- Block-level elements ---
-            Expr::Parbreak(_) => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-            }
-            Expr::Heading(h) => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                let level = h.depth().get() as i64;
-                let body_children = convert_markup_to_inlines(h.body(), source);
-                blocks.push(
-                    Node::new(node::HEADING)
-                        .prop(prop::LEVEL, level)
-                        .children(body_children),
-                );
-            }
-            Expr::ListItem(item) => {
-                // Each list item arrives as a top-level expr; collect them then merge.
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                let list_item = convert_list_item_body(item.body(), source);
-                blocks.push(
-                    Node::new(node::LIST)
-                        .prop(prop::ORDERED, false)
-                        .children(vec![list_item]),
-                );
-            }
-            Expr::EnumItem(item) => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                let list_item = convert_list_item_body(item.body(), source);
-                blocks.push(
-                    Node::new(node::LIST)
-                        .prop(prop::ORDERED, true)
-                        .children(vec![list_item]),
-                );
-            }
-            Expr::TermItem(item) => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                let term_children = convert_markup_to_inlines(item.term(), source);
-                let desc_children = convert_markup_to_inlines(item.description(), source);
-                let term_node = Node::new(node::DEFINITION_TERM).children(term_children);
-                let desc_node = Node::new(node::DEFINITION_DESC).children(desc_children);
-                blocks.push(Node::new(node::DEFINITION_LIST).children(vec![term_node, desc_node]));
-            }
-            Expr::Raw(raw) if raw.block() => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                let content: String = raw
-                    .lines()
-                    .map(|t| t.get().as_str().to_owned())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let lang_opt = raw.lang().map(|l| l.to_untyped().text().to_string());
-                let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
-                if let Some(lang) = lang_opt
-                    && !lang.is_empty()
-                {
-                    n = n.prop(prop::LANGUAGE, lang);
-                }
-                blocks.push(n);
-            }
-            Expr::FuncCall(call) => {
-                // Some functions are inherently inline; route them to the inline
-                // buffer rather than flushing the current paragraph.
-                let callee_text = call.callee().to_untyped().text().to_string();
-                if is_inline_func(callee_text.as_str()) {
-                    if let Some(n) = convert_func_call(call, source) {
-                        inline_buf.push(n);
-                    }
-                } else {
-                    flush_paragraph(&mut inline_buf, &mut blocks);
-                    if let Some(block) = convert_func_call(call, source) {
-                        blocks.push(block);
-                    }
-                }
-            }
-
-            // --- Inline elements (gathered into paragraph buffer) ---
-            other => {
-                inline_buf.extend(convert_expr_to_inlines(other, source));
-            }
-        }
-    }
-
-    flush_paragraph(&mut inline_buf, &mut blocks);
-    merge_adjacent_lists(blocks)
+fn convert_blocks(blocks: &[Block]) -> Vec<Node> {
+    blocks.iter().map(convert_block).collect()
 }
 
-fn flush_paragraph(inline_buf: &mut Vec<Node>, blocks: &mut Vec<Node>) {
-    if inline_buf.is_empty() {
-        return;
-    }
-    // Don't create paragraphs that contain only whitespace text nodes.
-    let all_whitespace = inline_buf.iter().all(|n| {
-        n.kind.as_str() == node::TEXT
-            && n.props
-                .get_str(prop::CONTENT)
-                .map(|s| s.trim().is_empty())
-                .unwrap_or(true)
-    });
-    if all_whitespace {
-        inline_buf.clear();
-        return;
-    }
-    blocks.push(Node::new(node::PARAGRAPH).children(inline_buf.drain(..)));
+fn convert_inlines(inlines: &[Inline]) -> Vec<Node> {
+    inlines.iter().map(convert_inline).collect()
 }
 
-/// Convert a `Markup` body into a flat list of inline rescribe nodes.
-fn convert_markup_to_inlines(markup: Markup, source: &str) -> Vec<Node> {
-    let mut nodes = Vec::new();
-    for expr in markup.exprs() {
-        nodes.extend(convert_expr_to_inlines(expr, source));
-    }
-    nodes
-}
-
-/// Convert a single `Expr` to inline rescribe nodes.
-fn convert_expr_to_inlines(expr: Expr, source: &str) -> Vec<Node> {
-    match expr {
-        Expr::Text(t) => {
-            vec![Node::new(node::TEXT).prop(prop::CONTENT, t.get().as_str())]
-        }
-        Expr::Space(_) => {
-            vec![Node::new(node::TEXT).prop(prop::CONTENT, " ")]
-        }
-        Expr::Linebreak(_) => {
-            vec![Node::new(node::LINE_BREAK)]
-        }
-        Expr::SmartQuote(q) => {
-            let ch = if q.double() { "\"" } else { "'" };
-            vec![Node::new(node::TEXT).prop(prop::CONTENT, ch)]
-        }
-        Expr::Escape(e) => {
-            let text = e.to_untyped().text().to_string();
-            // The escape source includes the backslash; strip it.
-            let content = if let Some(stripped) = text.strip_prefix('\\') {
-                stripped.to_owned()
-            } else {
-                text
-            };
-            vec![Node::new(node::TEXT).prop(prop::CONTENT, content)]
-        }
-        Expr::Shorthand(s) => {
-            let text = s.to_untyped().text().to_string();
-            vec![Node::new(node::TEXT).prop(prop::CONTENT, text)]
-        }
-        Expr::Strong(s) => {
-            let children = convert_markup_to_inlines(s.body(), source);
-            vec![Node::new(node::STRONG).children(children)]
-        }
-        Expr::Emph(e) => {
-            let children = convert_markup_to_inlines(e.body(), source);
-            vec![Node::new(node::EMPHASIS).children(children)]
-        }
-        Expr::Raw(raw) => {
-            let content: String = raw
-                .lines()
-                .map(|t| t.get().as_str().to_owned())
-                .collect::<Vec<_>>()
-                .join("\n");
-            vec![Node::new(node::CODE).prop(prop::CONTENT, content)]
-        }
-        Expr::Link(link) => {
-            let url = link.get().as_str().to_owned();
-            vec![
-                Node::new(node::LINK)
-                    .prop(prop::URL, url.clone())
-                    .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, url)]),
-            ]
-        }
-        Expr::Equation(eq) => {
-            let math_source = eq.to_untyped().text().to_string();
-            // Strip surrounding $ delimiters.
-            let src = math_source.trim_matches('$').trim().to_owned();
-            if eq.block() {
-                vec![Node::new("math_block").prop("math:source", src)]
-            } else {
-                vec![Node::new("math_inline").prop("math:source", src)]
-            }
-        }
-        Expr::FuncCall(call) => {
-            if let Some(n) = convert_func_call(call, source) {
-                vec![n]
-            } else {
-                vec![]
-            }
-        }
-        // Block-level things shouldn't appear at inline level, but be safe.
-        Expr::Parbreak(_)
-        | Expr::Heading(_)
-        | Expr::ListItem(_)
-        | Expr::EnumItem(_)
-        | Expr::TermItem(_) => vec![],
-        // Everything else: emit raw with source text if non-empty.
-        other => {
-            let text = other.to_untyped().text().to_string();
-            if text.is_empty() {
-                vec![]
-            } else {
-                vec![
-                    Node::new(node::RAW_BLOCK)
-                        .prop(prop::FORMAT, "typst")
-                        .prop(prop::CONTENT, text),
-                ]
-            }
-        }
-    }
-}
-
-/// Wrap a Markup body in a `LIST_ITEM` node containing a paragraph.
-fn convert_list_item_body(body: Markup, source: &str) -> Node {
-    let children = convert_markup_to_inlines(body, source);
-    Node::new(node::LIST_ITEM).children(vec![Node::new(node::PARAGRAPH).children(children)])
-}
-
-/// Returns true if the named Typst function should be treated as inline content.
-fn is_inline_func(name: &str) -> bool {
-    matches!(
-        name,
-        "sub"
-            | "super"
-            | "underline"
-            | "strike"
-            | "emph"
-            | "strong"
-            | "footnote"
-            | "link"
-            | "linebreak"
-    )
-}
-
-/// Handle common Typst built-in function calls at block level.
-///
-/// Returns `None` for unknown functions that should be silently skipped.
-fn convert_func_call(call: typst_syntax::ast::FuncCall, source: &str) -> Option<Node> {
-    // The callee for simple identifiers is an Ident node; its text() is the name.
-    let callee_node = call.callee().to_untyped();
-    let func_name = callee_node.text().as_str();
-
-    match func_name {
-        "image" => {
-            let url = first_str_arg(call.args());
-            let mut n = Node::new(node::IMAGE);
-            if let Some(u) = url {
-                n = n.prop(prop::URL, u);
-            }
-            Some(n)
-        }
-        "link" => {
-            let url = first_str_arg(call.args());
-            let body_markup = first_content_arg(call.args(), source);
-            let mut n = Node::new(node::LINK);
-            if let Some(ref u) = url {
-                n = n.prop(prop::URL, u.clone());
-            }
-            if let Some(children) = body_markup {
-                n = n.children(children);
-            } else if let Some(u) = url {
-                n = n.children(vec![Node::new(node::TEXT).prop(prop::CONTENT, u)]);
-            }
-            Some(n)
-        }
-        "raw" => {
-            let content = first_str_arg(call.args()).unwrap_or_default();
-            Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content))
-        }
-        "quote" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(
-                Node::new(node::BLOCKQUOTE)
-                    .children(vec![Node::new(node::PARAGRAPH).children(body)]),
-            )
-        }
-        "footnote" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::FOOTNOTE_DEF).children(body))
-        }
-        "sub" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::SUBSCRIPT).children(body))
-        }
-        "super" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::SUPERSCRIPT).children(body))
-        }
-        "underline" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::UNDERLINE).children(body))
-        }
-        "strike" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::STRIKEOUT).children(body))
-        }
-        "figure" => {
-            let mut figure = Node::new(node::FIGURE);
-            let mut caption_children: Option<Vec<Node>> = None;
-            let mut first_pos: Option<Node> = None;
-            for arg in call.args().items() {
-                match arg {
-                    typst_syntax::ast::Arg::Named(named) if named.name().as_str() == "caption" => {
-                        if let Expr::ContentBlock(cb) = named.expr() {
-                            caption_children = Some(convert_markup_to_inlines(cb.body(), source));
-                        }
-                    }
-                    typst_syntax::ast::Arg::Pos(expr) if first_pos.is_none() => {
-                        if let Some(n) = convert_func_call_expr(expr, source) {
-                            first_pos = Some(n);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let mut children = Vec::new();
-            if let Some(img) = first_pos {
-                children.push(img);
-            }
-            if let Some(cap) = caption_children {
-                children.push(Node::new(node::PARAGRAPH).children(cap));
-            }
-            figure = figure.children(children);
-            Some(figure)
-        }
-        "table" => {
-            let mut columns: i64 = 1;
-            let mut cells: Vec<Node> = Vec::new();
-            for arg in call.args().items() {
-                match arg {
-                    typst_syntax::ast::Arg::Named(named) if named.name().as_str() == "columns" => {
-                        if let Expr::Int(i) = named.expr() {
-                            columns = i.get();
-                        }
-                    }
-                    typst_syntax::ast::Arg::Pos(Expr::ContentBlock(cb)) => {
-                        let cell_children = convert_markup_to_inlines(cb.body(), source);
-                        cells.push(Node::new(node::TABLE_CELL).children(cell_children));
-                    }
-                    _ => {}
-                }
-            }
-            // Build rows from flat cell list using column count.
-            let rows: Vec<Node> = if columns > 0 {
-                cells
-                    .chunks(columns as usize)
-                    .map(|row_cells| Node::new(node::TABLE_ROW).children(row_cells.to_vec()))
-                    .collect()
-            } else {
-                // Fall back: emit all cells directly.
-                cells
-            };
-            Some(
-                Node::new(node::TABLE)
-                    .prop("columns", columns)
-                    .children(rows),
-            )
-        }
-        "linebreak" => Some(Node::new(node::LINE_BREAK)),
-        "emph" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::EMPHASIS).children(body))
-        }
-        "strong" => {
-            let body = first_content_arg(call.args(), source).unwrap_or_default();
-            Some(Node::new(node::STRONG).children(body))
-        }
-        _ => {
-            // Unknown function — emit as raw block.
-            let text = call.to_untyped().text().to_string();
-            Some(
-                Node::new(node::RAW_BLOCK)
-                    .prop(prop::FORMAT, "typst")
-                    .prop(prop::CONTENT, text),
-            )
-        }
-    }
-}
-
-/// Extract the first positional string literal argument from a function's args.
-fn first_str_arg(args: typst_syntax::ast::Args) -> Option<String> {
-    for arg in args.items() {
-        if let typst_syntax::ast::Arg::Pos(Expr::Str(s)) = arg {
-            return Some(s.get().to_string());
-        }
-    }
-    None
-}
-
-/// Extract the first content-block argument (returns inline nodes).
-fn first_content_arg(args: typst_syntax::ast::Args, source: &str) -> Option<Vec<Node>> {
-    for arg in args.items() {
-        if let typst_syntax::ast::Arg::Pos(Expr::ContentBlock(cb)) = arg {
-            return Some(convert_markup_to_inlines(cb.body(), source));
-        }
-    }
-    None
-}
-
-/// Convert a positional `Expr` in a function call position to a rescribe node,
-/// used when extracting figure body content.
-fn convert_func_call_expr(expr: Expr, source: &str) -> Option<Node> {
-    match expr {
-        Expr::FuncCall(call) => convert_func_call(call, source),
-        Expr::ContentBlock(cb) => {
-            let children = convert_markup_to_inlines(cb.body(), source);
-            Some(Node::new(node::PARAGRAPH).children(children))
-        }
-        other => {
-            let inlines = convert_expr_to_inlines(other, source);
-            if inlines.is_empty() {
-                None
-            } else {
-                Some(Node::new(node::PARAGRAPH).children(inlines))
-            }
-        }
-    }
-}
-
-/// Merge adjacent `LIST` nodes with the same `ordered` value, and adjacent
-/// `DEFINITION_LIST` nodes.
-///
-/// Individual list items arrive as separate single-item LIST / DEFINITION_LIST
-/// blocks because Typst's flat markup sequence gives us one item per step.
-fn merge_adjacent_lists(blocks: Vec<Node>) -> Vec<Node> {
-    let mut result: Vec<Node> = Vec::new();
-
-    for block in blocks {
-        let kind = block.kind.as_str();
-        if kind == node::LIST {
-            let ordered = block.props.get_bool(prop::ORDERED).unwrap_or(false);
-            if let Some(last) = result.last_mut()
-                && last.kind.as_str() == node::LIST
-                && last.props.get_bool(prop::ORDERED).unwrap_or(false) == ordered
+fn convert_block(block: &Block) -> Node {
+    match block {
+        Block::Paragraph(inlines) => Node::new(node::PARAGRAPH).children(convert_inlines(inlines)),
+        Block::Heading { level, body } => Node::new(node::HEADING)
+            .prop(prop::LEVEL, *level as i64)
+            .children(convert_inlines(body)),
+        Block::CodeBlock { lang, content } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = lang
+                && !lang.is_empty()
             {
-                last.children.extend(block.children);
-                continue;
+                n = n.prop(prop::LANGUAGE, lang.clone());
             }
-        } else if kind == node::DEFINITION_LIST
-            && let Some(last) = result.last_mut()
-            && last.kind.as_str() == node::DEFINITION_LIST
-        {
-            last.children.extend(block.children);
-            continue;
+            n
         }
-        result.push(block);
+        Block::List { ordered, items } => Node::new(node::LIST)
+            .prop(prop::ORDERED, *ordered)
+            .children(items.iter().map(|item| convert_list_item(item))),
+        Block::DefinitionList(entries) => {
+            let mut children = Vec::with_capacity(entries.len() * 2);
+            for (term, desc) in entries {
+                children.push(Node::new(node::DEFINITION_TERM).children(convert_inlines(term)));
+                children.push(Node::new(node::DEFINITION_DESC).children(convert_inlines(desc)));
+            }
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
+        Block::Quote(body) => Node::new(node::BLOCKQUOTE).children(convert_blocks(body)),
+        Block::Table { columns, rows } => {
+            let row_nodes: Vec<Node> =
+                rows.iter()
+                    .map(|row| {
+                        Node::new(node::TABLE_ROW).children(row.iter().map(|cell| {
+                            Node::new(node::TABLE_CELL).children(convert_inlines(cell))
+                        }))
+                    })
+                    .collect();
+            Node::new(node::TABLE)
+                .prop("columns", *columns as i64)
+                .children(row_nodes)
+        }
+        Block::Figure { body, caption } => {
+            let mut children = Vec::new();
+            if let Some(b) = body {
+                children.push(convert_block(b));
+            }
+            if let Some(cap) = caption {
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(cap)));
+            }
+            Node::new(node::FIGURE).children(children)
+        }
+        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::MathDisplay(source) => Node::new("math_display").prop("math:source", source.clone()),
+        Block::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Block::Raw(text) => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "typst")
+            .prop(prop::CONTENT, text.clone()),
     }
+}
 
-    result
+fn convert_list_item(item: &[Block]) -> Node {
+    Node::new(node::LIST_ITEM).children(convert_blocks(item))
+}
+
+fn convert_inline(inline: &Inline) -> Node {
+    match inline {
+        Inline::Text(t) => Node::new(node::TEXT).prop(prop::CONTENT, t.clone()),
+        Inline::Strong(body) => Node::new(node::STRONG).children(convert_inlines(body)),
+        Inline::Emph(body) => Node::new(node::EMPHASIS).children(convert_inlines(body)),
+        Inline::Underline(body) => Node::new(node::UNDERLINE).children(convert_inlines(body)),
+        Inline::Strike(body) => Node::new(node::STRIKEOUT).children(convert_inlines(body)),
+        Inline::Subscript(body) => Node::new(node::SUBSCRIPT).children(convert_inlines(body)),
+        Inline::Superscript(body) => Node::new(node::SUPERSCRIPT).children(convert_inlines(body)),
+        Inline::Code(content) => Node::new(node::CODE).prop(prop::CONTENT, content.clone()),
+        Inline::Link { url, body } => Node::new(node::LINK)
+            .prop(prop::URL, url.clone())
+            .children(convert_inlines(body)),
+        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::MathInline(source) => Node::new("math_inline").prop("math:source", source.clone()),
+        Inline::MathDisplay(source) => Node::new("math_block").prop("math:source", source.clone()),
+        Inline::Footnote(body) => Node::new(node::FOOTNOTE_DEF).children(convert_inlines(body)),
+        Inline::SmallCaps(body) => Node::new(node::SMALL_CAPS).children(convert_inlines(body)),
+        Inline::Quoted { double, body } => Node::new(node::QUOTED)
+            .prop(prop::QUOTE_TYPE, if *double { "double" } else { "single" })
+            .children(convert_inlines(body)),
+        Inline::Raw(text) => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "typst")
+            .prop(prop::CONTENT, text.clone()),
+    }
 }
 
 // ---------------------------------------------------------------------------

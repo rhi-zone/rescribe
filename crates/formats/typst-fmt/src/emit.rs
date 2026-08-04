@@ -216,10 +216,26 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write(source);
             ctx.write("$");
         }
+        Inline::MathDisplay(source) => {
+            ctx.write("$ ");
+            ctx.write(source);
+            ctx.write(" $");
+        }
         Inline::Footnote(body) => {
             ctx.write("#footnote[");
             emit_inlines(body, ctx);
             ctx.write("]");
+        }
+        Inline::SmallCaps(body) => {
+            ctx.write("#smallcaps[");
+            emit_inlines(body, ctx);
+            ctx.write("]");
+        }
+        Inline::Quoted { double, body } => {
+            let q = if *double { "\"" } else { "'" };
+            ctx.write(q);
+            emit_inlines(body, ctx);
+            ctx.write(q);
         }
         Inline::Raw(text) => ctx.write(text),
     }

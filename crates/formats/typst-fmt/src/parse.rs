@@ -188,7 +188,7 @@ fn convert_expr_to_inlines(expr: Expr) -> Vec<Inline> {
             let math_source = eq.to_untyped().text().to_string();
             let src = math_source.trim_matches('$').trim().to_owned();
             if eq.block() {
-                vec![Inline::Raw(format!("$ {src} $"))]
+                vec![Inline::MathDisplay(src)]
             } else {
                 vec![Inline::MathInline(src)]
             }

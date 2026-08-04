@@ -34,12 +34,18 @@ pub enum Event {
     EndDocument,
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
-    StartCodeBlock { lang: Option<String> },
+    StartCodeBlock {
+        lang: Option<String>,
+    },
     CodeBlockContent(String),
     EndCodeBlock,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -51,7 +57,9 @@ pub enum Event {
     EndDefinitionDesc,
     StartQuote,
     EndQuote,
-    StartTable { columns: usize },
+    StartTable {
+        columns: usize,
+    },
     EndTable,
     StartTableRow,
     EndTableRow,
@@ -63,7 +71,9 @@ pub enum Event {
     EndCaption,
     HorizontalRule,
     MathDisplay(String),
-    Image { url: String },
+    Image {
+        url: String,
+    },
     Text(String),
     StartStrong,
     EndStrong,
@@ -78,12 +88,23 @@ pub enum Event {
     StartSuperscript,
     EndSuperscript,
     Code(String),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     LineBreak,
     MathInline(String),
+    /// Inline-positioned block-style equation — see
+    /// [`crate::ast::Inline::MathDisplay`]'s doc comment.
+    InlineMathDisplay(String),
     StartFootnote,
     EndFootnote,
+    StartSmallCaps,
+    EndSmallCaps,
+    StartQuoted {
+        double: bool,
+    },
+    EndQuoted,
     Raw(String),
 }
 
@@ -229,10 +250,21 @@ impl EventIter {
             Inline::Image { url } => self.stack.push(Task::Event(Event::Image { url })),
             Inline::LineBreak => self.stack.push(Task::Event(Event::LineBreak)),
             Inline::MathInline(src) => self.stack.push(Task::Event(Event::MathInline(src))),
+            Inline::MathDisplay(src) => self.stack.push(Task::Event(Event::InlineMathDisplay(src))),
             Inline::Footnote(body) => {
                 self.stack.push(Task::Event(Event::EndFootnote));
                 self.stack.push(Task::Inlines(body.into_iter()));
                 self.stack.push(Task::Event(Event::StartFootnote));
+            }
+            Inline::SmallCaps(body) => {
+                self.stack.push(Task::Event(Event::EndSmallCaps));
+                self.stack.push(Task::Inlines(body.into_iter()));
+                self.stack.push(Task::Event(Event::StartSmallCaps));
+            }
+            Inline::Quoted { double, body } => {
+                self.stack.push(Task::Event(Event::EndQuoted));
+                self.stack.push(Task::Inlines(body.into_iter()));
+                self.stack.push(Task::Event(Event::StartQuoted { double }));
             }
             Inline::Raw(text) => self.stack.push(Task::Event(Event::Raw(text))),
         }
@@ -388,6 +420,11 @@ enum Frame {
         body: Vec<Inline>,
     },
     Footnote(Vec<Inline>),
+    SmallCaps(Vec<Inline>),
+    Quoted {
+        double: bool,
+        body: Vec<Inline>,
+    },
 }
 
 impl Builder {
@@ -428,6 +465,8 @@ impl Builder {
             Some(Frame::Superscript(v)) => v.push(i),
             Some(Frame::Link { body, .. }) => body.push(i),
             Some(Frame::Footnote(v)) => v.push(i),
+            Some(Frame::SmallCaps(v)) => v.push(i),
+            Some(Frame::Quoted { body, .. }) => body.push(i),
             _ => panic!("collect_doc: inline event with no inline-accepting parent frame"),
         }
     }
@@ -617,10 +656,26 @@ impl Builder {
             }
             Event::LineBreak => self.push_inline(Inline::LineBreak),
             Event::MathInline(src) => self.push_inline(Inline::MathInline(src)),
+            Event::InlineMathDisplay(src) => self.push_inline(Inline::MathDisplay(src)),
             Event::StartFootnote => self.frames.push(Frame::Footnote(Vec::new())),
             Event::EndFootnote => {
                 if let Some(Frame::Footnote(v)) = self.frames.pop() {
                     self.push_inline(Inline::Footnote(v));
+                }
+            }
+            Event::StartSmallCaps => self.frames.push(Frame::SmallCaps(Vec::new())),
+            Event::EndSmallCaps => {
+                if let Some(Frame::SmallCaps(v)) = self.frames.pop() {
+                    self.push_inline(Inline::SmallCaps(v));
+                }
+            }
+            Event::StartQuoted { double } => self.frames.push(Frame::Quoted {
+                double,
+                body: Vec::new(),
+            }),
+            Event::EndQuoted => {
+                if let Some(Frame::Quoted { double, body }) = self.frames.pop() {
+                    self.push_inline(Inline::Quoted { double, body });
                 }
             }
             Event::Raw(text) => {
@@ -651,6 +706,8 @@ impl Builder {
                     | Frame::Superscript(_)
                     | Frame::Link { .. }
                     | Frame::Footnote(_)
+                    | Frame::SmallCaps(_)
+                    | Frame::Quoted { .. }
             )
         )
     }
