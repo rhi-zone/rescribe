@@ -104,7 +104,7 @@ currently unverified, not that the claim is false.
 | gfm | 5† | 5† | U | pulldown-cmark | – | – |
 | markdown | 4† | 4† | U | pulldown-cmark | production | production |
 | markdown-strict | 4† | 2† | U | pulldown-cmark | production | harness |
-| multimarkdown | 4† | 2† | U | pulldown-cmark | production | harness |
+| multimarkdown | 4† | 4† | U | commonmark-fmt (multimarkdown-fmt) | fuzz (targets exist, compile-clean; standalone-validated ~300k pseudo-random samples instead — no `cargo-fuzz` binary in this session's sandbox, see multimarkdown-fmt's fuzz target module docs) | fuzz (same caveat); construct gaps remain: subscript/superscript unsupported (commonmark-fmt has no `ENABLE_SUBSCRIPT`/`ENABLE_SUPERSCRIPT` equivalent), inline citation-content form not implemented (see `fixtures/multimarkdown/COVERAGE.md`) |
 
 ### Lightweight markup
 
@@ -612,22 +612,23 @@ non-`#[cfg(test)]`, non-`[[bin]]` functions in each adapter's `src/*.rs` and che
 whether they call a `crates/formats/` crate or do the byte-level work themselves.
 `Cargo.toml` was treated as a weak signal only (verified per CLAUDE.md).
 
-**65 formats audited: 39 clean, 13 violating, 13 uncertain** (opml moved violating→clean
-2026-08-04: `opml-fmt` extracted, adapters gutted to thin translators).
+**65 formats audited: 41 clean, 11 violating, 13 uncertain** (opml, multimarkdown moved
+violating→clean 2026-08-04: `opml-fmt`/`multimarkdown-fmt` extracted, adapters gutted to
+thin translators).
 
 This section supersedes the "Formats still needing a standalone crate" line above and
 is the single inventory for this dimension; `TODO.md`'s DEBT section links here rather
 than repeating it.
 
-### Clean (40) — adapter is a thin AST↔IR translator on both sides
+### Clean (41) — adapter is a thin AST↔IR translator on both sides
 
 Backed by a repo-local `crates/formats/` crate: org, rst, asciidoc, textile, muse, t2t,
 markua, fountain, texinfo, bbcode, pod, haddock, man, mediawiki, creole, dokuwiki,
 vimwiki, zimwiki, xwiki, twiki, tikiwiki, jira, docx (`ooxml-wml`), pptx (`ooxml-pml`),
 xlsx (`ooxml-sml`), odt (`odf-fmt`), fb2 (`fb2-fmt`), docbook (`docbook-fmt`),
 jats (`jats-fmt`), tei (`tei-fmt`), opml (`opml-fmt`), endnotexml (`endnotexml-fmt`,
-2026-08-04), html (`html-fmt`), rtf (`rtf-fmt`), ris (`ris`), csv (`csv-fmt`),
-tsv (`tsv-fmt`), native (`native`).
+2026-08-04), multimarkdown (`multimarkdown-fmt`, 2026-08-04), html (`html-fmt`),
+rtf (`rtf-fmt`), ris (`ris`), csv (`csv-fmt`), tsv (`tsv-fmt`), native (`native`).
 
 Backed by a sanctioned third-party library with no hand-rolled logic layered on top:
 epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
@@ -635,7 +636,7 @@ epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
 Residual `zip::` usage in `rescribe-read-odt` and `rescribe-read-pptx` is confined to
 `#[cfg(test)]` fixture builders — verified, not a violation.
 
-### Violating (12)
+### Violating (11)
 
 `-fmt?` = a usable standalone crate exists in `crates/formats/`. `R`/`W` = reader /
 writer adapter contains parsing / emitting logic. Tier is eyeballed from adapter line
@@ -649,7 +650,6 @@ count and the fraction that is format syntax rather than AST↔IR translation.
 | markdown | yes | no | **yes** | large | reader dispatches to `commonmark_fmt`/`pulldown_cmark`; writer (1606 ln) fully hand-rolled |
 | gfm | (pulldown) | no | **yes** | large | reader walks `pulldown_cmark` events (sanctioned); writer (350 ln) hand-rolled with no backing crate |
 | markdown-strict | (pulldown) | no | **yes** | large | same shape as gfm; writer 377 ln |
-| multimarkdown | (pulldown) | no | **yes** | large | same shape as gfm; writer 552 ln |
 | latex | **no** | **yes** | **yes** | large | worst case: `handwritten.rs` (895 ln) is a full recursive-descent LaTeX parser *inside the reader adapter*, plus a 662-ln tree-sitter backend; writer `builder.rs` (717 ln) is a hand-written emitter |
 | bibtex | **no** | **yes** | **yes** | medium | reader calls third-party `biblatex::Bibliography::parse` directly; writer (643 ln) hand-rolls BibTeX syntax + escaping |
 | biblatex | **no** | **yes** | **yes** | medium | identical shape to bibtex |

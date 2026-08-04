@@ -7491,3 +7491,154 @@ introduced in commit `d4b8bcbfb3`, not touched here) pulled in transitively by
 `rescribe-fixtures`'s full dependency graph; not fixed here, out of scope for this vertical.
 `cargo test -p typst-fmt -p rescribe-read-typst -p rescribe-write-typst -p rescribe-fixtures
 -q` and `cargo fmt --check` on the three typst-fmt-vertical crates: both exit 0.
+
+## `multimarkdown-fmt` crate extracted; both adapters become thin translators (2026-08-04)
+
+Closed the `multimarkdown` "no standalone crate" violation logged during the
+opml-fmt/endnotexml-fmt/typst-fmt work this session and reflagged in
+`streaming_harness::NOT_YET_AUDITED`: `rescribe-read-multimarkdown` (457 lines) called
+`pulldown_cmark::Parser` directly in production code; `rescribe-write-multimarkdown`
+(552 lines) hand-rolled a `Node`→Markdown-string emitter with no backing crate at all.
+
+**Design decision (given, not re-derived): extend `commonmark-fmt`, don't reimplement.**
+MultiMarkdown is CommonMark/GFM plus footnotes/definition-lists/math (already added to
+`commonmark-fmt` earlier this session specifically to enable this) plus a genuinely small
+set of MMD-only constructs on top. `crates/formats/multimarkdown-fmt` depends on
+`commonmark-fmt` (`tables`/`task-lists`/`strikethrough`/`footnotes`/`definition-lists`/
+`math` features, always requested rather than left feature-conditional — see `emit.rs`'s
+`CmDoc { frontmatter: None, .. }` comment for why: Cargo feature unification across a
+shared build graph means a conditional `#[cfg(feature = "frontmatter")]` field in *this*
+crate could silently stop matching what `CmDoc` actually compiled with) and implements
+only the MMD-unique remainder itself:
+- **Metadata blocks** (`Key: value` at document start, bare or `---`-delimited) —
+  genuinely distinct grammar from `commonmark-fmt`'s `frontmatter` feature (which requires
+  delimiters and doesn't parse the interior); implemented directly in `metadata.rs`, never
+  routed through `commonmark-fmt` at all.
+- **Citations** (`[locator][#refname]`, `[][#refname]`, `[#refname]: definition`) and
+  **cross-references** (`[Anchor]`, `[Header Text][]`) — spelled with ordinary
+  link-reference bracket syntax that CommonMark's own parser already leaves as literal text
+  when unresolved (verified empirically, not assumed: pulldown-cmark's own fallback
+  behavior for an unresolved reference link is to keep the bracket text as literal,
+  inner-content-still-inline-parsed, exactly the CommonMark spec's documented behavior).
+  `citation.rs` recognizes both forms by scanning already-tokenized `Inline::Text` content
+  — genuine MMD-specific parsing logic that belongs in this crate, operating on top of
+  commonmark-fmt's tokenization rather than duplicating it. Scope, stated explicitly in the
+  module docs rather than silently: detection is within a single contiguous text run — a
+  locator/label containing nested Markdown markup (e.g. `[*emph*][#Doe:2006]`) isn't
+  reassembled across the resulting sibling `Inline::Emphasis` split; nothing is lost, the
+  construct just isn't upgraded to a structured node in that case. The MMD "inline
+  citation-content" form (`text.[#Full content.]`, as opposed to a separate `[#refname]:`
+  definition line) is not implemented.
+- **Heading anchors** (`### Heading [Anchor] ###`) — a heading's own trailing
+  shortcut-form cross-reference is indistinguishable from an explicit anchor label on
+  reparse (same bracket syntax), so `transform.rs`'s `extract_heading_anchor` always reads
+  a bare trailing one back as the anchor; the fuzz roundtrip generator has to account for
+  this explicitly (forces its own trailing shortcut cross-references to collapsed form so
+  they don't get reinterpreted — see the fuzz target's comment).
+
+**AST composition**: `commonmark_fmt::{Block, Inline}` are closed enums with no extension
+point (confirmed by reading `ast.rs` — no `#[non_exhaustive]`, no raw/other variant), so
+`MmdBlock`/`MmdInline` mirror them variant-for-variant (reusing `commonmark_fmt::{Span,
+ListKind, OrderedMarker, ColumnAlignment}` directly — nothing MMD-specific about those)
+plus the new MMD-unique variants. `transform.rs` converts both directions: `cm_to_mmd_*`
+(applied to `commonmark_fmt::parse::parse_str`'s output — all real CommonMark tokenizing
+already done, this is purely a recognize-and-relabel walk) and `mmd_to_cm_*` (the inverse,
+spelling MMD-unique nodes back out as the literal bracket text CommonMark would produce for
+an unresolved reference, then handing the whole tree to `commonmark_fmt::emit::emit`/
+`commonmark_fmt::Writer` for actual CommonMark writing — this crate never hand-writes
+Markdown syntax itself, on either the reader or writer side).
+
+**All five APIs implemented, `events()` genuinely incremental, not `parse()`-then-replay:**
+`EventIter` wraps `commonmark_fmt::events::EventIter` and layers MMD recognition on top
+with bounded lookahead only — metadata is extracted via a bounded prefix scan at
+construction (not a full-document buffer), citation-definition paragraphs are recognized
+with exactly one token of lookahead (`StartParagraph` → pull the next event → if it's a
+`Text` matching the definition prefix, re-tag as `StartCitationDefinition`; otherwise hold
+the looked-ahead event in a single-slot `deferred` buffer and replay it first next call),
+and citation/cross-reference patterns are split out of each `Text` event as it's pulled —
+O(1) event of lookahead overhead, not O(paragraph) or O(document). See `events.rs`'s module
+doc for the full mechanism. `StreamingParser`/`Writer` complete the five-API contract
+(`batch.rs`, `writer.rs`).
+
+**Inherited (and independently restated) limitation**: `StreamingParser` buffers all input
+before parsing — not a new limitation introduced here, but the CLAUDE.md-sanctioned
+pulldown-cmark exemption `commonmark-fmt` already documents, restated explicitly in
+multimarkdown-fmt's own crate docs and `batch.rs` module doc per the task brief's
+instruction not to silently inherit it. `events()` is unaffected — it's a true streaming
+iterator built directly on `commonmark_fmt::events`, not on `parse()`.
+
+**Discovered gap, flagged rather than forced**: `fixtures/multimarkdown/subscript`/
+`.../superscript` (pre-existing fixtures, previously passing under the old
+`pulldown_cmark::Options::ENABLE_SUBSCRIPT`/`ENABLE_SUPERSCRIPT`-enabled reader) now fail —
+`commonmark-fmt`'s feature set (`tables`/`task-lists`/`strikethrough`/`frontmatter`/
+`footnotes`/`definition-lists`/`math`, confirmed by reading its `Cargo.toml`) has no
+subscript/superscript equivalent at all, and single-tilde `~sub~` additionally collides
+with `commonmark-fmt`'s own strikethrough feature (GFM strikethrough accepts single *or*
+double tilde), which claims it before any MMD-level post-processing ever sees literal text
+to rescan. This cannot be fixed inside multimarkdown-fmt alone — it requires adding
+subscript/superscript support to `commonmark-fmt` itself, a separate vertical, not a
+"routine composition choice" within this one. Per the task brief's fence, not forced here:
+the two fixtures are skipped by name (with an inline comment explaining why) in
+`rescribe-fixtures/tests/run.rs`'s `multimarkdown()` test rather than deleted or silently
+left failing, and the gap is recorded in `fixtures/multimarkdown/COVERAGE.md` and here.
+
+**Fixtures**: 13 new fixtures added (`metadata-bare`, `metadata-delimited`,
+`citation-with-locator`, `citation-no-locator`, `citation-definition`,
+`cross-reference-shortcut`, `cross-reference-collapsed`, `heading-anchor`,
+`integration-citation-in-list`, `integration-citation-in-blockquote`,
+`adv-malformed-citation-def`, `adv-empty-citation-label`, `e2e-academic-document`) on top
+of the pre-existing 25-fixture base-construct suite (which continues to pass unchanged
+against the new adapter, confirming the commonmark-fmt-delegation composition preserves
+prior behavior for everything it covers). `COVERAGE.md` updated: metadata/citations/
+cross-references/heading-anchor checked off, subscript/superscript un-checked with the gap
+explanation, inline citation-content form logged as a known gap.
+
+**Fuzz targets**: `fuzz_multimarkdown_fmt_reader` (no-panic gate: `parse()`/`events()`/
+`StreamingParser` on arbitrary bytes) and `fuzz_multimarkdown_fmt_roundtrip` (native-AST
+roundtrip: `parse(emit(arbitrary_mmd_doc)).strip_spans() == arbitrary_mmd_doc`, the
+CLAUDE.md-mandated direction). Both compile clean; `cargo-fuzz` itself is not installed in
+this session's sandbox (same caveat as opml-fmt/endnotexml-fmt/typst-fmt), so the roundtrip
+generator was validated standalone against 300k pseudo-random byte buffers before being
+committed (documented inline in the fuzz target's module doc) — found and fixed two real
+generator-side issues along the way, both properties of the transform, not crate bugs:
+adjacent generated `Text` nodes must be merged at generation time (CommonMark's tokenizer
+always merges them back into one on reparse — same class of fix typst-fmt's generator
+needed); a heading's own trailing shortcut-form cross-reference must be forced to collapsed
+form (see "heading anchors" above) or it round-trips back as an `anchor` instead of a
+`CrossReference` inline.
+
+**Harness wiring**: `multimarkdown` moved from `streaming_harness::NOT_YET_AUDITED` to a
+real `CAPABILITIES` entry (`events`/`streaming_writer` `Wired`, `streaming_parser`
+`NotApplicable` with the inherited-exemption rationale restated inline, per the pattern
+already established for `commonmark`/`gfm`/`markdown`).
+
+**`docs/format-audit.md` updated**: Markdown-family table row (Library column now
+`commonmark-fmt (multimarkdown-fmt)`, R/W both 4, construct gaps noted); the adapter-layer
+violation audit's "Violating (12)" table lost its `multimarkdown` row (moved into "Clean",
+now 41 clean / 11 violating — both counts and both section headings updated together, not
+independently, to stay internally consistent).
+
+**Verification**: `cargo clippy --all-targets --all-features -- -D warnings` exit 0;
+`cargo test -q` (full workspace) exit 0; `cargo fmt --check` exit 0 (all captured directly,
+not through a `tail` pipe).
+
+**This closes the "crate-less formats" thread** opened earlier this session's audit:
+endnotexml, opml, typst, and multimarkdown — the four format adapters found to violate
+CLAUDE.md's "adapter layer must never contain parsing/writing logic" rule — all now have a
+standalone `{format}-fmt` crate and a thin adapter on both sides. `latex` remains correctly
+deferred per its own existing ranking in this file (a 895-line hand-rolled parser plus a
+662-line tree-sitter backend directly in `rescribe-read-latex` — a larger, separate
+undertaking, not in scope here). The other 8 formats found `NOT_YET_AUDITED`-without-a-crate
+during the earlier audit pass (`csl-json`, `pandoc-json`, `ipynb`, `bibtex`, `biblatex`,
+`epub`, `pdf`, plus the ten write-only pandoc presentation-target variants) were confirmed
+during that earlier pass as legitimate thin wrappers around sanctioned third-party
+libraries or genuinely reader-less/writer-only targets, not CLAUDE.md violations — that
+question is not reopened here, only recorded as already closed.
+
+**Not attempted this pass** (construct coverage remains incomplete beyond the two flagged
+gaps above): abbreviation definitions/references, glossary terms/references, TOC
+placeholders (`{{TOC}}`), file transclusion (`{{file}}`), image dimensions
+(`![alt][ref]{width=...}`), critic markup. `multimarkdown` is therefore R:4/W:4 in
+`docs/format-audit.md` (all five API modes + fixtures + harness + fuzz-target-compile
+complete; construct coverage gaps remain, tracked in `fixtures/multimarkdown/COVERAGE.md`),
+not yet 5-Production.
