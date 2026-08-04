@@ -399,6 +399,18 @@ struct SemanticState {
     /// starts, and [`SemanticState::handle_end`]/[`SemanticState::handle_empty`]
     /// for how it's maintained. 0 means not suppressing.
     suppress_depth: usize,
+    /// Content-builder stack for a `<title-info><annotation>` currently
+    /// open. Non-empty exactly while inside such an annotation. Separate
+    /// from the top-level `stack` because `<title-info><annotation>` has the
+    /// same content model as `<section>` (`Para`/`EmptyLine`/`Poem`/`Cite`/
+    /// `Subtitle`/`Table`, per `AnnotationContent` in `ast.rs`) but, unlike
+    /// section content, must be fully buffered into an owned `Annotation`
+    /// value and folded into `TitleInfo.annotation` — it packages into the
+    /// single `Event::Metadata` event rather than streaming as its own
+    /// top-level events the way identical-looking `<poem>`/`<cite>` content
+    /// in a `<section>` does. See `handle_ann_start`/`handle_ann_end` and
+    /// `AnnoItem`.
+    ann_stack: Vec<AnnoItem>,
 }
 
 /// The description-building sub-state (analogous to the full parse.rs TitleInfo etc.)
@@ -524,6 +536,47 @@ enum InlineKind {
     Strikethrough,
     Sub,
     Sup,
+}
+
+/// Content-builder stack items for a `<title-info><annotation>` (mirrors the
+/// subset of `parse.rs`'s `StackItem` reachable from `Annotation`'s content
+/// model — no `Section`/`Body`/metadata items, since an annotation can't
+/// contain those). Unlike `ParseState`, these carry fully owned AST values
+/// (`Poem`, `Cite`, `Table`, …) that get assembled bottom-up and folded into
+/// `TitleInfo.annotation` on `</annotation>`, the same way `parse.rs`'s
+/// `Parser` builds them — not streamed as individual events.
+enum AnnoItem {
+    Annotation(Annotation),
+    Paragraph(Vec<InlineElement>),
+    Subtitle(Vec<InlineElement>),
+    /// A `<p>` inside a `<poem><title>` within the annotation.
+    TitlePara(Vec<InlineElement>),
+    Poem(Poem),
+    PoemTitle(Title),
+    Stanza(Stanza),
+    VerseLine(Vec<InlineElement>),
+    Cite(Cite),
+    /// A `<epigraph>` nested inside a `<poem>` within the annotation (the
+    /// only place `Epigraph` can occur in the annotation content model —
+    /// `Annotation` itself has no `epigraph` field, only `Poem` does).
+    Epigraph(Epigraph),
+    TextAuthor(Vec<InlineElement>),
+    Table(Table),
+    TableRow(TableRow),
+    TableCell(TableCell),
+    InlineWrapper {
+        kind: InlineKind,
+        children: Vec<InlineElement>,
+    },
+    Link {
+        href: String,
+        link_kind: Option<String>,
+        children: Vec<InlineElement>,
+    },
+    FootnoteRef {
+        href: String,
+        children: Vec<InlineElement>,
+    },
 }
 
 impl<'a> XmlEventIter<'a> {
@@ -666,6 +719,19 @@ impl SemanticState {
         }
         let text = std::mem::take(&mut self.current_text);
 
+        // Inside a `<title-info><annotation>` (see `ann_stack`'s doc
+        // comment): route to the annotation's own inline-context search
+        // rather than the top-level/description one below — checked first
+        // since `desc.in_description` is still true the whole time we're
+        // inside the annotation too.
+        if !self.ann_stack.is_empty() {
+            if text.trim().is_empty() && !self.ann_in_inline_context() {
+                return;
+            }
+            self.ann_push_text_to_inline_context(text);
+            return;
+        }
+
         // In description leaf context (handled separately)
         if let Some(_target) = self.desc.leaf_target {
             // keep it for the leaf handler
@@ -780,6 +846,15 @@ impl SemanticState {
         // stack frame pushed — handle_end's matching guard below unwinds it.
         if self.suppress_depth > 0 {
             self.suppress_depth += 1;
+            return;
+        }
+
+        // Inside a `<title-info><annotation>` — see `ann_stack`'s doc
+        // comment. Checked before the description branch below since we're
+        // still logically inside `<description>` (`desc.in_description`
+        // stays true) the whole time we're inside the annotation too.
+        if !self.ann_stack.is_empty() {
+            self.handle_ann_start(name, attrs);
             return;
         }
 
@@ -966,6 +1041,10 @@ impl SemanticState {
         if self.suppress_depth > 0 {
             return;
         }
+        if !self.ann_stack.is_empty() {
+            self.handle_ann_empty(name, attrs);
+            return;
+        }
         match name {
             "empty-line" => {
                 self.pending.push_back(Event::EmptyLine);
@@ -1040,6 +1119,17 @@ impl SemanticState {
                     }));
                 }
             }
+            return;
+        }
+
+        // Inside a `<title-info><annotation>` — see `ann_stack`'s doc
+        // comment. Checked before the "description"/in_description branches
+        // below since, by the time a well-formed `</description>` arrives,
+        // the annotation (if any) has always already closed via its own
+        // `</annotation>`, so `ann_stack` is empty again — this only ever
+        // intercepts tags genuinely nested inside the still-open annotation.
+        if !self.ann_stack.is_empty() {
+            self.handle_ann_end(name);
             return;
         }
 
@@ -1200,6 +1290,412 @@ impl SemanticState {
         }
     }
 
+    // ---- `<title-info><annotation>` content-builder handlers --------------
+    //
+    // Mirrors `parse.rs`'s `handle_start`/`handle_empty`/`handle_end`/
+    // `push_block_content`/`push_inline`/`in_inline_context` /
+    // `push_text_to_inline_context`, scoped to `ann_stack` (see its doc
+    // comment) instead of `parse.rs`'s single `Parser::stack`. Content is
+    // assembled bottom-up into owned `Annotation`/`Poem`/`Cite`/`Table`/…
+    // values, exactly like `parse.rs`'s `Parser` does, rather than streamed
+    // as top-level events — the whole thing folds into a single
+    // `Event::Metadata` once `</annotation>` closes.
+
+    fn handle_ann_start(&mut self, name: &str, attrs: AttrMap) {
+        match name {
+            "p" => {
+                if matches!(self.ann_stack.last(), Some(AnnoItem::PoemTitle(_))) {
+                    self.ann_stack.push(AnnoItem::TitlePara(Vec::new()));
+                } else {
+                    self.ann_stack.push(AnnoItem::Paragraph(Vec::new()));
+                }
+            }
+            "subtitle" => self.ann_stack.push(AnnoItem::Subtitle(Vec::new())),
+            "poem" => self.ann_stack.push(AnnoItem::Poem(Poem {
+                id: attrs.get("id").cloned(),
+                lang: attrs.get("lang").cloned(),
+                ..Default::default()
+            })),
+            // A `<title>` is only schema-valid here inside a `<poem>` (an
+            // `Annotation` has no title field of its own) — matches
+            // `parse.rs`'s `is_title_context`/title-arm interplay, which
+            // only special-cases `Poem`/`Body` parents.
+            "title" if matches!(self.ann_stack.last(), Some(AnnoItem::Poem(_))) => {
+                self.ann_stack.push(AnnoItem::PoemTitle(Title {
+                    lang: attrs.get("lang").cloned(),
+                    ..Default::default()
+                }));
+            }
+            "epigraph" if matches!(self.ann_stack.last(), Some(AnnoItem::Poem(_))) => {
+                self.ann_stack.push(AnnoItem::Epigraph(Epigraph {
+                    id: attrs.get("id").cloned(),
+                    ..Default::default()
+                }));
+            }
+            "stanza" => self.ann_stack.push(AnnoItem::Stanza(Stanza {
+                lang: attrs.get("lang").cloned(),
+                ..Default::default()
+            })),
+            "v" => self.ann_stack.push(AnnoItem::VerseLine(Vec::new())),
+            "cite" => self.ann_stack.push(AnnoItem::Cite(Cite {
+                id: attrs.get("id").cloned(),
+                lang: attrs.get("lang").cloned(),
+                ..Default::default()
+            })),
+            "text-author" => self.ann_stack.push(AnnoItem::TextAuthor(Vec::new())),
+            "table" => self.ann_stack.push(AnnoItem::Table(Table {
+                id: attrs.get("id").cloned(),
+                style: attrs.get("style").cloned(),
+                ..Default::default()
+            })),
+            "tr" => self.ann_stack.push(AnnoItem::TableRow(TableRow {
+                align: attrs.get("align").cloned(),
+                ..Default::default()
+            })),
+            "td" | "th" => self.ann_stack.push(AnnoItem::TableCell(TableCell {
+                id: attrs.get("id").cloned(),
+                style: attrs.get("style").cloned(),
+                colspan: attrs.get("colspan").and_then(|v| v.parse().ok()),
+                rowspan: attrs.get("rowspan").and_then(|v| v.parse().ok()),
+                align: attrs.get("align").cloned(),
+                valign: attrs.get("valign").cloned(),
+                is_header: name == "th",
+                ..Default::default()
+            })),
+            "emphasis" => self.ann_stack.push(AnnoItem::InlineWrapper {
+                kind: InlineKind::Emphasis,
+                children: Vec::new(),
+            }),
+            "strong" => self.ann_stack.push(AnnoItem::InlineWrapper {
+                kind: InlineKind::Strong,
+                children: Vec::new(),
+            }),
+            "strikethrough" => self.ann_stack.push(AnnoItem::InlineWrapper {
+                kind: InlineKind::Strikethrough,
+                children: Vec::new(),
+            }),
+            "sub" => self.ann_stack.push(AnnoItem::InlineWrapper {
+                kind: InlineKind::Sub,
+                children: Vec::new(),
+            }),
+            "sup" => self.ann_stack.push(AnnoItem::InlineWrapper {
+                kind: InlineKind::Sup,
+                children: Vec::new(),
+            }),
+            "a" => {
+                let href = attrs.get("href").cloned().unwrap_or_default();
+                let kind = attrs.get("type").cloned();
+                if kind.as_deref() == Some("note") && href.starts_with('#') {
+                    self.ann_stack.push(AnnoItem::FootnoteRef {
+                        href,
+                        children: Vec::new(),
+                    });
+                } else {
+                    self.ann_stack.push(AnnoItem::Link {
+                        href,
+                        link_kind: kind,
+                        children: Vec::new(),
+                    });
+                }
+            }
+            // "code" (inline `<code>`) is deliberately unhandled here, just
+            // like `parse.rs`'s general `handle_start`: it's a pure-text
+            // leaf with no nested elements, so it needs no stack frame —
+            // its content simply accumulates in `current_text` between this
+            // Start and the matching End, which special-cases it (see
+            // `handle_ann_end`). A nested `<annotation>` (not schema-valid)
+            // and any other unrecognized tag also falls through here as a
+            // no-op, matching `parse.rs`'s `_ => {}`.
+            _ => {}
+        }
+    }
+
+    fn handle_ann_empty(&mut self, name: &str, attrs: AttrMap) {
+        match name {
+            "empty-line" => {
+                self.ann_push_block_content(SectionContent::EmptyLine);
+            }
+            // Not modeled inside annotation content on either API (mirrors
+            // `parse.rs`'s `push_block_content`, where none of
+            // `AnnotationContent`/`CiteContent`/`EpigraphContent` has an
+            // `Image` variant) — dropped unless it's inline content of a
+            // paragraph/table cell/etc., mirroring the top-level
+            // `in_inline_context()` branch.
+            "image" => {
+                if self.ann_in_inline_context() {
+                    let href = attrs.get("href").cloned().unwrap_or_default();
+                    let img = Image {
+                        href,
+                        alt: attrs.get("alt").cloned(),
+                        title: attrs.get("title").cloned(),
+                        id: attrs.get("id").cloned(),
+                    };
+                    self.ann_push_inline(InlineElement::Image(img));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_ann_end(&mut self, name: &str) {
+        // Inline code leaf: no `AnnoItem` was pushed for its Start (see
+        // `handle_ann_start`'s comment) — content lived purely in
+        // `current_text` between Start and End.
+        if name == "code" {
+            let text = std::mem::take(&mut self.current_text);
+            self.ann_push_inline(InlineElement::Code(text));
+            return;
+        }
+
+        let item = match self.ann_stack.pop() {
+            Some(i) => i,
+            None => return,
+        };
+        self.close_ann_item(item);
+    }
+
+    /// Synthesizes the semantic effect a real End tag would have had for one
+    /// `AnnoItem` frame — attaching it to its parent frame (or, for the
+    /// outermost `Annotation` frame, to `TitleInfo.annotation`) — mirroring
+    /// `parse.rs`'s per-`StackItem` `handle_end` match combined with
+    /// `push_block_content`. Reused by `finalize_open_elements` to
+    /// auto-close whatever's still open on `ann_stack` at end-of-input.
+    fn close_ann_item(&mut self, item: AnnoItem) {
+        match item {
+            AnnoItem::Annotation(ann) => {
+                self.desc.ti.annotation = Some(ann);
+            }
+            AnnoItem::Paragraph(inlines) => {
+                self.ann_push_block_content(SectionContent::Para(inlines));
+            }
+            AnnoItem::Subtitle(inlines) => {
+                self.ann_push_block_content(SectionContent::Subtitle(inlines));
+            }
+            AnnoItem::TitlePara(inlines) => {
+                let tp = TitlePara::Para(inlines);
+                if let Some(AnnoItem::PoemTitle(title)) = self.ann_stack.last_mut() {
+                    title.para.push(tp);
+                }
+            }
+            AnnoItem::Poem(p) => {
+                self.ann_push_block_content(SectionContent::Poem(p));
+            }
+            AnnoItem::PoemTitle(title) => {
+                if let Some(AnnoItem::Poem(p)) = self.ann_stack.last_mut() {
+                    p.title = Some(title);
+                }
+            }
+            AnnoItem::Stanza(s) => {
+                if let Some(AnnoItem::Poem(p)) = self.ann_stack.last_mut() {
+                    p.stanza.push(s);
+                }
+            }
+            AnnoItem::VerseLine(inlines) => {
+                if let Some(AnnoItem::Stanza(s)) = self.ann_stack.last_mut() {
+                    s.v.push(inlines);
+                }
+            }
+            AnnoItem::Cite(c) => {
+                self.ann_push_block_content(SectionContent::Cite(c));
+            }
+            AnnoItem::Epigraph(e) => {
+                if let Some(AnnoItem::Poem(p)) = self.ann_stack.last_mut() {
+                    p.epigraph.push(e);
+                }
+            }
+            AnnoItem::TextAuthor(inlines) => {
+                for item in self.ann_stack.iter_mut().rev() {
+                    match item {
+                        AnnoItem::Cite(c) => {
+                            c.text_author.push(inlines);
+                            return;
+                        }
+                        AnnoItem::Epigraph(e) => {
+                            e.text_author.push(inlines);
+                            return;
+                        }
+                        AnnoItem::Poem(p) => {
+                            p.text_author.push(inlines);
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            AnnoItem::Table(t) => {
+                self.ann_push_block_content(SectionContent::Table(t));
+            }
+            AnnoItem::TableRow(row) => {
+                if let Some(AnnoItem::Table(t)) = self.ann_stack.last_mut() {
+                    t.row.push(row);
+                }
+            }
+            AnnoItem::TableCell(cell) => {
+                if let Some(AnnoItem::TableRow(row)) = self.ann_stack.last_mut() {
+                    row.cell.push(cell);
+                }
+            }
+            AnnoItem::InlineWrapper { kind, children } => {
+                let el = match kind {
+                    InlineKind::Strong => InlineElement::Strong(children),
+                    InlineKind::Emphasis => InlineElement::Emphasis(children),
+                    InlineKind::Strikethrough => InlineElement::Strikethrough(children),
+                    InlineKind::Sub => InlineElement::Sub(children),
+                    InlineKind::Sup => InlineElement::Sup(children),
+                };
+                self.ann_push_inline(el);
+            }
+            AnnoItem::Link {
+                href,
+                link_kind,
+                children,
+            } => {
+                self.ann_push_inline(InlineElement::Link {
+                    href,
+                    kind: link_kind,
+                    children,
+                });
+            }
+            AnnoItem::FootnoteRef { href, children } => {
+                self.ann_push_inline(InlineElement::FootnoteRef { href, children });
+            }
+        }
+    }
+
+    /// Routes a completed content item to whichever `AnnoItem` container on
+    /// `ann_stack` can hold it — mirrors `parse.rs`'s `push_block_content`
+    /// exactly (same match arms, same silent-drop-if-parent-can't-hold-it
+    /// fallback for e.g. `Subtitle` inside `Cite`, which `CiteContent` has
+    /// no variant for).
+    fn ann_push_block_content(&mut self, content: SectionContent) {
+        for item in self.ann_stack.iter_mut().rev() {
+            match item {
+                AnnoItem::Cite(c) => {
+                    let cc = match content {
+                        SectionContent::Para(il) => CiteContent::Para(il),
+                        SectionContent::EmptyLine => CiteContent::EmptyLine,
+                        SectionContent::Poem(p) => CiteContent::Poem(p),
+                        SectionContent::Table(t) => CiteContent::Table(t),
+                        other => {
+                            let _ = other;
+                            return;
+                        }
+                    };
+                    c.content.push(cc);
+                    return;
+                }
+                AnnoItem::Epigraph(e) => {
+                    let ec = match content {
+                        SectionContent::Para(il) => EpigraphContent::Para(il),
+                        SectionContent::EmptyLine => EpigraphContent::EmptyLine,
+                        SectionContent::Poem(p) => EpigraphContent::Poem(p),
+                        SectionContent::Cite(c) => EpigraphContent::Cite(c),
+                        other => {
+                            let _ = other;
+                            return;
+                        }
+                    };
+                    e.content.push(ec);
+                    return;
+                }
+                AnnoItem::Annotation(ann) => {
+                    let ac = match content {
+                        SectionContent::Para(il) => AnnotationContent::Para(il),
+                        SectionContent::EmptyLine => AnnotationContent::EmptyLine,
+                        SectionContent::Poem(p) => AnnotationContent::Poem(p),
+                        SectionContent::Cite(c) => AnnotationContent::Cite(c),
+                        SectionContent::Subtitle(il) => AnnotationContent::Subtitle(il),
+                        SectionContent::Table(t) => AnnotationContent::Table(t),
+                        SectionContent::Image(_) => return,
+                    };
+                    ann.content.push(ac);
+                    return;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Mirrors `parse.rs`'s `in_inline_context`, scoped to `ann_stack`. Every
+    /// `AnnoItem` variant is unambiguously an inline-holding context or not
+    /// (unlike `parse.rs`'s general `stack`, nothing here needs to `continue`
+    /// past an intermediate frame to find an answer), so only the top frame
+    /// need be checked.
+    fn ann_in_inline_context(&self) -> bool {
+        matches!(
+            self.ann_stack.last(),
+            Some(
+                AnnoItem::Paragraph(_)
+                    | AnnoItem::TitlePara(_)
+                    | AnnoItem::Subtitle(_)
+                    | AnnoItem::VerseLine(_)
+                    | AnnoItem::TextAuthor(_)
+                    | AnnoItem::InlineWrapper { .. }
+                    | AnnoItem::Link { .. }
+                    | AnnoItem::FootnoteRef { .. }
+                    | AnnoItem::TableCell(_)
+            )
+        )
+    }
+
+    /// Mirrors `parse.rs`'s `push_text_to_inline_context`, scoped to
+    /// `ann_stack`.
+    fn ann_push_text_to_inline_context(&mut self, text: String) {
+        if text.is_empty() {
+            return;
+        }
+        for item in self.ann_stack.iter_mut().rev() {
+            match item {
+                AnnoItem::Paragraph(inlines)
+                | AnnoItem::TitlePara(inlines)
+                | AnnoItem::Subtitle(inlines)
+                | AnnoItem::VerseLine(inlines)
+                | AnnoItem::TextAuthor(inlines) => {
+                    inlines.push(InlineElement::Text(text));
+                    return;
+                }
+                AnnoItem::InlineWrapper { children, .. }
+                | AnnoItem::Link { children, .. }
+                | AnnoItem::FootnoteRef { children, .. } => {
+                    children.push(InlineElement::Text(text));
+                    return;
+                }
+                AnnoItem::TableCell(cell) => {
+                    cell.content.push(InlineElement::Text(text));
+                    return;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Mirrors `parse.rs`'s `push_inline`, scoped to `ann_stack`.
+    fn ann_push_inline(&mut self, el: InlineElement) {
+        for item in self.ann_stack.iter_mut().rev() {
+            match item {
+                AnnoItem::Paragraph(inlines)
+                | AnnoItem::TitlePara(inlines)
+                | AnnoItem::Subtitle(inlines)
+                | AnnoItem::VerseLine(inlines)
+                | AnnoItem::TextAuthor(inlines) => {
+                    inlines.push(el);
+                    return;
+                }
+                AnnoItem::InlineWrapper { children, .. }
+                | AnnoItem::Link { children, .. }
+                | AnnoItem::FootnoteRef { children, .. } => {
+                    children.push(el);
+                    return;
+                }
+                AnnoItem::TableCell(cell) => {
+                    cell.content.push(el);
+                    return;
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Finalizes every element still open on `self.stack`, synthesizing the
     /// same End event(s) each would have produced from a real End tag
     /// (`close_item`, innermost first — `Vec::pop()`'s natural order)
@@ -1214,9 +1710,16 @@ impl SemanticState {
     /// accumulated before the stream ended — is already sitting on
     /// `self.stack`. A no-op for well-formed input, where every element is
     /// already closed by its own End tag and the stack is empty by the time
-    /// this runs.
+    /// this runs. Also drains any still-open `ann_stack` first (same
+    /// reasoning, for a truncated `<title-info><annotation>`), folding it
+    /// down into `TitleInfo.annotation` before `self.stack`'s own unwind —
+    /// harmless no-op for well-formed input, where `ann_stack` is already
+    /// empty by the time this runs.
     fn finalize_open_elements(&mut self) {
         self.flush_inline_text();
+        while let Some(item) = self.ann_stack.pop() {
+            self.close_ann_item(item);
+        }
         while let Some(item) = self.stack.pop() {
             self.close_item(item);
         }
@@ -1231,6 +1734,15 @@ impl SemanticState {
                 self.stack.push(ParseState::Description);
             }
             "title-info" => self.desc.in_title_info = true,
+            // `parse.rs`'s "annotation" arm only reads `id` from attrs, not
+            // `lang` (despite `Annotation::lang` existing on the struct) —
+            // mirrored exactly here so the two stay structurally equal.
+            "annotation" => {
+                self.ann_stack.push(AnnoItem::Annotation(Annotation {
+                    id: attrs.get("id").cloned(),
+                    ..Default::default()
+                }));
+            }
             "document-info" => {
                 self.desc.in_doc_info = true;
                 self.desc.di = Some(DocumentInfo::default());

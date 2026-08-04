@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>poetry</genre>
+      <book-title>Annotated Poem Book</book-title>
+      <annotation>
+        <poem>
+          <title><p>Prelude</p></title>
+          <stanza>
+            <v>First line of stanza one</v>
+            <v>Second line of stanza one</v>
+          </stanza>
+          <stanza>
+            <v>First line of stanza two</v>
+            <v>Second line of stanza two</v>
+          </stanza>
+          <text-author>The Poet</text-author>
+        </poem>
+      </annotation>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Main text.</p>
+    </section>
+  </body>
+</FictionBook>

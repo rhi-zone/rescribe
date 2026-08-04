@@ -1,0 +1,8 @@
+{
+  "description": "a <cite> with a text-author nested inside title-info's <annotation> must not leak out as top-level content, nor be dropped",
+  "category": "happy",
+  "metadata": { "meta:annotation": "Praise for this book:" },
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

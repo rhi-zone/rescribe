@@ -290,6 +290,81 @@ the "not a quick fix" claim in the 2026-08-03 entry above by reading `fb2-fmt`'s
   this accurately and needed no correction, just independent confirmation. No code changed
   this pass.
 
+**2026-08-04 (later): fb2-fmt `<title-info><annotation>` content now fully modeled in
+`events()`/`StreamingParser` — the gap scoped immediately above is closed.** Read `parse.rs`'s
+actual `Poem`/`Stanza`/`VerseLine`/`Cite`/`TextAuthor`/`Epigraph` handling in full
+(`push_block_content`, `handle_start`/`handle_end`) rather than working from the ~40-arm
+estimate — the real shape turned out smaller than estimated because `parse.rs` already
+funnels `Para`/`EmptyLine`/`Poem`/`Cite`/`Subtitle`/`Table` through one shared
+`push_block_content` dispatcher keyed on whichever container (`Section`/`Cite`/`Epigraph`/
+`Annotation`) is on top of the stack, rather than duplicating the routing per container. Also
+read the `#[cfg(test)]`-only `collect_poem_events`/`collect_cite_events` (the AST→events
+direction) first, per the task brief — confirmed **not directly invertible**: they walk a
+fully-materialized `Poem`/`Cite` into a flat event sequence, while `events()` needs the
+opposite (assemble an owned `Poem`/`Cite` bottom-up from a token stream) — but reading them
+did pin the exact target shape (event ordering, which fields exist) before writing the
+builder, saving a re-derivation pass.
+
+Fixed in `crates/formats/fb2-fmt/src/events.rs` by adding a second, parallel content-builder
+stack, `ann_stack: Vec<AnnoItem>` on `SemanticState`, kept separate from the top-level
+`stack`/`ParseState` (which streams section content as top-level events) because annotation
+content must be fully buffered into one owned `Annotation` value and folded into
+`TitleInfo.annotation` — it packages into a single `Event::Metadata` rather than streaming
+incrementally the way identical-looking `<poem>`/`<cite>` content in a `<section>` does.
+`AnnoItem` mirrors the subset of `parse.rs`'s `StackItem` reachable from `Annotation`'s
+content model: `Annotation`/`Paragraph`/`Subtitle`/`TitlePara`/`Poem`/`PoemTitle`/`Stanza`/
+`VerseLine`/`Cite`/`Epigraph`/`TextAuthor`/`Table`/`TableRow`/`TableCell`/`InlineWrapper`/
+`Link`/`FootnoteRef`. `handle_start`/`handle_empty`/`handle_end`/`flush_inline_text` each gained
+an `ann_stack`-non-empty priority check (before the pre-existing `desc.in_description` branch,
+since `in_description` stays true the whole time inside the annotation too) routing to new
+`handle_ann_start`/`handle_ann_empty`/`handle_ann_end`/`close_ann_item`/
+`ann_push_block_content`/`ann_in_inline_context`/`ann_push_text_to_inline_context`/
+`ann_push_inline`, each a direct port of `parse.rs`'s `handle_start`/`handle_empty`/
+`handle_end`/`push_block_content`/`in_inline_context`/`push_text_to_inline_context`/
+`push_inline` scoped to `ann_stack` instead of `parse.rs`'s single `Parser::stack` — including
+porting `push_block_content`'s previously-missed `Epigraph` arm (needed for a `<poem>`'s own
+nested `<epigraph>`, which `Poem.epigraph: Vec<Epigraph>` supports). `finalize_open_elements`
+also now drains any still-open `ann_stack` first (folding a truncated annotation into
+`TitleInfo.annotation`), for the same malformed/truncated-input robustness this file already
+established for the top-level `stack`.
+
+Content types now covered end to end in `events()`/`StreamingParser`, matching `parse()`'s
+AST exactly: paragraph, table, poem (with multiple stanzas, its own title, its own nested
+epigraph, and text-author), cite (with text-author), subtitle, and empty-line — i.e. every
+`AnnotationContent` variant. Four new fixtures added: `fixtures/fb2/annotation-poem`,
+`-cite`, `-table`, `-subtitle`, alongside the existing `fixtures/fb2/annotation` (a bare
+`<p>`), each verified against both `fb2-fmt`'s own streaming-parity harness and
+`rescribe-read-fb2`'s adapter fixture runner (`crates/rescribe-fixtures/tests/run.rs`'s `fb2`
+test).
+
+Deliberately **not** touched, a separate and still-open pre-existing gap: a *section-level*
+`<section><annotation>` (`Section.annotation: Option<Annotation>`, distinct from
+`TitleInfo.annotation`) is parsed in `events.rs`'s general (non-description) `handle_start`
+into `ParseState::Annotation` — a bare marker whose `close_item` arm is a no-op
+(`ParseState::Description | ParseState::Annotation => {}`). Content nested inside it
+currently leaks out as top-level events instead of being dropped or folded anywhere, since
+`events()` has no `Event::Annotation` variant to carry an owned `Section`-level annotation
+value the way `Event::Metadata` carries `TitleInfo`'s (and `events.rs` never builds an owned
+`Section` value at all — section content streams incrementally). This was out of the
+confirmed scope for this fix (no current fixture exercises it, and the KNOWN_FAILURES/audit
+history that scoped this task named only `<title-info><annotation>`); fixing it would need a
+new public `Event::Annotation` variant plus `rescribe-read-fb2`/`rescribe-write-fb2`/oracle-
+harness changes — left as a genuinely open, separate gap for a future pass.
+
+Verified: `cargo clippy --all-targets --all-features -- -D warnings` clean (workspace-wide);
+`cargo fmt --check` clean; full workspace `cargo test -q` clean. fb2-specific:
+`cargo test -q -p fb2-fmt` (18+1 tests) clean;
+`cargo test -q -p rescribe-fixtures --test streaming_apis fb2` —
+`fb2_events_equals_ast_projection_over_all_fixtures`,
+`fb2_streaming_parser_matches_events_and_is_incremental`, and
+`fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures` all pass (previously the
+first and third were gated by `assert_or_known_failure`, now genuinely green — checked over
+the full 61-fixture suite, up from 56); `cargo test -q -p rescribe-fixtures --test run fb2`
+clean too (the adapter-facing fixture runner). Both `fb2`/`events` and `fb2`/`streaming_writer`
+`KnownFailure` entries removed from `streaming_harness::KNOWN_FAILURES` (the harness itself
+panics if a fixed check is still listed — this is how the removal was caught, not a manual
+decision); `docs/format-audit.md`'s `fb2` row promoted to Wired/Wired/Wired accordingly.
+
 **2026-08-04: fb2-fmt's `adv-malformed` divergence fixed — the 2026-08-03 "genuine
 architectural divergence... would require buffering" assessment was checked directly and
 found false; the fix needed only bounded state, the same class as docbook-fmt/jats-fmt/
@@ -7029,3 +7104,118 @@ mask the real exit code), and `cargo fmt --check` (exit 0) all pass. `cargo test
 (`rtf_events_equals_ast_projection_over_all_fixtures`,
 `rtf_streaming_parser_matches_events_under_adversarial_chunking`,
 `rtf_streaming_writer_matches_builder_over_all_fixtures`).
+
+## 10 presentation/output-only writer fixtures audited (2026-08-04)
+
+Picked up the `NOT_YET_AUDITED` sub-list of 10 write-only pandoc output-format variants
+(beamer, revealjs, slidy, s5, dzslides, slideous, context, ms, icml, chunkedhtml) flagged in
+prior passes as "zero fixtures, not prioritized." All ten already had a working
+`rescribe-write-{format}` crate and writer-fixture test-harness wiring in place from an
+earlier "add writer fixture infrastructure and Tier D smoke tests" commit (`8cfbe3e454`) —
+each had exactly one minimal "basic-slide"/"basic-doc" fixture (single heading + single
+paragraph). This pass added a second, richer fixture per format under
+`fixtures/writers/{format}/`, verified against the real writer output (a throwaway scratch
+crate path-depending on `rescribe-read-pandoc-json` + each `rescribe-write-{format}` was used
+to generate real output for every `output_contains` assertion — none hand-guessed).
+
+**Implementation grouping**: none of the ten has a standalone `{format}-fmt` crate — all
+writer logic lives directly in `crates/writers/rescribe-write-{format}/src/lib.rs`
+(confirmed by reading each file and grepping `crates/formats/` for a matching `-fmt` crate:
+zero matches). revealjs/slidy/s5/dzslides/slideous superficially resemble a shared "HTML
+slideshow family" but are **five independent hand-rolled emitters** — each duplicates its
+own split-on-heading-level-and-emit-HTML logic, no shared code, no common base. beamer
+(LaTeX Beamer), context (ConTeXt), ms (groff ms), icml (InCopy XML), and chunkedhtml
+(multi-file HTML, returns `Vec<HtmlChunk>` rather than `Vec<u8>` — the CLI's single-output
+path (`rescribe-cli/src/main.rs:1064`) explicitly rejects it for this reason) are each fully
+independent.
+
+**Fixtures added** (all verified against real writer output):
+- `beamer/multi-slide-content`: two frames split on heading level ≤2, paragraph with
+  bold/italic, itemize list, verbatim code block, `\includegraphics` image — all present and
+  correct in real output.
+- `revealjs/multi-slide-content`, `slidy/multi-slide-content`, `s5/multi-slide-content`,
+  `dzslides/multi-slide-content`: two slides split on heading level ≤2 (both H1 and H2 open
+  a new slide), paragraph with bold/italic, bullet list, code block — all four confirmed
+  working. Image deliberately **not** fixtured for these four (see bug below).
+- `slideous/multi-slide-content`: confirmed via source read that slideous splits on heading
+  level **== 1 only** (not ≤2 like the other four) — a real, sourced divergence from pandoc's
+  own convention, not assumed. Two H1 slides plus an auto-generated title slide from
+  metadata, paragraph/bold/italic/list/code/image — image works here (`<img>`), unlike the
+  other four HTML writers.
+- `context/content-constructs`: heading (`\chapter`), paragraph with bold/italic
+  (`{\bf}`/`{\em}`), bullet list (`\startitemize`), code block (`\starttyping`), and a table
+  (`\starttabulate`) — all confirmed working, including the table (took two iterations to get
+  a correctly-shaped pandoc-json `Table` payload; the reader's `convert_table` expects raw
+  `[Attr, Alignment, RowSpan, ColSpan, [Block]]` tuples for `Row`/`Cell`/`TableHead`/
+  `TableBody`/`TableFoot`, **not** `{"t":...,"c":...}`-wrapped values — those wrapper tags are
+  only for actual Pandoc sum types (`Block`, `Inline`, `Alignment`, `ColWidth`), not the
+  product-type table substructures).
+- `ms/content-constructs`: two heading levels (`.SH`/`.SS`), paragraph with bold/italic
+  troff font-change macros (`\fB`/`\fI`/`\fP`), bullet and ordered lists (`.IP`), code block
+  (`.DS`/`.ft CW`/`.DE`) — all confirmed working.
+- `icml/content-constructs`: heading → `ParagraphStyle/Heading1`, paragraph →
+  `ParagraphStyle/Body` with bold/italic text runs → `CharacterStyle/Bold`/`Italic`, bullet
+  list — all confirmed working.
+- `chunkedhtml/multi-section`: two H1 sections confirmed to produce **three** distinct
+  `HtmlChunk`s (`index.html` with a table-of-contents, `chunk000.html`, `chunk001.html` with
+  prev/next nav) via direct inspection of `rescribe_write_chunkedhtml::emit`'s returned
+  `Vec<HtmlChunk>` before the existing test harness concatenates it for the single-blob
+  `output_contains` check — genuinely working multi-file generation, not a stub.
+
+Every new fixture directory was confirmed actually wired (not silently skipped) by
+temporarily corrupting one assertion and observing the fixture test fail with the expected
+message, then reverting.
+
+**Two real silent content-drop bugs found, not fixed (flagged, out of scope per this task's
+fence)**:
+1. `crates/writers/rescribe-write-revealjs/src/lib.rs`: `IMAGE` has an arm in `emit_node`
+   (block dispatch, ~line 141) but **no arm in `emit_inline_node`** (inline dispatch). Pandoc
+   represents a standalone image as an `Image` inline inside a `Para` — the normal case — so
+   it falls through `emit_inline_node`'s `_ => emit_inline_nodes(&node.children, ...)`
+   catch-all, which recurses into `IMAGE`'s children (none — `IMAGE` carries only
+   url/alt/title props, no children) and emits nothing. Confirmed via a real run: a `Para`
+   containing only an `Image` inline produced literal `<p></p>` in the output.
+2. `crates/writers/rescribe-write-slidy/src/lib.rs`, `rescribe-write-s5/src/lib.rs`,
+   `rescribe-write-dzslides/src/lib.rs`, `rescribe-write-ms/src/lib.rs`, and
+   `rescribe-write-icml/src/lib.rs` have **no `IMAGE` arm anywhere** — confirmed by grepping
+   each `src/lib.rs` for `node::IMAGE` (zero matches in all five). Images are silently
+   dropped unconditionally. ms's gap is plausibly an intentional non-goal (groff ms has no
+   native image embedding), but even so it should emit a fidelity warning per CLAUDE.md, not
+   drop silently; icml's gap is not defensible (ICML/InCopy natively supports embedded
+   images via the `Image`/`Rectangle` element machinery). None of the ten writers in this
+   vertical implement any fidelity-warning mechanism at all — every `emit_with_options`
+   returns `ConversionResult::ok(...)` unconditionally, so even the constructs each writer
+   *does* drop on purpose (e.g. table support absent from icml/ms/the five slideshow
+   writers) go unwarned. This is a pre-existing gap across the whole vertical, not
+   introduced by this pass; logged here rather than fixed, per the task's explicit
+   "don't force-fix, flag for its own vertical" fence.
+
+`crates/rescribe-fixtures/src/streaming_harness.rs`'s `NOT_YET_AUDITED` const: the ten format
+names moved from the (now-stale) "zero-fixture, not prioritized" comment block into the
+"no `{format}-fmt` crate exists" group, with an updated comment explaining they stay in this
+list independent of fixture coverage — the harness audits standalone `{format}-fmt` crates'
+`events()`/`StreamingParser`/streaming-writer surface, none of the ten has such a crate (all
+writer logic is in the `rescribe-write-{format}` adapter directly), and being write-only they
+have no reader-side surface to audit regardless. No new `FormatCapabilities`/`CAPABILITIES`
+entry was added — there is no in-file precedent for a write-only-format entry (grepped for
+`plaintext`, the closest analogue: zero matches anywhere in `streaming_harness.rs`), and
+inventing one for a crate this harness structurally cannot audit would misrepresent status
+rather than clarify it.
+
+`docs/format-audit.md`'s "Presentation / output-only" table `W-next` column updated per
+format: three (slidy, s5, dzslides) point at "add `IMAGE` handling", revealjs points at the
+inline-vs-block dispatch bug specifically, ms and icml point at their own image gaps, and the
+remaining four (beamer, slideous, context, chunkedhtml) note fixtures are done with their
+image/table/multi-file support already confirmed correct.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings` exit 0, `cargo test
+-q` across the whole workspace exit 0 (captured directly via `echo "TEST EXIT: $?"`, not
+through a `tail` pipe), `cargo fmt --check` exit 0. `cargo test -q -p rescribe-fixtures --test
+run -- writer`: 20 passed, 0 failed (covers all ten new fixtures plus every pre-existing
+writer-fixture format).
+
+Not attempted this pass (out of scope per the task's fence): fixing either silent-image-drop
+bug class above; adding a fidelity-warning mechanism to any of the ten writers; deciding the
+still-open policy call from the 2026-07-28 entry above (whether these ten output-only targets
+should ever get a real standalone `{format}-fmt` crate, given they have no reader and no
+round-trip consumer).

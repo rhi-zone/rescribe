@@ -1,0 +1,8 @@
+{
+  "description": "a <subtitle> nested inside title-info's <annotation> must not leak out as top-level content, nor be dropped",
+  "category": "happy",
+  "metadata": { "meta:annotation": "A short summary, in brief The full summary follows." },
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "a <poem> with multiple stanzas and a text-author nested inside title-info's <annotation> must not leak out as top-level content, nor be dropped — this exercises fb2-fmt's events()/streaming_writer annotation content-model support alongside parse()'s AST",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

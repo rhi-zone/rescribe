@@ -1,0 +1,7 @@
+{
+  "description": "a <table> nested inside title-info's <annotation> must not leak out as top-level content, nor be dropped",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

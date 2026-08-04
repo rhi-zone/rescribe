@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <book-title>Annotated Cite Book</book-title>
+      <annotation>
+        <p>Praise for this book:</p>
+        <cite id="c1">
+          <p>A stunning debut.</p>
+          <text-author>A Critic</text-author>
+        </cite>
+      </annotation>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Main text.</p>
+    </section>
+  </body>
+</FictionBook>

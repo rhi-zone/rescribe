@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>reference</genre>
+      <book-title>Annotated Table Book</book-title>
+      <annotation>
+        <table>
+          <tr><th>Name</th><th>Value</th></tr>
+          <tr><td>Foo</td><td>Bar</td></tr>
+        </table>
+      </annotation>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Main text.</p>
+    </section>
+  </body>
+</FictionBook>

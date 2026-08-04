@@ -1637,10 +1637,30 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     // audited this pass — see its `CAPABILITIES` entry below.
     "multimarkdown",
     "pdf",
-    // Pandoc output-format variants of html/latex/ooxml-* with zero fixtures
-    // (`fixtures/{format}/` has no case directories) — not yet audited and
-    // not prioritized per CLAUDE.md's "fixture suite is the primary
-    // deliverable" ordering (no fixture corpus exists to check against).
+    // Ten Pandoc output-format variants (beamer, revealjs, slidy, s5,
+    // dzslides, slideous, context, ms, icml, chunkedhtml) — write-only
+    // presentation/rendering targets with no reader, analogous to how pandoc
+    // treats html/latex/ooxml variants. Each now has a fixture suite under
+    // `fixtures/writers/{format}/` (added 2026-08-04: slide/frame-boundary +
+    // paragraph/list/code-block/emphasis coverage for the six HTML- and
+    // LaTeX-slideshow-family writers, table coverage for context, troff
+    // macro coverage for ms, InCopy story/text-run coverage for icml,
+    // multi-file coverage for chunkedhtml — see fixtures/writers/{format}/
+    // and TODO.md for exact constructs and two confirmed content-drop bugs
+    // found along the way: revealjs/slidy/s5/dzslides all silently drop
+    // inline `Image` nodes appearing inside a paragraph, ms and icml drop
+    // `Image` entirely). They remain in this list, not `CAPABILITIES`,
+    // because — independent of fixture coverage — none of the ten has a
+    // standalone `{format}-fmt` crate for this harness to audit: all writer
+    // logic lives directly in `rescribe-write-{format}` (confirmed by
+    // reading each `src/lib.rs`; no `crates/formats/{format}-fmt` exists
+    // for any of them), the same "no `-fmt` crate exists at all" situation
+    // as `latex`/`csl-json`/etc. above, and being write-only they have no
+    // `events()`/`StreamingParser` (reader) surface to audit in the first
+    // place; only a streaming writer could conceivably be checked, and
+    // there is no `{format}-fmt` crate to expose one independently of the
+    // `rescribe-write-{format}` builder `emit()` fixture tests already
+    // covering these adapters.
     "beamer",
     "revealjs",
     "slidy",
@@ -1673,126 +1693,50 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
-    KnownFailure {
-        format: "fb2",
-        api: "events",
-        description: "Narrowed (2026-08-03): the originally-tracked bug — events()/EventIter \
-                       silently dropping Event::Metadata for input lacking a literal \
-                       <description> element — is fixed (SemanticState now synthesizes a \
-                       default Metadata event, either right before the first other top-level \
-                       child of <FictionBook> or, for a <FictionBook> with no children at all, \
-                       at end-of-input). Fixing it unmasked four further, independent, \
-                       pre-existing events()-vs-AST-projection bugs on fixtures the harness's \
-                       first-divergence-only check hadn't reached before (same failure mode \
-                       documented on the \"commonmark\" entry above) — three are now also \
-                       fixed: (1) a leading Text run immediately before an inline <code> was \
-                       swallowed into the Code element's own content instead of flushed as its \
-                       own Text inline first (fixtures/fb2/code-inline); (2) <table>/<tr>/<td>/ \
-                       <th> push no ParseState frame in handle_start, but handle_end still \
-                       unconditionally popped the generic stack before its table-specific \
-                       arms ran, silently discarding whatever unrelated frame (e.g. the \
-                       enclosing Section) was actually on top and losing the table plus every \
-                       event after it (fixtures/fb2/table-header); (3) <a type=\"note\" \
-                       href=\"#...\"> was never recognized as a footnote reference — always \
-                       built as a generic Link — unlike parse()'s AST, which treats it as \
-                       FootnoteRef structurally regardless of whether the target actually \
-                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures diverged \
-                       and were NOT fixed by this 2026-08-03 pass; one is now fixed (2026-08-04): \
-                       fixtures/fb2/adv-malformed's input has an unclosed <FictionBook ...> \
-                       start tag that swallows the following <body> text (confirmed directly \
-                       against quick_xml's own tokenization), so quick_xml never emits a real \
-                       Start(\"body\") token at all and only errors once it reaches the orphaned \
-                       </body> end tag. This was previously mis-scoped as \"genuine architectural \
-                       divergence... would require events() to buffer and defer emission until \
-                       validated\" — that was checked directly and found false: ancestor validity \
-                       (does a <section> have a <body>/<section> already open?) is a property of \
-                       the already-tracked ParseState stack *before* the <section> Start token is \
-                       even dispatched, so the orphan is knowable the instant it opens, with zero \
-                       lookahead. Fixed via a `suppress_depth` counter on SemanticState: an \
-                       orphaned <section> (and everything nested inside it) is suppressed from \
-                       the moment its Start tag is seen, mirroring parse()'s StackItem::Section \
-                       finalize arm, which silently drops a Section it can't attach to a Body/ \
-                       Section ancestor when it (and everything already folded into it) is \
-                       popped. Fixing the suppression surfaced one more gap it depended on: \
-                       events()/EventIter never synthesized a matching EndFictionBook when the \
-                       token stream terminates early (Eof or a fatal Err) with FictionBook still \
-                       open — parse()'s AST always implicitly \"closes\" the whole document by \
-                       construction, but events()'s XmlEventIter::step and StreamingParser::drain \
-                       previously just stopped, mirroring docbook-fmt/jats-fmt/tei-fmt's own \
-                       malformed-XML gap before their 2026-08-03 fix (see the FormatCapabilities \
-                       comment for those three formats above) rather than the fixed state. Fixed \
-                       the same way: `close_item` was extracted from handle_end's per-element \
-                       closing match and reused by a new `finalize_open_elements`, called at \
-                       every point XmlEventIter::step/StreamingParser::drain/finish can terminate \
-                       for good (Eof, a fatal Err, and StreamingParser's own hand-tracked \
-                       tag-mismatch branch) — pops whatever's still on `self.stack`, innermost \
-                       first, synthesizing the same End event(s) each item's own End tag would \
-                       have produced. No lookahead needed there either: everything required is \
-                       already sitting on the (already O(nesting depth)) stack. Confirmed via \
-                       fixtures/fb2/adv-malformed no longer diverging in either \
-                       fb2_events_equals_ast_projection_over_all_fixtures or \
-                       fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures, and via \
-                       fb2_streaming_parser_matches_events_and_is_incremental (adversarial \
-                       chunking) continuing to pass. fixtures/fb2/annotation remains open, a \
-                       genuine, real gap: the book's own \
-                       <description><title-info><annotation> (with <p>/<poem>/<cite>/ \
-                       <subtitle>/<table>/empty-line sub-content) is not modeled at all in \
-                       events.rs's description parsing — SemanticState's DescState has no \
-                       equivalent of parse.rs's recursive AnnotationContent builder, so the \
-                       annotation's whole content is silently discarded and \
-                       TitleInfo.annotation stays None; implementing it is a real, nontrivial \
-                       addition (a second content-model builder paralleling Body/Section's), \
-                       not a quick fix. Independently re-scoped 2026-08-04 (investigation \
-                       only, no code change): confirmed via direct reading of both files — \
-                       events.rs has no production code anywhere that materializes an owned \
-                       Poem/Cite/Stanza struct (collect_poem_events/collect_cite_events walk \
-                       the opposite direction, AST-to-events, and are #[cfg(test)]-only); \
-                       building one means porting parse.rs's multi-level nested dispatch \
-                       (Stanza's finalize needs its parent to be Poem, VerseLine's needs its \
-                       parent to be Stanza, Cite/TextAuthor need their grandparent context to \
-                       route among Section/Epigraph/Annotation) spanning ~40+ interdependent \
-                       match arms in parse.rs's handle_start/handle_end, without regressing \
-                       the existing non-annotation streaming behavior (today's <poem>/<cite> \
-                       events fire incrementally per sub-element; annotation context needs \
-                       full buffering first since the whole thing packages into one \
-                       Event::Metadata). <p> alone (the only content the one annotation \
-                       fixture exercises) and <table> (already built as an owned struct via \
-                       current_table, needing only a context-check redirect) would be small, \
-                       but a partial fix covering only those would still silently leak \
-                       <poem>/<cite>/<subtitle> content nested in an annotation as top-level \
-                       events instead of folding it into TitleInfo.annotation — not \
-                       attempted. A related, already-fixed adjacent bug from this pass: a \
-                       description-context self-closing <image> (e.g. inside \
-                       <title-info><coverpage>) used to leak out as a stray top-level \
-                       Event::Image with no AST-side counterpart (fixtures/fb2/cover-image); \
-                       that's now a no-op in events(), matching parse()'s AST, which also does \
-                       not populate TitleInfo.coverpage from it (a separate, pre-existing, \
-                       parse()-side gap, out of scope here since it affects both APIs equally, \
-                       not just events()).",
-    },
-    KnownFailure {
-        format: "fb2",
-        api: "streaming_writer",
-        description: "Narrowed (2026-08-03): downstream of the fb2/events KnownFailure — with \
-                       every events()-side bug fixed this pass also no longer reproducing here \
-                       (the streaming Writer emits the same output as build() for those \
-                       fixtures now), the events()-side gaps still open there \
-                       (fixtures/fb2/adv-malformed, fixtures/fb2/annotation) still reproduced \
-                       downstream here too, for the same underlying reason: the streaming Writer \
-                       can only emit what events() hands it, and build() (via parse()'s AST) \
-                       diverged from it on exactly those fixtures for the reasons documented on \
-                       the fb2/events entry. Narrowed further (2026-08-04): fb2/events's \
-                       adv-malformed fix (a bounded-state orphan-<section> suppression plus a \
-                       finalize_open_elements auto-close, see that entry) fixed this downstream \
-                       too, for free — the streaming Writer needed no changes of its own, since \
-                       it is fed by events() and now sees the same corrected event stream build() \
-                       does. Confirmed via fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures \
-                       no longer diverging on adv-malformed. fixtures/fb2/annotation remains \
-                       open, for the same downstream reason as before: unmodeled annotation \
-                       content is still absent from events()'s output, so build() (which does \
-                       model it via parse()'s AST) still diverges from the streaming Writer on \
-                       that one fixture.",
-    },
+    // fb2's "events" and "streaming_writer" KnownFailure entries (the book's own
+    // <description><title-info><annotation> — with <p>/<poem>/<cite>/<subtitle>/<table>/
+    // empty-line sub-content — silently discarded by events()/EventIter, leaving
+    // TitleInfo.annotation permanently None while parse()'s AST modeled it correctly) were
+    // removed 2026-08-04. Fixed in events.rs by adding a dedicated `ann_stack: Vec<AnnoItem>`
+    // content-builder, separate from the top-level `stack`: `AnnoItem` mirrors the subset of
+    // parse.rs's `StackItem` reachable from `Annotation`'s content model (Paragraph/Subtitle/
+    // Poem/PoemTitle/Stanza/VerseLine/Cite/Epigraph/TextAuthor/Table/TableRow/TableCell/
+    // InlineWrapper/Link/FootnoteRef), assembling owned AST values bottom-up exactly like
+    // parse.rs's Parser does — not streamed as top-level events, since the whole thing must
+    // fold into a single Event::Metadata rather than emit incrementally the way identical-
+    // looking <poem>/<cite> content in a <section> does. `handle_start`/`handle_empty`/
+    // `handle_end`/`flush_inline_text`/`finalize_open_elements` were all given an ann_stack
+    // priority check (before the pre-existing `desc.in_description` branch, since
+    // `in_description` stays true the whole time inside the annotation too) that routes to the
+    // new `handle_ann_start`/`handle_ann_empty`/`handle_ann_end`/`close_ann_item`/
+    // `ann_push_block_content`/`ann_in_inline_context`/`ann_push_text_to_inline_context`/
+    // `ann_push_inline` methods, which mirror parse.rs's `handle_start`/`handle_empty`/
+    // `handle_end`/`push_block_content`/`in_inline_context`/`push_text_to_inline_context`/
+    // `push_inline` respectively, scoped to `ann_stack`. `finalize_open_elements` also drains
+    // any still-open `ann_stack` (folding a truncated annotation into TitleInfo.annotation)
+    // before its pre-existing `self.stack` unwind, for the same malformed/truncated-input
+    // robustness the rest of this file already established. The `#[cfg(test)]`-only
+    // `collect_poem_events`/`collect_cite_events` (AST→events, the opposite direction) were
+    // read first per the task brief but turned out not to be directly invertible — events()
+    // needs owned AST values assembled bottom-up, not a flat event sequence — though they did
+    // confirm the exact target shape. Four new fixtures were added (fixtures/fb2/annotation-
+    // poem, -cite, -table, -subtitle) alongside the existing fixtures/fb2/annotation (a bare
+    // <p>), covering every AnnotationContent variant (Para/Poem/Cite/Subtitle/Table/EmptyLine)
+    // and Poem's own nested Epigraph. Confirmed via
+    // fb2_events_equals_ast_projection_over_all_fixtures and
+    // fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures both passing over the
+    // full (now 61-fixture) suite, and fb2_streaming_parser_matches_events_and_is_incremental
+    // (adversarial chunking) continuing to pass. Deliberately NOT touched: the separate,
+    // still-open, pre-existing gap where a *section-level* `<section><annotation>` (Section's
+    // own `annotation` field, distinct from TitleInfo's) is parsed into `ParseState::Annotation`
+    // as a bare marker whose `close_item` arm is a no-op (`ParseState::Description |
+    // ParseState::Annotation => {}`) — content nested inside it currently leaks out as
+    // top-level events instead of being dropped or folded anywhere, since events() has no
+    // `Event::Annotation` variant to carry an owned Section-level annotation value the way
+    // Event::Metadata carries TitleInfo's. This is out of the confirmed scope for this fix (no
+    // fixture currently exercises it, and fixing it would need a new public Event variant plus
+    // rescribe-read-fb2/rescribe-write-fb2/oracle-harness changes) — left as a genuinely open,
+    // separate gap; see TODO.md.
     // commonmark/gfm/markdown's "events" and "streaming_writer" KnownFailure entries
     // (StartList-tight-always-true, and the Writer's downstream blank-line omission) were
     // removed 2026-08-04 — both are fixed via a new Event::ListTightnessResolved correction
