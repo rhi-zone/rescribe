@@ -1,0 +1,12 @@
+{
+  "description": "Two slides split on heading level<=2 (both H1 and H2 start a new <section>), covering paragraph, bold/italic emphasis, bullet list, and a code block",
+  "output_contains": [
+    "<h1>First Slide</h1>",
+    "</section>\n<section>\n<h2>Second Slide</h2>",
+    "<strong>bold</strong>",
+    "<em>italic</em>",
+    "<li>Item one</li>",
+    "<li>Item two</li>",
+    "<pre><code class=\"language-rust\">fn main() {}</code></pre>"
+  ]
+}

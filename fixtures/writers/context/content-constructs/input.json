@@ -1,0 +1,20 @@
+{"pandoc-api-version": [1, 23], "meta": {"title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "Report"}]}}, "blocks": [
+  {"t": "Header", "c": [1, ["sec1", [], []], [{"t": "Str", "c": "Introduction"}]]},
+  {"t": "Para", "c": [{"t": "Str", "c": "Some "}, {"t": "Strong", "c": [{"t": "Str", "c": "bold"}]}, {"t": "Str", "c": " and "}, {"t": "Emph", "c": [{"t": "Str", "c": "italic"}]}, {"t": "Str", "c": " text."}]},
+  {"t": "BulletList", "c": [[{"t": "Plain", "c": [{"t": "Str", "c": "One"}]}], [{"t": "Plain", "c": [{"t": "Str", "c": "Two"}]}]]},
+  {"t": "CodeBlock", "c": [["", ["rust"], []], "fn main() {}"]},
+  {"t": "Table", "c": [
+    ["", [], []],
+    [null, []],
+    [[{"t": "AlignDefault"}, {"t": "ColWidthDefault"}], [{"t": "AlignDefault"}, {"t": "ColWidthDefault"}]],
+    [["", [], []], [[["", [], []], [
+      [["", [], []], {"t": "AlignDefault"}, 1, 1, [{"t": "Plain", "c": [{"t": "Str", "c": "A"}]}]],
+      [["", [], []], {"t": "AlignDefault"}, 1, 1, [{"t": "Plain", "c": [{"t": "Str", "c": "B"}]}]]
+    ]]]],
+    [[["", [], []], 0, [], [[["", [], []], [
+      [["", [], []], {"t": "AlignDefault"}, 1, 1, [{"t": "Plain", "c": [{"t": "Str", "c": "1"}]}]],
+      [["", [], []], {"t": "AlignDefault"}, 1, 1, [{"t": "Plain", "c": [{"t": "Str", "c": "2"}]}]]
+    ]]]]],
+    [["", [], []], []]
+  ]}
+]}

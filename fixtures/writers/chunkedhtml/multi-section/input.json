@@ -1,0 +1,6 @@
+{"pandoc-api-version": [1, 23], "meta": {"title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "Manual"}]}}, "blocks": [
+  {"t": "Header", "c": [1, ["ch1", [], []], [{"t": "Str", "c": "Chapter One"}]]},
+  {"t": "Para", "c": [{"t": "Str", "c": "Content one."}]},
+  {"t": "Header", "c": [1, ["ch2", [], []], [{"t": "Str", "c": "Chapter Two"}]]},
+  {"t": "Para", "c": [{"t": "Str", "c": "Content two."}]}
+]}

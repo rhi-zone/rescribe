@@ -1,0 +1,14 @@
+{
+  "description": "Two H1 sections produce three distinct output files (index.html + chunk000.html + chunk001.html, confirmed via rescribe_write_chunkedhtml::emit's HtmlChunk list before concatenation for this harness's single-blob output_contains check) — index page has a table of contents linking both chapters, each chapter page has its own <title> and prev/next nav",
+  "output_contains": [
+    "<title>Manual</title>",
+    "<a href=\"chunk000.html\">Chapter One</a>",
+    "<a href=\"chunk001.html\">Chapter Two</a>",
+    "<title>Chapter One</title>",
+    "<title>Chapter Two</title>",
+    "<a href=\"chunk000.html\">&laquo; Previous</a>",
+    "<a href=\"chunk000.html\">&laquo; Chapter One</a>",
+    "Content one.",
+    "Content two."
+  ]
+}

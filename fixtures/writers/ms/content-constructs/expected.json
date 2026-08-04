@@ -1,0 +1,14 @@
+{
+  "description": "Two heading levels (.SH/.SS), paragraph with bold/italic font-change macros (\\fB/\\fI/\\fP), bullet and ordered lists (.IP), and a code block (.DS/.ft CW/.DE)",
+  "output_contains": [
+    ".SH\nIntroduction",
+    ".SS\nDetails",
+    "\\fBbold\\fP",
+    "\\fIitalic\\fP",
+    ".IP \\(bu\nOne",
+    ".IP \\(bu\nTwo",
+    ".IP 1.\nFirst",
+    ".IP 2.\nSecond",
+    ".DS\n.ft CW\nfn main() {}\n.ft\n.DE"
+  ]
+}

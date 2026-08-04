@@ -1,0 +1,17 @@
+{
+  "description": "Two frames split on heading level<=2 (both H1 and H2 start a new \\begin{frame}), covering paragraph, bold/italic emphasis, itemize list, code block (verbatim), and an image (\\includegraphics)",
+  "output_contains": [
+    "\\frametitle{First Slide}",
+    "\\frametitle{Second Slide}",
+    "\\textbf{bold}",
+    "\\emph{italic}",
+    "\\begin{itemize}",
+    "\\item Item one",
+    "\\item Item two",
+    "\\end{itemize}",
+    "\\begin{verbatim}",
+    "fn main() {}",
+    "\\end{verbatim}",
+    "\\includegraphics[width=\\textwidth]{pic.png}"
+  ]
+}

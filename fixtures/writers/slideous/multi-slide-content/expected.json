@@ -1,0 +1,14 @@
+{
+  "description": "Slideous splits slides on heading level==1 only (unlike revealjs/slidy/s5/dzslides, which split on level<=2) — verified against this writer's source, not assumed from pandoc's convention. Two H1 headings produce two content slides (plus an auto-generated title slide from doc metadata), covering paragraph, bold/italic emphasis, bullet list, code block, and an image (<img>, which this writer does render unlike revealjs/slidy/s5/dzslides)",
+  "output_contains": [
+    "<h1>Deck</h1>",
+    "<h1>First Slide</h1>",
+    "<h1>Second Slide</h1>",
+    "<strong>bold</strong>",
+    "<em>italic</em>",
+    "<li>Item one</li>",
+    "<li>Item two</li>",
+    "<pre><code class=\"language-rust\">fn main() {}</code></pre>",
+    "<img src=\"pic.png\" alt=\"alt text\">"
+  ]
+}

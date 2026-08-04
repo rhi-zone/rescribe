@@ -1,0 +1,19 @@
+{
+  "description": "Heading (chapter), paragraph with bold/italic emphasis, bullet list, code block (typing), and a table",
+  "output_contains": [
+    "\\chapter{Introduction}",
+    "{\\bf bold}",
+    "{\\em italic}",
+    "\\startitemize",
+    "\\item One",
+    "\\item Two",
+    "\\stopitemize",
+    "\\starttyping",
+    "fn main() {}",
+    "\\stoptyping",
+    "\\starttabulate",
+    "\\NC A \\NC B \\NC\\NR",
+    "\\NC 1 \\NC 2 \\NC\\NR",
+    "\\stoptabulate"
+  ]
+}

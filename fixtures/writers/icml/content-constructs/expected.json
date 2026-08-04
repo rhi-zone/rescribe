@@ -1,0 +1,15 @@
+{
+  "description": "Heading mapped to ParagraphStyle/Heading1, paragraph mapped to ParagraphStyle/Body with bold/italic text runs mapped to CharacterStyle/Bold and CharacterStyle/Italic, and a bullet list",
+  "output_contains": [
+    "AppliedParagraphStyle=\"ParagraphStyle/Heading1\"",
+    "<Content>Introduction</Content>",
+    "AppliedParagraphStyle=\"ParagraphStyle/Body\"",
+    "AppliedCharacterStyle=\"CharacterStyle/Bold\"",
+    "<Content>bold</Content>",
+    "AppliedCharacterStyle=\"CharacterStyle/Italic\"",
+    "<Content>italic</Content>",
+    "<Content>• </Content>",
+    "<Content>One</Content>",
+    "<Content>Two</Content>"
+  ]
+}
