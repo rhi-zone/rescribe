@@ -3142,6 +3142,9 @@ fn fb2_section_events(section: &fb2_fmt::Section, out: &mut Vec<fb2_fmt::Event>)
     for epigraph in &section.epigraph {
         fb2_epigraph_events(epigraph, out);
     }
+    if let Some(annotation) = &section.annotation {
+        fb2_annotation_events(annotation, out);
+    }
     for content in &section.content {
         fb2_section_content_events(content, out);
     }
@@ -3149,6 +3152,34 @@ fn fb2_section_events(section: &fb2_fmt::Section, out: &mut Vec<fb2_fmt::Event>)
         fb2_section_events(nested, out);
     }
     out.push(fb2_fmt::Event::EndSection);
+}
+
+/// `Section.annotation` (distinct from `TitleInfo.annotation`, which is
+/// packaged whole into `Event::Metadata` and never appears here) streams as
+/// `StartAnnotation`/`EndAnnotation` wrapping the same per-construct events
+/// section content already uses — mirrors `fb2_epigraph_events`'s shape,
+/// since `Section.annotation` attaches to `Section` the same way
+/// `Section.epigraph` does.
+fn fb2_annotation_events(annotation: &fb2_fmt::Annotation, out: &mut Vec<fb2_fmt::Event>) {
+    use fb2_fmt::AnnotationContent;
+    out.push(fb2_fmt::Event::StartAnnotation {
+        id: annotation.id.clone(),
+    });
+    for content in &annotation.content {
+        match content {
+            AnnotationContent::Para(il) => {
+                out.push(fb2_fmt::Event::StartParagraph);
+                out.push(fb2_fmt::Event::Inline(il.clone()));
+                out.push(fb2_fmt::Event::EndParagraph);
+            }
+            AnnotationContent::EmptyLine => out.push(fb2_fmt::Event::EmptyLine),
+            AnnotationContent::Subtitle(il) => out.push(fb2_fmt::Event::Subtitle(il.clone())),
+            AnnotationContent::Poem(p) => fb2_poem_events(p, out),
+            AnnotationContent::Cite(c) => fb2_cite_events(c, out),
+            AnnotationContent::Table(t) => out.push(fb2_fmt::Event::Table(t.clone())),
+        }
+    }
+    out.push(fb2_fmt::Event::EndAnnotation);
 }
 
 fn fb2_title_events(title: &fb2_fmt::Title, out: &mut Vec<fb2_fmt::Event>) {

@@ -92,6 +92,17 @@ pub enum Event {
     StartEpigraph { id: Option<String> },
     /// `</epigraph>` closed.
     EndEpigraph,
+    /// A *section-level* `<annotation id="…">` opened — i.e.
+    /// `Section.annotation`, distinct from the `<title-info><annotation>`
+    /// packaged whole into [`Event::Metadata`]. Its content (paragraphs,
+    /// poems, cites, subtitles, tables, empty lines) streams as the same
+    /// events section content already uses, exactly like
+    /// [`Event::StartEpigraph`]/[`Event::EndEpigraph`] scope
+    /// `Section.epigraph`/`Poem.epigraph` content.
+    StartAnnotation { id: Option<String> },
+    /// `</annotation>` closed (section-level annotation only — see
+    /// [`Event::StartAnnotation`]).
+    EndAnnotation,
     /// `<text-author>` element.
     TextAuthor(Vec<InlineElement>),
     /// A complete `<table>`.
@@ -772,7 +783,8 @@ impl SemanticState {
                 | ParseState::Stanza
                 | ParseState::SectionTitle
                 | ParseState::BodyTitle
-                | ParseState::PoemTitle => return false,
+                | ParseState::PoemTitle
+                | ParseState::Annotation => return false,
                 _ => continue,
             }
         }
@@ -1027,7 +1039,18 @@ impl SemanticState {
                 self.stack.push(ParseState::Binary { id, content_type });
             }
             "annotation" => {
+                // Section-level `<section><annotation>` (`Section.annotation`)
+                // — distinct from `<title-info><annotation>`, which is
+                // intercepted earlier by the `ann_stack`-non-empty check
+                // above and never reaches here. `parse.rs`'s single
+                // "annotation" arm only reads `id` (not `lang`, despite
+                // `Annotation::lang` existing) regardless of context —
+                // mirrored here for the same reason `handle_desc_start`'s
+                // "annotation" arm does.
                 self.stack.push(ParseState::Annotation);
+                self.pending.push_back(Event::StartAnnotation {
+                    id: attrs.get("id").cloned(),
+                });
             }
             _ => {}
         }
@@ -1286,7 +1309,10 @@ impl SemanticState {
                     }));
                 }
             }
-            ParseState::Description | ParseState::Annotation => {}
+            ParseState::Annotation => {
+                self.pending.push_back(Event::EndAnnotation);
+            }
+            ParseState::Description => {}
         }
     }
 

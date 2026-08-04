@@ -9,6 +9,71 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-04: fb2-fmt's section-level `<section><annotation>` gap closed — the last remaining
+piece flagged (but deliberately deferred) in the `<title-info><annotation>` fix earlier this
+day.** `Section.annotation` (`Option<Annotation>`, distinct from `TitleInfo.annotation`) was
+already parsed correctly by `parse()`'s AST builder — confirmed by reading `parse.rs`'s
+`StackItem::Annotation` finalize arm, which walks the stack for either a `TitleInfo` or
+`Section` ancestor to attach to. The gap was entirely in `events.rs`/`writer.rs`: content
+inside a section-level `<annotation>` streamed as ordinary events (identical to what the same
+`<p>`/`<poem>`/`<cite>`/`<table>`/`<subtitle>` would produce as direct section children) with
+no wrapping event marking it as annotation content rather than section content, so a consumer
+(and this harness's `ast_to_events` projection check) couldn't tell them apart.
+
+Unlike title-info's annotation, this did **not** need the `ann_stack`/`AnnoItem` buffering
+machinery built earlier today — `parse.rs` already treats `Section.annotation`'s own children
+as ordinary stack frames going through the same `push_block_content` dispatch section content
+uses, and `events.rs`'s `ParseState::Annotation` (for the non-title-info case) already sat on
+the main `stack`, not `ann_stack`. The only missing piece was scoping: added two new `Event`
+variants, `StartAnnotation { id }`/`EndAnnotation`, structurally identical in role to the
+pre-existing `StartEpigraph`/`EndEpigraph` pair that already scopes `Section.epigraph`/
+`Poem.epigraph` content the same way (schema-wise `<annotation>` sits alongside `<epigraph>`
+in `Section`'s content model). `handle_start`'s `"annotation"` arm now emits `StartAnnotation`
+before pushing `ParseState::Annotation`; `close_item`'s `ParseState::Annotation` arm (a no-op
+before) now emits `EndAnnotation`; `ParseState::Annotation` also added to `in_inline_context`'s
+explicit boundary-frame list (previously fell through transparently to the `Section`/`Body`
+frame beneath it — same practical result, now explicit and consistent with `Epigraph`/`Cite`/
+`Poem`/`Stanza`). `writer::Writer` gained matching `StartAnnotation`/`EndAnnotation` arms
+(writes `<annotation id="…">`/`</annotation>`, mirroring the `StartEpigraph`/`EndEpigraph` arms
+exactly) — no other writer change needed since content between the new Start/End pair already
+writes correctly via the existing per-event arms.
+
+Five new fixtures added, mirroring the title-info annotation set:
+`fixtures/fb2/section-annotation` (bare `<p>`), `-poem`, `-cite`, `-table`, `-subtitle` — one
+per `AnnotationContent` variant except `EmptyLine` (not separately exercised, matching the
+title-info set's precedent). `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+`fb2_ast_to_events` ground-truth projection gained a matching `fb2_annotation_events` helper
+(mirrors `fb2_epigraph_events`'s shape), called from `fb2_section_events` for
+`section.annotation`, placed after `epigraph` and before `content` to match the real FB2
+schema's element order.
+
+Deliberately **not** touched, a distinct gap found while scoping this fix: the IR adapter
+(`rescribe-read-fb2`'s `convert_section` in `crates/readers/rescribe-read-fb2/src/lib.rs`) has
+no code path reading `Section.annotation` at all — it silently contributes nothing to the
+converted `Document`, with no fidelity warning, even after this fix (which only touches
+`fb2-fmt`'s own `events()`/`StreamingParser`, not the adapter). This is one layer up from what
+this task scoped (the events()/StreamingParser gap named in the prior entries) and is left as
+a separate, still-open gap — closing it would mean modeling `Section.annotation` into the IR
+(e.g. as a `blockquote` with an `fb2:type = "annotation"` prop, analogous to how
+`convert_epigraph` already models `Section.epigraph`) plus a `rescribe-write-fb2` writer-side
+counterpart.
+
+Verified: `cargo clippy --all-targets --all-features -- -D warnings` clean (workspace-wide, run
+before an unrelated concurrent process began adding an incomplete `crates/formats/opml-fmt`
+crate to this repo's working tree mid-session, which then blocked further workspace-wide cargo
+invocations until that unrelated work finishes — not caused by or related to this fix, and
+`crates/formats/opml-fmt`/`.claude/worktrees/` were left untouched, not staged). `cargo test -q`
+(full workspace) clean, 0 failures, run to completion before the `opml-fmt` interference began.
+`cargo fmt --check` scoped to the changed files directly via `rustfmt --check` (workspace-wide
+`cargo fmt --check` also blocked by the same `opml-fmt` manifest issue): clean. fb2-specific,
+run individually before the interference: `cargo test -q -p fb2-fmt` (18+1 tests) clean;
+`cargo test -q -p rescribe-fixtures --test streaming_apis fb2` —
+`fb2_events_equals_ast_projection_over_all_fixtures`,
+`fb2_streaming_parser_matches_events_and_is_incremental`, and
+`fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures` all pass over the full
+66-fixture suite (up from 61). `docs/format-audit.md`'s `fb2` row updated with this fix's
+detail; `fixtures/fb2/COVERAGE.md` gained a `section-level annotation` line.
+
 **2026-08-04: the recurring `ooxml-codegen`/`wml.rnc`-missing-file "flake" (see the several
 entries elsewhere in this file that misdiagnosed it as pre-existing/unrelated/intermittent)
 is fixed at the root cause: it's not a flake, it's a fresh-worktree environment gap.**

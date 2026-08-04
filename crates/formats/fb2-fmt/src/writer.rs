@@ -170,6 +170,17 @@ impl<W: Write> Writer<W> {
                 self.inner
                     .write_event(XmlEvent::End(BytesEnd::new("epigraph")))?;
             }
+            Event::StartAnnotation { id } => {
+                let mut e = BytesStart::new("annotation");
+                if let Some(id) = &id {
+                    e.push_attribute(("id", id.as_str()));
+                }
+                self.inner.write_event(XmlEvent::Start(e))?;
+            }
+            Event::EndAnnotation => {
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("annotation")))?;
+            }
             Event::TextAuthor(inlines) => {
                 self.inner
                     .write_event(XmlEvent::Start(BytesStart::new("text-author")))?;

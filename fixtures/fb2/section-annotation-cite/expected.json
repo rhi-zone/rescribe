@@ -1,0 +1,10 @@
+{
+  "description": "a <cite> with a text-author nested inside a section-level <annotation> must not leak out as top-level section content, nor be dropped — mirrors fixtures/fb2/annotation-cite but for Section.annotation instead of TitleInfo.annotation",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Main content." } }
+  ]
+}

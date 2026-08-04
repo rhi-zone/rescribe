@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <annotation>
+        <p>Praise for this section:</p>
+        <cite id="c1">
+          <p>A stunning passage.</p>
+          <text-author>A Critic</text-author>
+        </cite>
+      </annotation>
+      <p>Main content.</p>
+    </section>
+  </body>
+</FictionBook>

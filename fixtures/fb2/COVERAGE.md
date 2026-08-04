@@ -29,6 +29,7 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] subtitle — `subtitle` (`<subtitle>`)
 - [x] code block — no dedicated FB2 preformatted block; `<code>` is inline only (covered by `code-inline`)
 - [x] annotation — `annotation` (`<annotation>` inside `<description>` / `<title-info>`; mapped to `meta:annotation`)
+- [x] section-level annotation — `section-annotation` (`<section><annotation>`, distinct from title-info's; `fb2-fmt`'s `parse()`/`events()`/`StreamingParser` all model `Section.annotation` — the IR adapter (`rescribe-read-fb2`) does not yet surface it, see `TODO.md`)
 - [x] text-author (standalone) — covered in `epigraph` fixture
 
 ## Inline constructs

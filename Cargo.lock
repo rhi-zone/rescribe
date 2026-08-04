@@ -2451,6 +2451,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "opml-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.39.4",
+]
+
+[[package]]
 name = "org-fmt"
 version = "0.1.0"
 dependencies = [
