@@ -5240,6 +5240,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-fmt"
+version = "0.1.0"
+dependencies = [
+ "typst-syntax",
+]
+
+[[package]]
 name = "typst-html"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
