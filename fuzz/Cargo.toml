@@ -334,6 +334,9 @@ path = "../crates/formats/opml-fmt"
 [dependencies.endnotexml-fmt]
 path = "../crates/formats/endnotexml-fmt"
 
+[dependencies.typst-fmt]
+path = "../crates/formats/typst-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -1130,6 +1133,20 @@ bench = false
 [[bin]]
 name = "fuzz_xml_entities_reader"
 path = "fuzz_targets/xml_entities_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_typst_fmt_reader"
+path = "fuzz_targets/typst_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_typst_fmt_roundtrip"
+path = "fuzz_targets/typst_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false
