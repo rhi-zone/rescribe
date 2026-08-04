@@ -1,7 +1,31 @@
 //! OPML reader for rescribe.
 //!
-//! Parses OPML (Outline Processor Markup Language) into rescribe's document IR.
-//! Outlines are converted to nested lists.
+//! Thin AST→IR adapter over [`opml_fmt`] (the standalone OPML parser/AST/
+//! emitter crate — see its docs for the format grammar). All XML parsing
+//! lives in `opml-fmt`; this crate only translates `opml_fmt::OpmlDoc` into
+//! rescribe's `Document`. Per CLAUDE.md's adapter-layer rule, no
+//! `quick_xml` (or any XML tokenizer) appears in this crate's production
+//! code.
+//!
+//! # Mapping
+//!
+//! - `<head>` metadata: `title` → `Document::metadata["title"]`, `ownerName`
+//!   → `metadata["author"]` (the two rescribe treats as cross-format
+//!   metadata), every other head field → a namespaced `opml:` metadata key
+//!   (e.g. `opml:date_created`), so nothing from `<head>` is silently
+//!   dropped even though only two fields have cross-format meaning.
+//! - Each `<outline>` becomes a `paragraph` (no children) or a `list` of
+//!   one `list_item` (has children) wrapping a `paragraph` plus a nested
+//!   `list` of the same shape — proper nesting, not flattened, so an
+//!   outline's depth is preserved exactly.
+//! - The paragraph's content is `text` (or, wrapped in a `link`, when
+//!   `xmlUrl`/`htmlUrl` is present) — a semantic rendering useful to any
+//!   *other* format writer. Separately, **every** OPML attribute on the
+//!   outline is raw-preserved verbatim as an `opml:attr:{name}` property on
+//!   that same node — the writer reconstructs `Outline::attrs` from these,
+//!   not by re-deriving them from the rendered text/link, so round-tripping
+//!   through rescribe's IR is exact regardless of what the semantic
+//!   rendering does with them.
 //!
 //! # Example
 //!
@@ -21,233 +45,128 @@
 //! let doc = result.value;
 //! ```
 
-use quick_xml::Reader;
-use quick_xml::events::{BytesStart, Event};
-use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
+use opml_fmt::{Head, Outline};
+use rescribe_core::{
+    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
+    WarningKind,
+};
 use rescribe_std::{node, prop};
 
 /// Parse OPML text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let mut reader = Reader::from_str(input);
-    reader.config_mut().trim_text(true);
+    let (doc, diagnostics) = opml_fmt::parse(input.as_bytes());
 
-    let mut converter = Converter::new();
-    converter.parse(&mut reader)?;
+    let mut warnings: Vec<FidelityWarning> = diagnostics
+        .iter()
+        .map(|d| {
+            FidelityWarning::new(
+                Severity::Major,
+                WarningKind::FeatureLost("opml-syntax".to_string()),
+                format!("OPML parse error: {}", d.message),
+            )
+        })
+        .collect();
+
+    let mut metadata = Properties::new();
+    apply_head_metadata(&doc.head, &mut metadata);
+    metadata.set("opml:version", doc.version.clone());
+
+    let children: Vec<Node> = doc
+        .body
+        .outlines
+        .iter()
+        .map(|o| outline_to_top_node(o, &mut warnings))
+        .collect();
 
     let document = Document {
-        content: Node::new(node::DOCUMENT).children(converter.result),
+        content: Node::new(node::DOCUMENT).children(children),
         resources: Default::default(),
-        metadata: converter.metadata,
+        metadata,
         source: None,
     };
 
-    Ok(ConversionResult::with_warnings(
-        document,
-        converter.warnings,
-    ))
+    Ok(ConversionResult::with_warnings(document, warnings))
 }
 
-struct Converter {
-    result: Vec<Node>,
-    metadata: Properties,
-    warnings: Vec<FidelityWarning>,
-    in_head: bool,
-    outline_stack: Vec<Vec<Node>>,
-}
-
-impl Converter {
-    fn new() -> Self {
-        Self {
-            result: Vec::new(),
-            metadata: Properties::new(),
-            warnings: Vec::new(),
-            in_head: false,
-            outline_stack: Vec::new(),
-        }
+fn apply_head_metadata(head: &Head, metadata: &mut Properties) {
+    if let Some(v) = &head.title {
+        metadata.set("title", v.clone());
     }
-
-    fn parse(&mut self, reader: &mut Reader<&[u8]>) -> Result<(), ParseError> {
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) => {
-                    self.handle_start(&e, reader)?;
-                }
-                Ok(Event::Empty(e)) => {
-                    self.handle_empty(&e)?;
-                }
-                Ok(Event::End(e)) => {
-                    self.handle_end(&e)?;
-                }
-                Ok(Event::Eof) => break,
-                Ok(_) => {} // Ignore other events
-                Err(e) => {
-                    return Err(ParseError::Invalid(format!("XML parse error: {}", e)));
-                }
-            }
-            buf.clear();
-        }
-
-        // Build final list from remaining outlines
-        self.finalize_outlines();
-
-        Ok(())
+    if let Some(v) = &head.owner_name {
+        metadata.set("author", v.clone());
     }
-
-    fn handle_start(
-        &mut self,
-        e: &BytesStart<'_>,
-        reader: &mut Reader<&[u8]>,
-    ) -> Result<(), ParseError> {
-        match e.local_name().as_ref() {
-            b"head" => {
-                self.in_head = true;
+    macro_rules! raw {
+        ($opt:expr, $key:literal) => {
+            if let Some(v) = &$opt {
+                metadata.set($key, v.clone());
             }
-            b"title" if self.in_head => {
-                if let Ok(text) = reader.read_text(e.to_end().name()) {
-                    self.metadata.set("title", text.to_string());
-                }
-            }
-            b"dateCreated" if self.in_head => {
-                if let Ok(text) = reader.read_text(e.to_end().name()) {
-                    self.metadata.set("date", text.to_string());
-                }
-            }
-            b"ownerName" if self.in_head => {
-                if let Ok(text) = reader.read_text(e.to_end().name()) {
-                    self.metadata.set("author", text.to_string());
-                }
-            }
-            b"outline" => {
-                let outline_node = self.create_outline_node(e);
-                // Push a new level for nested outlines
-                self.outline_stack.push(vec![outline_node]);
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn handle_empty(&mut self, e: &BytesStart<'_>) -> Result<(), ParseError> {
-        if e.local_name().as_ref() == b"outline" {
-            let outline_node = self.create_outline_node(e);
-            // Add to current level or result
-            if let Some(current) = self.outline_stack.last_mut() {
-                // Add as sibling to the last item in current level
-                current.push(outline_node);
-            } else {
-                self.result.push(outline_node);
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_end(&mut self, e: &quick_xml::events::BytesEnd<'_>) -> Result<(), ParseError> {
-        match e.local_name().as_ref() {
-            b"head" => {
-                self.in_head = false;
-            }
-            b"outline" => {
-                // Pop the current level and merge with parent
-                if let Some(children) = self.outline_stack.pop() {
-                    if children.is_empty() {
-                        return Ok(());
-                    }
-
-                    // The first item in children is the outline node itself
-                    // The rest are its nested children
-                    let mut items: Vec<Node> = children;
-
-                    // Convert to list items
-                    let list_items: Vec<Node> = items
-                        .drain(..)
-                        .map(|n| {
-                            if n.kind.as_str() == node::LIST_ITEM {
-                                n
-                            } else {
-                                // Convert outline node to list item
-                                Node::new(node::LIST_ITEM).children(vec![n])
-                            }
-                        })
-                        .collect();
-
-                    // Create a list from the items
-                    let list = Node::new(node::LIST)
-                        .prop(prop::ORDERED, false)
-                        .children(list_items);
-
-                    if let Some(parent) = self.outline_stack.last_mut() {
-                        // Add as child to parent's last item
-                        if let Some(last) = parent.last_mut() {
-                            last.children.push(list);
-                        } else {
-                            parent.push(list);
-                        }
-                    } else {
-                        self.result.push(list);
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn create_outline_node(&self, e: &BytesStart<'_>) -> Node {
-        let mut text = String::new();
-        let mut url: Option<String> = None;
-
-        for attr in e.attributes().flatten() {
-            match attr.key.local_name().as_ref() {
-                b"text" => {
-                    text = String::from_utf8_lossy(&attr.value).to_string();
-                }
-                b"title" if text.is_empty() => {
-                    text = String::from_utf8_lossy(&attr.value).to_string();
-                }
-                b"xmlUrl" | b"htmlUrl" | b"url" if url.is_none() => {
-                    url = Some(String::from_utf8_lossy(&attr.value).to_string());
-                }
-                _ => {}
-            }
-        }
-
-        // Create the content: either a link or plain text
-        let content = if let Some(url) = url {
-            Node::new(node::LINK)
-                .prop(prop::URL, url)
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, text))
-        } else {
-            Node::new(node::TEXT).prop(prop::CONTENT, text)
         };
+    }
+    raw!(head.date_created, "opml:date_created");
+    raw!(head.date_modified, "opml:date_modified");
+    raw!(head.owner_email, "opml:owner_email");
+    raw!(head.owner_id, "opml:owner_id");
+    raw!(head.docs, "opml:docs");
+    raw!(head.expansion_state, "opml:expansion_state");
+    raw!(head.vert_scroll_state, "opml:vert_scroll_state");
+    raw!(head.window_top, "opml:window_top");
+    raw!(head.window_left, "opml:window_left");
+    raw!(head.window_bottom, "opml:window_bottom");
+    raw!(head.window_right, "opml:window_right");
+    for (name, value) in &head.extra {
+        metadata.set(format!("opml:head_extra:{name}"), value.clone());
+    }
+}
 
-        Node::new(node::PARAGRAPH).child(content)
+/// Build the node representing a top-level outline: a bare `paragraph` if
+/// it has no children, or a `list` containing one `list_item` (so a
+/// with-children outline is always structurally a list at every depth,
+/// including the top level) if it does.
+fn outline_to_top_node(o: &Outline, warnings: &mut [FidelityWarning]) -> Node {
+    if o.children.is_empty() {
+        build_paragraph(o, warnings)
+    } else {
+        let item = outline_to_list_item(o, warnings);
+        Node::new(node::LIST).prop(prop::ORDERED, false).child(item)
+    }
+}
+
+fn outline_to_list_item(o: &Outline, warnings: &mut [FidelityWarning]) -> Node {
+    let para = build_paragraph(o, warnings);
+    if o.children.is_empty() {
+        Node::new(node::LIST_ITEM).child(para)
+    } else {
+        let items: Vec<Node> = o
+            .children
+            .iter()
+            .map(|c| outline_to_list_item(c, warnings))
+            .collect();
+        let nested_list = Node::new(node::LIST)
+            .prop(prop::ORDERED, false)
+            .children(items);
+        Node::new(node::LIST_ITEM).children(vec![para, nested_list])
+    }
+}
+
+fn build_paragraph(o: &Outline, _warnings: &mut [FidelityWarning]) -> Node {
+    let mut para = Node::new(node::PARAGRAPH);
+    para = para.prop("opml:self_closing", o.self_closing);
+    for (name, value) in &o.attrs {
+        para = para.prop(format!("opml:attr:{name}"), value.clone());
     }
 
-    fn finalize_outlines(&mut self) {
-        // Any remaining items in the stack should be added to result
-        while let Some(items) = self.outline_stack.pop() {
-            if items.is_empty() {
-                continue;
-            }
+    let display_text = o.text().or_else(|| o.title()).unwrap_or("");
+    let url = o.xml_url().or_else(|| o.html_url());
 
-            let list_items: Vec<Node> = items
-                .into_iter()
-                .map(|n| Node::new(node::LIST_ITEM).children(vec![n]))
-                .collect();
+    let text_node = Node::new(node::TEXT).prop(prop::CONTENT, display_text.to_string());
+    let content = match url {
+        Some(url) => Node::new(node::LINK)
+            .prop(prop::URL, url.to_string())
+            .child(text_node),
+        None => text_node,
+    };
 
-            let list = Node::new(node::LIST)
-                .prop(prop::ORDERED, false)
-                .children(list_items);
-
-            if let Some(parent) = self.outline_stack.last_mut() {
-                parent.push(list);
-            } else {
-                self.result.push(list);
-            }
-        }
-    }
+    para.child(content)
 }
 
 #[cfg(test)]
@@ -268,10 +187,12 @@ mod tests {
         let result = parse(opml).unwrap();
         let doc = result.value;
         assert_eq!(doc.metadata.get_str("title"), Some("Test"));
+        assert_eq!(doc.content.children.len(), 2);
+        assert_eq!(doc.content.children[0].kind.as_str(), node::PARAGRAPH);
     }
 
     #[test]
-    fn test_parse_nested_opml() {
+    fn test_parse_nested_opml_preserves_depth() {
         let opml = r#"<?xml version="1.0"?>
 <opml version="2.0">
   <head><title>Nested</title></head>
@@ -280,13 +201,23 @@ mod tests {
       <outline text="Child 1"/>
       <outline text="Child 2"/>
     </outline>
+    <outline text="Sibling"/>
   </body>
 </opml>"#;
 
         let result = parse(opml).unwrap();
         let doc = result.value;
-        // Should have a nested list structure
-        assert!(!doc.content.children.is_empty());
+        assert_eq!(doc.content.children.len(), 2);
+        let parent_list = &doc.content.children[0];
+        assert_eq!(parent_list.kind.as_str(), node::LIST);
+        let parent_item = &parent_list.children[0];
+        assert_eq!(parent_item.kind.as_str(), node::LIST_ITEM);
+        // paragraph + nested list of 2 children
+        assert_eq!(parent_item.children.len(), 2);
+        let nested_list = &parent_item.children[1];
+        assert_eq!(nested_list.kind.as_str(), node::LIST);
+        assert_eq!(nested_list.children.len(), 2);
+        assert_eq!(doc.content.children[1].kind.as_str(), node::PARAGRAPH);
     }
 
     #[test]
@@ -300,6 +231,23 @@ mod tests {
 
         let result = parse(opml).unwrap();
         let doc = result.value;
-        assert!(!doc.content.children.is_empty());
+        let para = &doc.content.children[0];
+        let link = &para.children[0];
+        assert_eq!(link.kind.as_str(), node::LINK);
+        assert_eq!(
+            link.props.get_str(prop::URL),
+            Some("https://example.com/feed.xml")
+        );
+    }
+
+    #[test]
+    fn test_unknown_attributes_are_raw_preserved() {
+        let opml = r#"<opml version="2.0"><body>
+  <outline text="X" isComment="true" appSpecific="v"/>
+</body></opml>"#;
+        let result = parse(opml).unwrap();
+        let para = &result.value.content.children[0];
+        assert_eq!(para.props.get_str("opml:attr:isComment"), Some("true"));
+        assert_eq!(para.props.get_str("opml:attr:appSpecific"), Some("v"));
     }
 }

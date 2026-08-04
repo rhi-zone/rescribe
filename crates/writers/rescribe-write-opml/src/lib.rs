@@ -1,206 +1,198 @@
 //! OPML writer for rescribe.
 //!
-//! Emits rescribe's document IR as OPML (Outline Processor Markup Language).
-//! Lists are converted to outline elements.
+//! Thin IR→AST adapter over [`opml_fmt`] (the standalone OPML parser/AST/
+//! emitter crate). All XML emission lives in `opml-fmt`; this crate only
+//! translates rescribe's `Document` into `opml_fmt::OpmlDoc`, then calls
+//! `opml_fmt::emit`. Per CLAUDE.md's adapter-layer rule, no `quick_xml`
+//! appears in this crate's production code.
 //!
-//! # Example
+//! # Mapping (inverse of `rescribe-read-opml`)
 //!
-//! ```ignore
-//! use rescribe_write_opml::emit;
-//!
-//! let doc = Document::new();
-//! let result = emit(&doc)?;
-//! let opml = String::from_utf8(result.value).unwrap();
-//! ```
+//! - A `paragraph` (or `list_item` wrapping a `paragraph` plus a nested
+//!   `list`) that carries `opml:attr:*` properties round-trips exactly:
+//!   those properties *are* `Outline::attrs`, used verbatim rather than
+//!   re-derived from the rendered text/link — this is what makes
+//!   `rescribe-read-opml` → `rescribe-write-opml` lossless.
+//! - A `paragraph`/`list`/heading/etc. with no `opml:attr:*` properties
+//!   (content that did not originate from OPML — e.g. converting a Markdown
+//!   document to OPML) is a foreign node: its `text`/`link` content is
+//!   extracted and synthesized into `text`/`xmlUrl` attributes instead, so
+//!   any document can still be written as OPML.
 
-use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use opml_fmt::{Body, Head, OpmlDoc, Outline, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
-use std::io::Cursor;
 
 /// Emit a document as OPML.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-    let warnings = Vec::new();
+    let head = build_head(doc);
+    let version = doc
+        .metadata
+        .get_str("opml:version")
+        .map(str::to_string)
+        .unwrap_or_else(|| "2.0".to_string());
 
-    // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    // OPML root
-    let mut opml = BytesStart::new("opml");
-    opml.push_attribute(("version", "2.0"));
-    writer
-        .write_event(Event::Start(opml))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    // Head section
-    writer
-        .write_event(Event::Start(BytesStart::new("head")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    // Title
-    if let Some(title) = doc.metadata.get_str("title") {
-        writer
-            .write_event(Event::Start(BytesStart::new("title")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-        writer
-            .write_event(Event::Text(BytesText::new(title)))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-        writer
-            .write_event(Event::End(BytesEnd::new("title")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
+    let mut outlines = Vec::new();
+    for child in &doc.content.children {
+        push_top_outline(child, &mut outlines);
     }
 
-    // Author as ownerName
-    if let Some(author) = doc.metadata.get_str("author") {
-        writer
-            .write_event(Event::Start(BytesStart::new("ownerName")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-        writer
-            .write_event(Event::Text(BytesText::new(author)))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-        writer
-            .write_event(Event::End(BytesEnd::new("ownerName")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-    }
+    let opml_doc = OpmlDoc {
+        xml_decl: Some(opml_fmt::XmlDecl {
+            version: "1.0".to_string(),
+            encoding: Some("UTF-8".to_string()),
+            standalone: None,
+        }),
+        version,
+        head,
+        body: Body {
+            outlines,
+            span: Span::NONE,
+        },
+        span: Span::NONE,
+    };
 
-    writer
-        .write_event(Event::End(BytesEnd::new("head")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    // Body section
-    writer
-        .write_event(Event::Start(BytesStart::new("body")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    // Convert document content to outlines
-    write_outlines(&mut writer, &doc.content)?;
-
-    writer
-        .write_event(Event::End(BytesEnd::new("body")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    writer
-        .write_event(Event::End(BytesEnd::new("opml")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML write error: {}", e))))?;
-
-    let result = writer.into_inner().into_inner();
-    Ok(ConversionResult::with_warnings(result, warnings))
+    let bytes = opml_fmt::emit(&opml_doc);
+    Ok(ConversionResult::ok(bytes))
 }
 
-fn write_outlines<W: std::io::Write>(writer: &mut Writer<W>, node: &Node) -> Result<(), EmitError> {
-    match node.kind.as_str() {
-        node::DOCUMENT => {
-            for child in &node.children {
-                write_outlines(writer, child)?;
-            }
-        }
+fn build_head(doc: &Document) -> Head {
+    let m = &doc.metadata;
+    Head {
+        title: m.get_str("title").map(str::to_string),
+        date_created: m.get_str("opml:date_created").map(str::to_string),
+        date_modified: m.get_str("opml:date_modified").map(str::to_string),
+        owner_name: m.get_str("author").map(str::to_string),
+        owner_email: m.get_str("opml:owner_email").map(str::to_string),
+        owner_id: m.get_str("opml:owner_id").map(str::to_string),
+        docs: m.get_str("opml:docs").map(str::to_string),
+        expansion_state: m.get_str("opml:expansion_state").map(str::to_string),
+        vert_scroll_state: m.get_str("opml:vert_scroll_state").map(str::to_string),
+        window_top: m.get_str("opml:window_top").map(str::to_string),
+        window_left: m.get_str("opml:window_left").map(str::to_string),
+        window_bottom: m.get_str("opml:window_bottom").map(str::to_string),
+        window_right: m.get_str("opml:window_right").map(str::to_string),
+        extra: m
+            .iter()
+            .filter_map(|(k, v)| {
+                k.strip_prefix("opml:head_extra:").map(|name| {
+                    let value = match v {
+                        rescribe_core::PropValue::String(s) => s.clone(),
+                        other => format!("{other:?}"),
+                    };
+                    (name.to_string(), value)
+                })
+            })
+            .collect(),
+        span: Span::NONE,
+    }
+}
+
+fn push_top_outline(n: &Node, out: &mut Vec<Outline>) {
+    match n.kind.as_str() {
+        node::PARAGRAPH => out.push(outline_from_paragraph(n)),
         node::LIST => {
-            for child in &node.children {
-                write_outlines(writer, child)?;
-            }
-        }
-        node::LIST_ITEM => {
-            // Extract text and URL from the list item content
-            let (text, url) = extract_outline_content(node);
-
-            // Check if there are nested lists
-            let nested_lists: Vec<&Node> = node
-                .children
-                .iter()
-                .filter(|c| c.kind.as_str() == node::LIST)
-                .collect();
-
-            if nested_lists.is_empty() {
-                // Empty element
-                let mut outline = BytesStart::new("outline");
-                outline.push_attribute(("text", text.as_str()));
-                if let Some(url) = url {
-                    outline.push_attribute(("xmlUrl", url.as_str()));
+            for item in &n.children {
+                if item.kind.as_str() == node::LIST_ITEM {
+                    out.push(outline_from_list_item(item));
                 }
-                writer.write_event(Event::Empty(outline)).map_err(|e| {
-                    EmitError::Io(std::io::Error::other(format!("XML write error: {}", e)))
-                })?;
-            } else {
-                // Start element with children
-                let mut outline = BytesStart::new("outline");
-                outline.push_attribute(("text", text.as_str()));
-                if let Some(url) = url {
-                    outline.push_attribute(("xmlUrl", url.as_str()));
-                }
-                writer.write_event(Event::Start(outline)).map_err(|e| {
-                    EmitError::Io(std::io::Error::other(format!("XML write error: {}", e)))
-                })?;
-
-                for nested in nested_lists {
-                    write_outlines(writer, nested)?;
-                }
-
-                writer
-                    .write_event(Event::End(BytesEnd::new("outline")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML write error: {}", e)))
-                    })?;
             }
         }
-        node::HEADING => {
-            // Convert headings to outlines
-            let text = extract_text(node);
-            let mut outline = BytesStart::new("outline");
-            outline.push_attribute(("text", text.as_str()));
-            writer.write_event(Event::Empty(outline)).map_err(|e| {
-                EmitError::Io(std::io::Error::other(format!("XML write error: {}", e)))
-            })?;
-        }
-        node::PARAGRAPH => {
-            // Convert paragraphs to outlines
-            let (text, url) = extract_paragraph_content(node);
-            let mut outline = BytesStart::new("outline");
-            outline.push_attribute(("text", text.as_str()));
-            if let Some(url) = url {
-                outline.push_attribute(("xmlUrl", url.as_str()));
-            }
-            writer.write_event(Event::Empty(outline)).map_err(|e| {
-                EmitError::Io(std::io::Error::other(format!("XML write error: {}", e)))
-            })?;
-        }
-        _ => {
-            // Try to process children
-            for child in &node.children {
-                write_outlines(writer, child)?;
-            }
-        }
+        _ => out.push(outline_from_text_fallback(n)),
     }
-    Ok(())
 }
 
-fn extract_outline_content(list_item: &Node) -> (String, Option<String>) {
-    let mut text = String::new();
-    let mut url: Option<String> = None;
-
-    for child in &list_item.children {
+/// Build an `Outline` from a `list_item`: its first non-`list` child is
+/// treated as the item's own content (a `paragraph`, ideally); any `list`
+/// child holds nested outlines.
+fn outline_from_list_item(item: &Node) -> Outline {
+    let mut own: Option<&Node> = None;
+    let mut children = Vec::new();
+    for child in &item.children {
         if child.kind.as_str() == node::LIST {
-            continue; // Skip nested lists
-        }
-        let (t, u) = extract_paragraph_content(child);
-        if !t.is_empty() {
-            if !text.is_empty() {
-                text.push(' ');
+            for li in &child.children {
+                if li.kind.as_str() == node::LIST_ITEM {
+                    children.push(outline_from_list_item(li));
+                } else {
+                    children.push(outline_from_text_fallback(li));
+                }
             }
-            text.push_str(&t);
-        }
-        if url.is_none() && u.is_some() {
-            url = u;
+        } else if own.is_none() {
+            own = Some(child);
         }
     }
 
-    (text, url)
+    let mut o = match own {
+        Some(p) if p.kind.as_str() == node::PARAGRAPH => outline_from_paragraph(p),
+        Some(other) => outline_from_text_fallback(other),
+        None => Outline {
+            attrs: vec![("text".to_string(), String::new())],
+            children: Vec::new(),
+            self_closing: true,
+            span: Span::NONE,
+        },
+    };
+    let has_children = !children.is_empty();
+    o.children = children;
+    if has_children {
+        o.self_closing = false;
+    }
+    o
 }
 
-fn extract_paragraph_content(node: &Node) -> (String, Option<String>) {
+/// Build an `Outline` from a `paragraph`. If it carries `opml:attr:*`
+/// properties (round-tripping content originally read from OPML), those are
+/// the authoritative attribute set — used verbatim, not re-derived. Content
+/// without them (a foreign paragraph, e.g. from a Markdown document being
+/// converted to OPML) has its `text`/`link` extracted and synthesized into
+/// `text`/`xmlUrl` attributes instead.
+fn outline_from_paragraph(para: &Node) -> Outline {
+    let mut attrs: Vec<(String, String)> = para
+        .props
+        .iter()
+        .filter_map(|(k, v)| {
+            k.strip_prefix("opml:attr:").map(|name| {
+                let value = match v {
+                    rescribe_core::PropValue::String(s) => s.clone(),
+                    other => format!("{other:?}"),
+                };
+                (name.to_string(), value)
+            })
+        })
+        .collect();
+
+    let self_closing = para.props.get_bool("opml:self_closing").unwrap_or(true);
+
+    if attrs.is_empty() {
+        let (text, url) = extract_para_content(para);
+        attrs.push(("text".to_string(), text));
+        if let Some(url) = url {
+            attrs.push(("xmlUrl".to_string(), url));
+        }
+    }
+
+    Outline {
+        attrs,
+        children: Vec::new(),
+        self_closing,
+        span: Span::NONE,
+    }
+}
+
+/// Fallback for any node kind that isn't a `paragraph`/`list_item` (e.g. a
+/// `heading` in foreign input) — extracts its text content into a plain
+/// `text` outline so nothing is silently dropped.
+fn outline_from_text_fallback(n: &Node) -> Outline {
+    let text = extract_text(n);
+    Outline {
+        attrs: vec![("text".to_string(), text)],
+        children: Vec::new(),
+        self_closing: true,
+        span: Span::NONE,
+    }
+}
+
+fn extract_para_content(node: &Node) -> (String, Option<String>) {
     let mut text = String::new();
     let mut url: Option<String> = None;
 
@@ -215,15 +207,9 @@ fn extract_paragraph_content(node: &Node) -> (String, Option<String>) {
                 if url.is_none() {
                     url = child.props.get_str(prop::URL).map(|s| s.to_string());
                 }
-                // Get link text
-                let link_text = extract_text(child);
-                text.push_str(&link_text);
+                text.push_str(&extract_text(child));
             }
-            _ => {
-                // Recursively extract text from other nodes
-                let child_text = extract_text(child);
-                text.push_str(&child_text);
-            }
+            _ => text.push_str(&extract_text(child)),
         }
     }
 
@@ -231,19 +217,19 @@ fn extract_paragraph_content(node: &Node) -> (String, Option<String>) {
 }
 
 fn extract_text(node: &Node) -> String {
-    let mut result = String::new();
-    extract_text_recursive(node, &mut result);
-    result
+    let mut out = String::new();
+    extract_text_recursive(node, &mut out);
+    out
 }
 
-fn extract_text_recursive(node: &Node, output: &mut String) {
+fn extract_text_recursive(node: &Node, out: &mut String) {
     if node.kind.as_str() == node::TEXT
         && let Some(content) = node.props.get_str(prop::CONTENT)
     {
-        output.push_str(content);
+        out.push_str(content);
     }
     for child in &node.children {
-        extract_text_recursive(child, output);
+        extract_text_recursive(child, out);
     }
 }
 
@@ -274,5 +260,33 @@ mod tests {
         let output = String::from_utf8(result.value).unwrap();
         assert!(output.contains("<title>My Outline</title>"));
         assert!(output.contains("<ownerName>John Doe</ownerName>"));
+    }
+
+    #[test]
+    fn test_roundtrip_preserves_outline_attrs() {
+        let opml = r#"<opml version="2.0"><body>
+  <outline text="X" isComment="true" appSpecific="v"/>
+</body></opml>"#;
+        let parsed = rescribe_read_opml::parse(opml).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(xml.contains(r#"text="X""#));
+        assert!(xml.contains(r#"isComment="true""#));
+        assert!(xml.contains(r#"appSpecific="v""#));
+    }
+
+    #[test]
+    fn test_roundtrip_preserves_nesting() {
+        let opml = r#"<opml version="2.0"><body>
+  <outline text="Parent"><outline text="Child"/></outline>
+</body></opml>"#;
+        let parsed = rescribe_read_opml::parse(opml).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        let (doc2, diags) = opml_fmt::parse(xml.as_bytes());
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert_eq!(doc2.body.outlines.len(), 1);
+        assert_eq!(doc2.body.outlines[0].children.len(), 1);
+        assert_eq!(doc2.body.outlines[0].children[0].text(), Some("Child"));
     }
 }

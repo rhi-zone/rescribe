@@ -3633,7 +3633,7 @@ dependencies = [
 name = "rescribe-read-opml"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.4",
+ "opml-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -4191,8 +4191,9 @@ dependencies = [
 name = "rescribe-write-opml"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.4",
+ "opml-fmt",
  "rescribe-core",
+ "rescribe-read-opml",
  "rescribe-std",
 ]
 

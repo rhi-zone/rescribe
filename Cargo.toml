@@ -118,6 +118,7 @@ html-fmt = { path = "crates/formats/html-fmt" }
 docbook-fmt = { path = "crates/formats/docbook-fmt" }
 jats-fmt = { path = "crates/formats/jats-fmt" }
 tei-fmt = { path = "crates/formats/tei-fmt" }
+opml-fmt = { path = "crates/formats/opml-fmt" }
 ris = { path = "crates/formats/ris" }
 native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }

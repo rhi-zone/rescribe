@@ -9,4 +9,4 @@ description = "OPML reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
-quick-xml = "0.39"
+opml-fmt = { workspace = true }
