@@ -328,6 +328,9 @@ path = "../crates/formats/xml-entities"
 [dependencies.tei-fmt]
 path = "../crates/formats/tei-fmt"
 
+[dependencies.opml-fmt]
+path = "../crates/formats/opml-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -1089,6 +1092,20 @@ bench = false
 [[bin]]
 name = "fuzz_tei_fmt_roundtrip"
 path = "fuzz_targets/tei_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_opml_fmt_reader"
+path = "fuzz_targets/opml_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_opml_fmt_roundtrip"
+path = "fuzz_targets/opml_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

@@ -1025,6 +1025,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "opml-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
+
+[[package]]
 name = "org-fmt"
 version = "0.1.0"
 
@@ -1353,6 +1360,7 @@ dependencies = [
  "libfuzzer-sys",
  "mediawiki-fmt",
  "odf-fmt",
+ "opml-fmt",
  "rescribe-core",
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
@@ -1748,7 +1756,7 @@ dependencies = [
 name = "rescribe-read-opml"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "opml-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
