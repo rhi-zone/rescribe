@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Journal Article">17</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Well-Tagged Paper</title>
+      </titles>
+      <keywords>
+        <keyword>bibliometrics</keyword>
+        <keyword>citation analysis</keyword>
+        <keyword>metadata</keyword>
+      </keywords>
+    </record>
+  </records>
+</xml>

@@ -1,0 +1,14 @@
+{
+  "description": "Exporter-specific record-level fields this reader doesn't know by name (custom1, research-notes, language) are raw-preserved as misc bibliography_field nodes tagged with their own element name, in source order, rather than dropped",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "custom1" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "internal-tracking-id-42" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "research-notes" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "Follow up with the author." } },
+    { "path": "/0/0/4",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "language" } },
+    { "path": "/0/0/4/0", "kind": "text", "props": { "content": "en" } }
+  ]
+}

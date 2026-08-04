@@ -1,0 +1,14 @@
+{
+  "description": "All three title variants (title, secondary-title, tertiary-title) each become their own bibliography_field: title/container_title get cross-format field:role, tertiary-title (series) is raw-preserved as misc",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title", "endnote:field": "titles/title" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "The Chapter Title" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "container_title", "endnote:field": "titles/secondary-title" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "The Book Title" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "titles/tertiary-title" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "The Series Title" } }
+  ]
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Book Section">5</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>The Chapter Title</title>
+        <secondary-title>The Book Title</secondary-title>
+        <tertiary-title>The Series Title</tertiary-title>
+      </titles>
+    </record>
+  </records>
+</xml>

@@ -1,0 +1,16 @@
+{
+  "description": "All four contributors role lists (authors, secondary-authors/editors, tertiary-authors, subsidiary-authors) produce distinct bibliography_field nodes: author/editor get their field:role, tertiary/subsidiary are raw-preserved as misc since they have no cross-format role equivalent",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author", "endnote:field": "authors/author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Smith, John" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "editor", "endnote:field": "secondary-authors/author" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Doe, Jane" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "tertiary-authors/author" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Roe, Richard" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "subsidiary-authors/author" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "Poe, Patricia" } }
+  ]
+}

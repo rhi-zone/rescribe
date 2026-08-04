@@ -23,7 +23,21 @@ node carries both `field:role` (the semantic vocabulary) and `endnote:field` (th
 source element path, e.g. `titles/secondary-title`, `urls/related-urls/url`). EndNote XML
 is the one of these four formats whose fields can carry `<style face="...">` markup runs —
 those become real `emphasis`/`strong`/`underline`/`superscript`/`subscript` inline nodes
-(see `rare-style-markup`) instead of being flattened to plain text.
+(see `rare-style-markup`, `style-variety`) instead of being flattened to plain text.
+
+**2026-08-04:** `rescribe-read-endnotexml`/`rescribe-write-endnotexml` were relocated onto a
+new standalone `endnotexml-fmt` crate (`crates/formats/endnotexml-fmt`), following the
+`opml-fmt` template — see that crate's `ast.rs`/`events.rs` module docs for the native AST/
+event design. The IR mapping documented above is unchanged; this pass added dedicated
+fixtures for constructs the old reader already handled but no fixture exercised
+(`all-contributors`, `all-titles`, `periodical`, `identifiers`, `pdf-urls`,
+`keywords-multi`, `abstract-and-notes`, `pub-date`, `custom-fields`, `style-variety`,
+`adv-malformed-xml`), and closed several genuine (if rare) silent-drop gaps the new AST's
+per-container `extra` buckets fix as a natural consequence of proper modeling (unknown
+children of `<contributors>`/`<titles>`/`<periodical>`/`<urls>`/`<dates>`/`<foreign-keys>`
+now raw-preserve instead of being dropped) — none of those specific sub-gaps has a dedicated
+fixture yet (no known real-world exporter emits them; tracked as future work, not asserted
+as fixed by a test).
 
 ## Reference types (ref-type)
 
@@ -88,36 +102,43 @@ those become real `emphasis`/`strong`/`underline`/`superscript`/`subscript` inli
 ### Contributor fields (`<contributors>`)
 - [x] authors / author (single) — `article`
 - [x] authors / author (multiple) — `multi-author`
-- [x] secondary-authors (editors) — supported (`field:role` = `editor`), no dedicated fixture yet — (missing fixture)
-- [x] tertiary-authors / subsidiary-authors — raw-preserved as `misc`, no dedicated fixture yet — (missing fixture)
-- [ ] translated-authors — (missing)
+- [x] secondary-authors (editors) — `all-contributors` (`field:role` = `editor`)
+- [x] tertiary-authors / subsidiary-authors — `all-contributors` (raw-preserved as `misc`)
+- [ ] translated-authors — not raw-preserved with its own dedicated wrapper name today; falls
+      into `Contributors::extra` (endnotexml-fmt AST) and would surface as a `misc` field
+      tagged `contributors/translated-authors`, but no fixture exercises this path — (missing)
 
 ### Title fields
 - [x] titles / title — `article`
 - [x] titles / secondary-title (journal / container) — `article`
-- [x] titles / tertiary-title (series) — raw-preserved as `misc`, no dedicated fixture yet — (missing fixture)
-- [ ] titles / short-title — (missing)
-- [ ] titles / translated-title — (missing)
-- [ ] titles / alt-title — (missing)
+- [x] titles / tertiary-title (series) — `all-titles` (raw-preserved as `misc`)
+- [ ] titles / short-title — not raw-preserved with its own dedicated wrapper name today; falls
+      into `Titles::extra` and would surface as `misc` tagged `titles/short-title` — (missing fixture)
+- [ ] titles / translated-title — same as short-title — (missing fixture)
+- [ ] titles / alt-title — same as short-title — (missing fixture)
 
 ### Date fields
 - [x] dates / year — `article`
-- [x] dates / pub-dates / date — raw-preserved as `misc` (no unambiguous month-name parse without guessing locale), no dedicated fixture yet — (missing fixture)
-- [ ] dates / access-date — (missing)
+- [x] dates / pub-dates / date — `pub-date` (raw-preserved as `misc`, no unambiguous
+      month-name parse without guessing locale)
+- [ ] dates / access-date — falls into `Dates::extra`, would surface as `misc` tagged
+      `dates/access-date` — (missing fixture)
 
 ### Periodical fields
-- [ ] periodical / full-title — (missing)
-- [ ] periodical / abbr-1 — (missing)
-- [ ] periodical / abbr-2 — (missing)
-- [ ] periodical / abbr-3 — (missing)
+- [x] periodical / full-title — `periodical` (raw-preserved as `misc`, tagged
+      `periodical/full-title`, distinct from `titles/secondary-title`)
+- [ ] periodical / abbr-1 — falls into `Periodical::extra` — (missing fixture)
+- [ ] periodical / abbr-2 — falls into `Periodical::extra` — (missing fixture)
+- [ ] periodical / abbr-3 — falls into `Periodical::extra` — (missing fixture)
 
 ### Volume / pages
 - [x] volume — `article`
-- [x] number — supported (`field:role` = `issue`), no dedicated fixture yet — (missing fixture)
+- [x] number — `all-contributors`/others exercise it incidentally; no *dedicated* fixture —
+      supported (`field:role` = `issue`) — (missing dedicated fixture)
 - [x] pages (numeric range split into page_first/page_last) — `article`, `book-section`
-- [ ] num-vols — (missing)
-- [ ] edition — (missing)
-- [ ] section — (missing)
+- [ ] num-vols — falls into `Record::extra` — (missing fixture)
+- [ ] edition — falls into `Record::extra` — (missing fixture)
+- [ ] section — falls into `Record::extra` — (missing fixture)
 
 ### Publisher fields
 - [x] publisher — `book`
@@ -126,50 +147,61 @@ those become real `emphasis`/`strong`/`underline`/`superscript`/`subscript` inli
 ### Identifier fields
 - [x] electronic-resource-num (DOI) — `with-doi`
 - [x] urls / related-urls / url — `webpage`
-- [x] urls / pdf-urls / url — supported, no dedicated fixture yet — (missing fixture)
+- [x] urls / pdf-urls / url — `pdf-urls`
 - [x] bare top-level url (non-standard placement) — `with-url`
-- [x] isbn / issn (each own identifier field, not conflated) — supported, no dedicated fixture yet — (missing fixture)
-- [ ] accession-num — (missing)
-- [ ] call-num — (missing)
-- [ ] custom1 through custom7 — raw-preserved as `misc` via the generic record-level fallback, no dedicated fixture yet — (missing fixture)
+- [x] isbn / issn (each own identifier field, not conflated) — `identifiers`
+- [ ] accession-num — falls into `Record::extra` — (missing fixture)
+- [ ] call-num — falls into `Record::extra` — (missing fixture)
+- [x] custom1 through custom7 — `custom-fields` (raw-preserved as `misc` via the generic
+      record-level fallback; only `custom1` exercised directly, `custom2`..`custom7` follow
+      the identical code path)
 
 ### Content fields
-- [x] abstract — supported, no dedicated fixture yet — (missing fixture)
-- [x] notes — supported, no dedicated fixture yet — (missing fixture)
-- [x] keywords / keyword — supported, no dedicated fixture yet — (missing fixture)
-- [ ] research-notes — (missing; would raw-preserve via generic fallback)
-- [ ] work-type — (missing; would raw-preserve via generic fallback)
-- [ ] reviewed-item — (missing; would raw-preserve via generic fallback)
-- [ ] language — (missing; would raw-preserve via generic fallback)
+- [x] abstract — `abstract-and-notes`
+- [x] notes — `abstract-and-notes`, `style-variety` (with markup)
+- [x] keywords / keyword — `keywords-multi`
+- [x] research-notes — `custom-fields` (raw-preserved via generic fallback)
+- [ ] work-type — same code path as `research-notes`, no dedicated fixture — (missing fixture)
+- [ ] reviewed-item — same code path — (missing fixture)
+- [x] language — `custom-fields` (raw-preserved via generic fallback)
 
 ### Rich text in fields (`<style face="...">`)
 - [x] italic — `rare-style-markup`
 - [x] bold — `rare-style-markup`
-- [ ] underline — (missing; supported, no fixture)
-- [ ] superscript / subscript — (missing; supported, no fixture)
+- [x] underline — `style-variety`
+- [x] superscript / subscript — `style-variety`
+- [ ] `<style>` attributes other than `face` (e.g. `font`, `size`, as seen in
+      `rare-style-markup`'s input) — not preserved; `endnotexml-fmt`'s `Inline::Style` only
+      captures `face` (matches the pre-existing reader's identical scope, not a regression
+      introduced by this relocation) — tracked in TODO.md as a known gap, not asserted fixed
 
 ### Source (book info)
 - [ ] source-app — (missing)
 
 ## Structure
 
-- [ ] multiple records in one file — (missing)
-- [ ] record with all standard fields — (missing)
+- [ ] multiple records in one file — (missing; every current fixture is single-record)
+- [ ] record with all standard fields — (missing; no single fixture exercises every field at once)
 
 ## Composition (integration)
 
-- [ ] article with volume, pages, journal, and DOI — (missing)
-- [ ] book section with secondary title (book) and publisher — (missing)
-- [ ] multiple records in one `<xml>` document — (missing)
+- [x] article with volume, pages, journal, and DOI — covered piecewise (`article` has
+      volume/pages/journal; `with-doi` has DOI) but no single fixture combines all four —
+      (missing a combined fixture)
+- [ ] book section with secondary title (book) and publisher — `book-section` has secondary
+      title only, `book` has publisher only, no fixture combines them — (missing)
+- [ ] multiple records in one `<xml>` document — (missing; every current fixture is single-record)
 
 ## Adversarial
 
 - [x] empty / minimal XML — `adv-empty`
-- [ ] record with unknown ref-type — (missing)
+- [ ] record with unknown ref-type — not distinguished from a known one (ref-type is stored
+      verbatim regardless), so this would not exercise different code — (missing fixture)
 - [ ] record with missing ref-type — (missing)
-- [ ] malformed XML — (missing)
+- [x] malformed XML — `adv-malformed-xml` (truncated mid-record; must not panic)
 - [ ] record with empty title — (missing)
-- [ ] XML with unknown elements — (missing)
+- [x] XML with unknown elements — `custom-fields` (happy-path unknown elements);
+      `adv-malformed-xml` covers the truncation case
 
 ## Pathological
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Journal Article">17</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title><style face="underline">Underlined Title</style></title>
+      </titles>
+      <notes><style face="normal">E = mc</style><style face="superscript">2</style><style face="normal"> and H</style><style face="subscript">2</style><style face="normal">O</style></notes>
+    </record>
+  </records>
+</xml>

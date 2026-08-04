@@ -1,0 +1,6 @@
+{
+  "description": "Truncated XML (unclosed title/record/records/xml) must not panic; the reader recovers whatever was parsed so far",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

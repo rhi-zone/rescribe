@@ -1,0 +1,12 @@
+{
+  "description": "isbn and issn each become a separate identifier field with the correct field:scheme (not conflated into one slot where the second overwrites the first)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "isbn" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "978-0-13-468599-1" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "issn" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "1234-5678" } }
+  ]
+}

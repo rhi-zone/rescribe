@@ -1,0 +1,10 @@
+{
+  "description": "periodical/full-title (distinct from titles/secondary-title) becomes its own misc bibliography_field tagged periodical/full-title, not dropped or merged",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "periodical/full-title" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Journal of Examples" } }
+  ]
+}

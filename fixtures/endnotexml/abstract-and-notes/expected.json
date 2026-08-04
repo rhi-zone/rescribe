@@ -1,0 +1,12 @@
+{
+  "description": "abstract and notes each become their own misc bibliography_field",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "abstract" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "This paper studies things." } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "notes" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "Read before citing." } }
+  ]
+}

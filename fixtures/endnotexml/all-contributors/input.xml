@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Book Section">5</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+        <secondary-authors>
+          <author>Doe, Jane</author>
+        </secondary-authors>
+        <tertiary-authors>
+          <author>Roe, Richard</author>
+        </tertiary-authors>
+        <subsidiary-authors>
+          <author>Poe, Patricia</author>
+        </subsidiary-authors>
+      </contributors>
+      <titles>
+        <title>A Chapter With Every Contributor Role</title>
+      </titles>
+    </record>
+  </records>
+</xml>

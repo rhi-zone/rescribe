@@ -1,0 +1,10 @@
+{
+  "description": "urls/pdf-urls/url becomes an identifier field tagged endnote:field urls/pdf-urls/url, distinct from urls/related-urls/url",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "url", "endnote:field": "urls/pdf-urls/url" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "internal-pdf://report.pdf" } }
+  ]
+}

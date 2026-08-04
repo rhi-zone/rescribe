@@ -1,0 +1,19 @@
+{
+  "description": "style face values beyond bold/italic (underline, superscript, subscript) become the matching inline markup node, across two different field types (title, notes)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title" }, "children_count": 1 },
+    { "path": "/0/0/1/0", "kind": "underline", "children_count": 1 },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "Underlined Title" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "notes" }, "children_count": 5 },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "E = mc" } },
+    { "path": "/0/0/2/1", "kind": "superscript", "children_count": 1 },
+    { "path": "/0/0/2/1/0", "kind": "text", "props": { "content": "2" } },
+    { "path": "/0/0/2/2", "kind": "text", "props": { "content": " and H" } },
+    { "path": "/0/0/2/3", "kind": "subscript", "children_count": 1 },
+    { "path": "/0/0/2/3/0", "kind": "text", "props": { "content": "2" } },
+    { "path": "/0/0/2/4", "kind": "text", "props": { "content": "O" } }
+  ]
+}

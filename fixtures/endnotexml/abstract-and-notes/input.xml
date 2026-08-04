@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Journal Article">17</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Documented Paper</title>
+      </titles>
+      <abstract>This paper studies things.</abstract>
+      <notes>Read before citing.</notes>
+    </record>
+  </records>
+</xml>

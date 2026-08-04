@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Book">6</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Book With Both Identifiers</title>
+      </titles>
+      <isbn>978-0-13-468599-1</isbn>
+      <issn>1234-5678</issn>
+    </record>
+  </records>
+</xml>
