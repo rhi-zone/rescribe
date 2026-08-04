@@ -234,10 +234,25 @@ impl<H: Handler> StreamingParser<H> {
         // document still gets its synthesized default Metadata event,
         // matching `events()`/`XmlEventIter::step`'s Eof handling.
         if !self.failed {
-            self.state.finalize_missing_description();
-            while let Some(sem_ev) = self.state.pending.pop_front() {
-                self.handler.handle(sem_ev);
-            }
+            self.finalize_and_flush();
+        }
+    }
+
+    /// Finalizes the shared `SemanticState` — auto-closing whatever's still
+    /// open (`finalize_open_elements`) and synthesizing a default Metadata
+    /// event if the input never had a literal `<description>`
+    /// (`finalize_missing_description`) — then drains every event this
+    /// produces to the handler. Called at every point `drain()`/`finish()`
+    /// can terminate for good (plain EOF, a fatal XML error, and the
+    /// hand-tracked tag-mismatch branch below), mirroring
+    /// `XmlEventIter::step`'s identical Eof/Err handling. Idempotent (both
+    /// finalize methods are no-ops once already run), so it's safe to call
+    /// unconditionally even when a prior call already ran.
+    fn finalize_and_flush(&mut self) {
+        self.state.finalize_missing_description();
+        self.state.finalize_open_elements();
+        while let Some(sem_ev) = self.state.pending.pop_front() {
+            self.handler.handle(sem_ev);
         }
     }
 
@@ -274,10 +289,7 @@ impl<H: Handler> StreamingParser<H> {
                 Ok(XmlEvent::Eof) => {
                     if is_final {
                         self.byte_buf.clear();
-                        self.state.finalize_missing_description();
-                        while let Some(sem_ev) = self.state.pending.pop_front() {
-                            self.handler.handle(sem_ev);
-                        }
+                        self.finalize_and_flush();
                     }
                     return;
                 }
@@ -314,6 +326,7 @@ impl<H: Handler> StreamingParser<H> {
                                 _ => {
                                     self.failed = true;
                                     self.byte_buf.clear();
+                                    self.finalize_and_flush();
                                     return;
                                 }
                             }
@@ -333,6 +346,7 @@ impl<H: Handler> StreamingParser<H> {
                     // wait for more data, unless this really is the end.
                     if is_final {
                         self.byte_buf.clear();
+                        self.finalize_and_flush();
                     }
                     return;
                 }
@@ -380,6 +394,11 @@ struct SemanticState {
     current_table: Option<Table>,
     current_table_row: Option<TableRow>,
     current_table_cell: Option<TableCell>,
+    /// Nesting depth of an "orphaned" subtree currently being suppressed —
+    /// see the `"section"` arm of [`SemanticState::handle_start`] for how it
+    /// starts, and [`SemanticState::handle_end`]/[`SemanticState::handle_empty`]
+    /// for how it's maintained. 0 means not suppressing.
+    suppress_depth: usize,
 }
 
 /// The description-building sub-state (analogous to the full parse.rs TitleInfo etc.)
@@ -531,12 +550,15 @@ impl<'a> XmlEventIter<'a> {
         match self.reader.read_event_into(&mut self.buf) {
             Ok(XmlEvent::Eof) => {
                 self.state.finalize_missing_description();
+                self.state.finalize_open_elements();
                 self.done = true;
             }
             Ok(ev) => {
                 self.state.dispatch(&ev);
             }
             Err(_) => {
+                self.state.finalize_missing_description();
+                self.state.finalize_open_elements();
                 self.done = true;
             }
         }
@@ -753,6 +775,14 @@ impl SemanticState {
     }
 
     fn handle_start(&mut self, name: &str, attrs: AttrMap) {
+        // Inside an orphaned subtree (see the "section" arm below): every
+        // nested Start just deepens the suppression, no event queued, no
+        // stack frame pushed — handle_end's matching guard below unwinds it.
+        if self.suppress_depth > 0 {
+            self.suppress_depth += 1;
+            return;
+        }
+
         // Description sub-state
         if self.desc.in_description || name == "description" {
             self.handle_desc_start(name, attrs);
@@ -782,6 +812,32 @@ impl SemanticState {
                 self.pending.push_back(Event::StartTitle);
             }
             "section" => {
+                // A <section> with no enclosing <body>/<section> ancestor is
+                // structurally orphaned — this only arises from malformed
+                // XML (see fixtures/fb2/adv-malformed: an unclosed
+                // `<FictionBook ...` start tag swallows the following
+                // `<body>` token as garbage attribute text, so quick_xml
+                // never actually emits a Start("body") event at all).
+                // parse()'s AST hits the identical case in its own
+                // StackItem::Section finalize arm (parse.rs): it walks the
+                // stack for a Body/Section parent to attach to and, finding
+                // none, silently drops the whole Section (and everything
+                // nested inside it, since that's already been folded into
+                // the Section value by the time it's discarded). Mirroring
+                // that here needs no lookahead or buffering: ancestor
+                // validity is a property of `self.stack` as it already
+                // stands *before* this Start tag, so the orphan is knowable
+                // the instant it opens — before anything nested inside it
+                // is ever dispatched, not after seeing what's inside.
+                let has_valid_parent = self
+                    .stack
+                    .iter()
+                    .rev()
+                    .any(|s| matches!(s, ParseState::Body | ParseState::Section));
+                if !has_valid_parent {
+                    self.suppress_depth = 1;
+                    return;
+                }
                 let id = attrs.get("id").cloned();
                 let lang = attrs.get("lang").cloned();
                 self.stack.push(ParseState::Section);
@@ -903,6 +959,13 @@ impl SemanticState {
     }
 
     fn handle_empty(&mut self, name: &str, attrs: AttrMap) {
+        // A self-closing element fully inside a suppressed orphan subtree
+        // (see the "section" arm of handle_start) contributes nothing — no
+        // Start/End pair to balance, so unlike handle_start/handle_end this
+        // doesn't touch suppress_depth, just drops the event.
+        if self.suppress_depth > 0 {
+            return;
+        }
         match name {
             "empty-line" => {
                 self.pending.push_back(Event::EmptyLine);
@@ -955,6 +1018,15 @@ impl SemanticState {
     }
 
     fn handle_end(&mut self, name: &str) {
+        // Unwind one level of the suppressed orphan subtree (see the
+        // "section" arm of handle_start above). No stack frame was pushed
+        // for anything inside it, so this End is consumed here rather than
+        // falling through to the normal per-name handling below.
+        if self.suppress_depth > 0 {
+            self.suppress_depth -= 1;
+            return;
+        }
+
         // Binary: decode base64
         if name == "binary" {
             if let Some(ParseState::Binary { id, content_type }) = self.stack.pop() {
@@ -1031,7 +1103,15 @@ impl SemanticState {
             Some(i) => i,
             None => return,
         };
+        self.close_item(item);
+    }
 
+    /// Synthesizes the semantic End event(s) a `ParseState` frame would have
+    /// produced via its own End tag, given only the frame's own (already
+    /// fully-accumulated) content — extracted from `handle_end`'s per-item
+    /// match so [`SemanticState::finalize_open_elements`] can reuse it
+    /// verbatim for elements that never get a real End tag at all.
+    fn close_item(&mut self, item: ParseState) {
         match item {
             ParseState::FictionBook => {
                 self.pending.push_back(Event::EndFictionBook);
@@ -1117,6 +1197,28 @@ impl SemanticState {
                 }
             }
             ParseState::Description | ParseState::Annotation => {}
+        }
+    }
+
+    /// Finalizes every element still open on `self.stack`, synthesizing the
+    /// same End event(s) each would have produced from a real End tag
+    /// (`close_item`, innermost first — `Vec::pop()`'s natural order)
+    /// instead of dropping it. Called at every point the token stream can
+    /// terminate for good — plain EOF and a fatal XML error alike, in both
+    /// `XmlEventIter::step` and `StreamingParser::drain` — mirroring
+    /// docbook-fmt/jats-fmt/tei-fmt's `EventIter::finalize()` (the
+    /// malformed/truncated-XML auto-close recovery ported there
+    /// 2026-08-03). No lookahead or buffering is needed: everything
+    /// required to close every open element correctly — each one's
+    /// `ParseState` marker plus whatever content it had already
+    /// accumulated before the stream ended — is already sitting on
+    /// `self.stack`. A no-op for well-formed input, where every element is
+    /// already closed by its own End tag and the stack is empty by the time
+    /// this runs.
+    fn finalize_open_elements(&mut self) {
+        self.flush_inline_text();
+        while let Some(item) = self.stack.pop() {
+            self.close_item(item);
         }
     }
 
