@@ -829,6 +829,43 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // this is genuinely Wired.
         streaming_writer: ApiState::Wired,
     },
+    FormatCapabilities {
+        format: "opml",
+        // opml-fmt is a from-scratch crate (2026-08-04), not an audit of a pre-existing
+        // implementation, so this entry documents design rather than a fix. Unlike
+        // docbook/jats/tei's generic-element-tree AST, opml-fmt models OPML's small fixed
+        // grammar as a domain-typed AST/event vocabulary (OpmlDoc/Head/Body/Outline,
+        // StartOutline/HeadField/EmptyOutline/...) — the same "well-nested XML, three
+        // genuinely independent readers" architecture, just with OPML-specific event names
+        // instead of generic StartElement/EndElement. `events()` (`EventIter`) wraps
+        // `quick_xml::Reader` directly, pulling a `<head>` child's Start/Text/End run in one
+        // `next()` call (bounded lookahead, not tree-building) so the returned `HeadField`
+        // event carries the complete text value. `events::events_from_doc(&OpmlDoc)` is the
+        // crate's own AST->events projection, used as the equivalence oracle here exactly as
+        // for docbook/jats/tei.
+        //
+        // Verified via this harness's own checks over all 26 opml fixtures, not asserted from
+        // design alone: initial runs found two real defects, both now fixed. (1) An empty
+        // `Head` (all fields unset) is indistinguishable, once parsed, from "no `<head>`
+        // element in the source" (`Head::is_empty()`, ast.rs) — `events_from_doc` and `emit`
+        // both used to unconditionally synthesize a `<head></head>` pair regardless, while
+        // `events()` (reading real bytes) only emits one when the source actually had a
+        // `<head>` tag; fixture adv-minimal (no head at all) caught this. Fixed by having both
+        // `events_from_doc` and `emit` skip the Start/EndHead pair when `head.is_empty()`,
+        // matching what `events()` produces for a headless source. (2) On a fatal XML error
+        // (fixture adv-malformed-xml: an `<outline>` left unclosed when `</body>` is hit),
+        // `EventIter::finalize()`/`StreamingParser::close_out()` auto-closed any open
+        // `<outline>`/`<head>`/`<body>` but had no equivalent tracking for `<opml>` itself, so
+        // no synthetic `EndOpml` was ever produced on that recovery path — while
+        // `events_from_doc` always appends `EndOpml` unconditionally at the end, since the AST
+        // has no way to represent "the document was truncated before `</opml>`". Fixed by
+        // adding an `in_opml` flag (mirroring `in_head`/`in_body`) to both `EventIter` and
+        // `StreamingParser`, synthesizing `EndOpml` in `finalize()`/`close_out()` when still
+        // open, the same recovery shape as the docbook/jats/tei "unclosed element" fix above.
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::Wired,
+    },
     // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
     // (events.rs's `events()` literally calls `crate::parse::parse(input)`
     // then walks the resulting `BbcodeDoc`) — the same non-independent shape
@@ -1619,7 +1656,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "csl-json",
     "pandoc-json",
     "ipynb",
-    "opml",
     "bibtex",
     "biblatex",
     "typst",

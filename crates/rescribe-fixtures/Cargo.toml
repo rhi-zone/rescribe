@@ -89,6 +89,7 @@ commonmark-fmt = { workspace = true, features = ["extensions"] }
 docbook-fmt = { workspace = true }
 jats-fmt = { workspace = true }
 tei-fmt = { workspace = true }
+opml-fmt = { workspace = true }
 odf-fmt = { workspace = true }
 ansi-fmt = { workspace = true }
 bbcode-fmt = { workspace = true }
