@@ -1,0 +1,30 @@
+[package]
+name = "multimarkdown-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MultiMarkdown parser and emitter built on commonmark-fmt — no rescribe dependency"
+
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = ["commonmark-fmt/reader-ast"]
+reader-streaming = ["commonmark-fmt/reader-streaming"]
+reader-batch = ["commonmark-fmt/reader-batch", "reader-streaming"]
+writer-streaming = ["commonmark-fmt/writer-streaming"]
+writer-builder = ["commonmark-fmt/writer-builder", "reader-ast", "writer-streaming"]
+arbitrary = ["dep:arbitrary", "commonmark-fmt/arbitrary"]
+
+[dependencies]
+commonmark-fmt = { path = "../commonmark-fmt", default-features = false, features = [
+    "tables",
+    "task-lists",
+    "strikethrough",
+    "footnotes",
+    "definition-lists",
+    "math",
+    "frontmatter",
+] }
+arbitrary = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
