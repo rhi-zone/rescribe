@@ -3923,10 +3923,13 @@ fn commonmark_block_events(
                 ListKind::Unordered { .. } => (false, 1),
                 ListKind::Ordered { start, .. } => (true, *start),
             };
+            // EventIter always emits StartList { tight: true } optimistically,
+            // regardless of the AST's real tight value — see
+            // commonmark_fmt::events::Event::ListTightnessResolved's doc comment.
             out.push(Event::StartList {
                 ordered,
                 start,
-                tight: *tight,
+                tight: true,
             });
             for item in items {
                 out.push(Event::StartItem {
@@ -3936,6 +3939,13 @@ fn commonmark_block_events(
                     commonmark_block_events(c, out);
                 }
                 out.push(Event::EndItem);
+            }
+            // EventIter always emits StartList { tight: true } optimistically
+            // and, only for a loose list, corrects it once right before
+            // EndList — see commonmark_fmt::events::Event::ListTightnessResolved's
+            // doc comment.
+            if !*tight {
+                out.push(Event::ListTightnessResolved { tight: false });
             }
             out.push(Event::EndList);
         }

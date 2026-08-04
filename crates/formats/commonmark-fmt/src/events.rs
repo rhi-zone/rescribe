@@ -52,6 +52,28 @@ pub enum Event<'a> {
         tight: bool,
     },
     EndList,
+    /// Corrects a list's tightness once it becomes fully known.
+    ///
+    /// CommonMark list tightness ("is any item blank-line-separated from
+    /// its neighbor, or does any item directly contain two block-level
+    /// children separated by a blank line") is a property of the *entire*
+    /// list, uniform across every item — pulldown-cmark itself only wraps
+    /// item content in real `Paragraph` tags when the whole list is loose,
+    /// never per-item. Determining it can require seeing every item, which
+    /// isn't bounded by a constant lookahead, so `EventIter` cannot always
+    /// know it in time for `StartList`.
+    ///
+    /// `EventIter` therefore always emits `StartList { tight: true, .. }`
+    /// optimistically (the common case: most lists are tight) and, only if
+    /// the list turns out loose, emits this event exactly once, immediately
+    /// before the matching `EndList`, to correct it. It is never emitted
+    /// for a genuinely tight list — the optimistic default was already
+    /// right, so there is nothing to correct. Applies to the most recently
+    /// opened `StartList` that hasn't yet seen its `EndList` — the same
+    /// nesting correlation `StartItem`/`EndItem` use with `StartList`.
+    ListTightnessResolved {
+        tight: bool,
+    },
     /// `checked` is `Some` for GFM task-list items (`- [ ]`/`- [x]`), `None`
     /// for ordinary items. Always `None` when the `task-lists` feature is off.
     StartItem {
@@ -167,6 +189,7 @@ impl<'a> Event<'a> {
                 tight,
             },
             Event::EndList => Event::EndList,
+            Event::ListTightnessResolved { tight } => Event::ListTightnessResolved { tight },
             #[cfg(feature = "task-lists")]
             Event::StartItem { checked } => Event::StartItem { checked },
             #[cfg(not(feature = "task-lists"))]
@@ -248,9 +271,29 @@ struct ImageState {
 }
 
 /// State tracked for list tightness detection.
+///
+/// Starts `true` (mirroring `StartList`'s optimistic default) and flips to
+/// `false` the moment a *real* `Paragraph` tag is seen as a direct child of
+/// one of this list's items — never back to `true`, since pulldown-cmark
+/// only emits real `Paragraph` tags for item content when the whole list is
+/// loose (see `Event::ListTightnessResolved`'s doc comment).
 struct ListState {
-    /// Number of paragraphs seen in this list so far (tight = 0).
-    para_count: usize,
+    tight: bool,
+}
+
+/// State tracked per currently-open list item.
+struct ItemFrame {
+    /// Whether a synthetic `StartParagraph` is currently open for this item
+    /// (see `item_stack`'s doc comment on `EventIter`).
+    synthetic_open: bool,
+    /// Nesting depth of blockquotes opened since this item began (relative
+    /// depth, not absolute document depth). A real `Paragraph` nested
+    /// inside `Item > Blockquote > Paragraph` is never surgerized by
+    /// pulldown-cmark regardless of list tightness (its own tight-list
+    /// rewrite only touches an item's *direct* block children), so it must
+    /// not be mistaken for the tight/loose signal — the signal only counts
+    /// when `quote_depth == 0`.
+    quote_depth: u32,
 }
 
 /// Streaming event iterator over a CommonMark `&str`.
@@ -277,8 +320,9 @@ pub struct EventIter<'a> {
     /// content in an implicit `Block::Paragraph` (`parse.rs`'s
     /// `flush_tight_inlines`) — this stack lets `EventIter` synthesize the
     /// matching `StartParagraph`/`EndParagraph` pair without buffering the
-    /// item.
-    item_stack: Vec<bool>,
+    /// item. Also carries the per-item state needed for list-tightness
+    /// detection (see `ItemFrame`).
+    item_stack: Vec<ItemFrame>,
     /// Depth counter for "real" inline-bearing containers that already
     /// come with their own explicit open/close tags (`Paragraph`,
     /// `Heading`, table cells) — incremented/decremented alongside those
@@ -382,14 +426,14 @@ impl<'a> Iterator for EventIter<'a> {
             if self.code_block.is_none()
                 && self.image.is_none()
                 && self.text_container_depth == 0
-                && let Some(open) = self.item_stack.last().copied()
+                && let Some(open) = self.item_stack.last().map(|f| f.synthetic_open)
             {
                 let is_inline_flow = is_inline_flow_event(&pd_event);
                 if open && !is_inline_flow {
                     // Leaving the item's bare inline content (a nested
                     // block starts, or the item itself ends): close the
                     // synthetic paragraph before letting `pd_event` through.
-                    *self.item_stack.last_mut().unwrap() = false;
+                    self.item_stack.last_mut().unwrap().synthetic_open = false;
                     self.pending_pd.push_front((pd_event, _range));
                     return Some(Event::EndParagraph);
                 }
@@ -398,7 +442,7 @@ impl<'a> Iterator for EventIter<'a> {
                     // with no wrapping Paragraph from pulldown-cmark: open
                     // the synthetic paragraph before letting `pd_event`
                     // through.
-                    *self.item_stack.last_mut().unwrap() = true;
+                    self.item_stack.last_mut().unwrap().synthetic_open = true;
                     self.pending_pd.push_front((pd_event, _range));
                     return Some(Event::StartParagraph);
                 }
@@ -407,6 +451,19 @@ impl<'a> Iterator for EventIter<'a> {
             match pd_event {
                 // ── Block opens ──────────────────────────────────────────────
                 PdEvent::Start(Tag::Paragraph) => {
+                    // A *real* Paragraph tag arriving as a direct child of
+                    // the innermost open item (no intervening blockquote)
+                    // is only ever emitted by pulldown-cmark when the whole
+                    // enclosing list is loose — see `ListState`'s and
+                    // `Event::ListTightnessResolved`'s doc comments. Record
+                    // the signal now; the correction event itself is only
+                    // emitted later, at `EndList`, once (see there).
+                    if let Some(item) = self.item_stack.last()
+                        && item.quote_depth == 0
+                        && let Some(ls) = self.list_stack.last_mut()
+                    {
+                        ls.tight = false;
+                    }
                     self.text_container_depth += 1;
                     return Some(Event::StartParagraph);
                 }
@@ -417,6 +474,9 @@ impl<'a> Iterator for EventIter<'a> {
                     });
                 }
                 PdEvent::Start(Tag::BlockQuote(_)) => {
+                    if let Some(item) = self.item_stack.last_mut() {
+                        item.quote_depth += 1;
+                    }
                     return Some(Event::StartBlockquote);
                 }
                 PdEvent::Start(Tag::CodeBlock(kind)) => {
@@ -438,10 +498,12 @@ impl<'a> Iterator for EventIter<'a> {
                         None => (false, 1u64),
                         Some(n) => (true, n),
                     };
-                    self.list_stack.push(ListState { para_count: 0 });
-                    // Tightness is unknown until we see paragraphs; emit with
-                    // tight=true tentatively. Callers that need accurate tightness
-                    // should use the AST API instead.
+                    self.list_stack.push(ListState { tight: true });
+                    // Tightness is unknown until we see the list's items;
+                    // emit with tight=true optimistically. If this turns
+                    // out wrong, `Event::ListTightnessResolved` corrects it
+                    // right before the matching `EndList` (see there and
+                    // that event's doc comment).
                     return Some(Event::StartList {
                         ordered,
                         start,
@@ -450,7 +512,10 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "task-lists")]
                 PdEvent::Start(Tag::Item) => {
-                    self.item_stack.push(false);
+                    self.item_stack.push(ItemFrame {
+                        synthetic_open: false,
+                        quote_depth: 0,
+                    });
                     // Peek ahead: a task-list item is immediately followed by
                     // a `TaskListMarker` event before any other content.
                     match self.next_pd() {
@@ -470,7 +535,10 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(not(feature = "task-lists"))]
                 PdEvent::Start(Tag::Item) => {
-                    self.item_stack.push(false);
+                    self.item_stack.push(ItemFrame {
+                        synthetic_open: false,
+                        quote_depth: 0,
+                    });
                     return Some(Event::StartItem {});
                 }
                 PdEvent::Start(Tag::HtmlBlock) => {
@@ -583,9 +651,6 @@ impl<'a> Iterator for EventIter<'a> {
                 // ── Block closes ──────────────────────────────────────────────
                 PdEvent::End(TagEnd::Paragraph) => {
                     self.text_container_depth = self.text_container_depth.saturating_sub(1);
-                    if let Some(ls) = self.list_stack.last_mut() {
-                        ls.para_count += 1;
-                    }
                     return Some(Event::EndParagraph);
                 }
                 PdEvent::End(TagEnd::Heading(level)) => {
@@ -595,6 +660,9 @@ impl<'a> Iterator for EventIter<'a> {
                     });
                 }
                 PdEvent::End(TagEnd::BlockQuote(_)) => {
+                    if let Some(item) = self.item_stack.last_mut() {
+                        item.quote_depth = item.quote_depth.saturating_sub(1);
+                    }
                     return Some(Event::EndBlockquote);
                 }
                 PdEvent::End(TagEnd::CodeBlock) => {
@@ -605,7 +673,18 @@ impl<'a> Iterator for EventIter<'a> {
                     }
                 }
                 PdEvent::End(TagEnd::List(_)) => {
-                    self.list_stack.pop();
+                    if let Some(ls) = self.list_stack.pop()
+                        && !ls.tight
+                    {
+                        // The optimistic StartList { tight: true } was
+                        // wrong: correct it once, immediately before
+                        // EndList (see Event::ListTightnessResolved's doc
+                        // comment for why this is the one point in the
+                        // stream where the correction is guaranteed known
+                        // and doesn't require buffering the whole list).
+                        self.pending.push_back(Event::EndList);
+                        return Some(Event::ListTightnessResolved { tight: false });
+                    }
                     return Some(Event::EndList);
                 }
                 PdEvent::End(TagEnd::Item) => {

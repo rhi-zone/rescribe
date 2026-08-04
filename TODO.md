@@ -788,6 +788,77 @@ added — `fixtures/commonmark/image`, `rare-backslash-escape`, `integration-tab
 `rare-tight-vs-loose` already existed and already exercise every fixed/remaining construct
 through the `events()`-vs-AST-projection harness, which walks all of `fixtures/commonmark/`.
 
+**2026-08-04: bug 6 above (`StartList` always `tight: true`) fixed — was wrongly declared
+"confirmed architecturally unfixable" in the 2026-08-03 entry. The "requires seeing every item"
+framing was correct but its conclusion wasn't: the fix doesn't need to know tightness *at*
+`StartList`-emission time, only *before* the matching `EndList`, and that answer is always known
+by then without buffering the whole list.** `commonmark_fmt::events::Event` gained a new public
+variant — a breaking, semver-relevant change to the standalone `commonmark-fmt` crate, noted in
+its own `CHANGELOG.md`:
+
+```rust
+ListTightnessResolved { tight: bool },
+```
+
+**Design.** `EventIter` still emits `StartList { tight: true, .. }` optimistically (tight is the
+common case). It tracks the real signal incrementally with `O(nesting depth)` state — a per-list
+`ListState.tight: bool` (flips `true`→`false`, never back, matching the fact that pulldown-cmark
+only ever emits a *real* `Paragraph` tag for an item's direct content when the whole enclosing
+list is loose) and a per-item `ItemFrame.quote_depth: u32` (relative blockquote nesting since the
+item began, needed so a `Paragraph` nested inside `Item > Blockquote > Paragraph` — never
+surgerized by pulldown-cmark regardless of list tightness, since its own tight-list rewrite only
+touches an item's *direct* block children — isn't mistaken for the signal). If the list turns out
+loose, `EventIter` emits `ListTightnessResolved { tight: false }` exactly once, immediately before
+the matching `EndList`.
+
+**Why this doesn't reintroduce the "requires whole-list lookahead" problem.** The earlier
+(wrong) conclusion assumed the correction had to arrive early enough for *every* consumer
+decision that depends on it, including a streaming writer's already-decided item separators. It
+doesn't have to — see the Writer fix below, which handles this by recording *where* a separator
+was skipped rather than deciding it needs early notice. `EndList` is simply the one point in the
+stream past which nothing further about tightness can be learned, which makes it the natural
+(and simplest) place to emit a single correction, and this needs no extra buffering: `list_stack`
+is already `O(nesting depth)`, and the per-item bookkeeping to detect the signal costs `O(1)` per
+item, not `O(list size)`.
+
+**Writer fix, in lockstep (`crates/formats/commonmark-fmt/src/writer.rs`).** Rather than mutating
+frame state (the `Frame::ListItem` for the item that revealed the signal may already be closed by
+the time `EndList` arrives — all the more so for items *before* it), the `Writer` records, at
+every point it *skips* a blank-line separator because tightness was still assumed `true` (both
+`StartItem`'s inter-item check and `container_child_open`'s intra-item one), the `out`-buffer byte
+offset where that separator would have gone — a new field, `list_correction_marks:
+Vec<Vec<usize>>`, one `Vec<usize>` per currently-open list, pushed/popped in lockstep with
+`Frame::List`. On `Event::ListTightnessResolved { tight: false }`, the Writer splices `'\n'` into
+`out` at every recorded offset for the current list, processed in reverse (last-to-first) so an
+earlier insertion never invalidates an already-recorded later offset. This is correct regardless
+of whether the correction arrives with the triggering item still open (it always does, since
+`EndList` immediately follows), and requires no additional asymptotic memory — the whole
+top-level list's rendered text is already resident in `out` until it flushes, same as before.
+
+Verified against a hand-written probe covering four cases (genuinely tight; loose via blank line
+between items; loose via two blocks separated by blank line inside one item; loose only revealed
+by item 2, where item 1 is itself a nested-list-only item with no direct paragraph of its own) —
+`Writer` output was byte-identical to `emit::emit()`'s tree-based output in all four, including
+the last (hardest) case. `commonmark_events_equals_ast_projection_over_all_fixtures` and
+`commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures` (`crates/rescribe-
+fixtures/tests/streaming_apis.rs`) both pass outright now (no longer `ACKNOWLEDGED KNOWN
+FAILURE`) — the test helper's `commonmark_ast_to_events` was updated to always project
+`StartList { tight: true, .. }` (matching `EventIter`'s optimistic default, not the AST's real
+value) plus a trailing `ListTightnessResolved` when the AST's `tight` is `false`. No new fixtures
+needed: `fixtures/commonmark/rare-loose-list`, `integration-loose-list-item`, and
+`rare-tight-vs-loose` already exist and already exercise exactly this. 11 of the 64 commonmark
+fixtures contain a list; all are covered by the two whole-suite fixture-loop tests above (not a
+sample).
+
+`streaming_harness::CAPABILITIES` entries for `commonmark`/`gfm`/`markdown` updated to
+`ApiState::Wired` for `events` (commonmark) and `streaming_writer` (all three); the corresponding
+`KNOWN_FAILURES` entries removed (a fixed bug must not keep masking future regressions — the
+harness itself panics if a `KnownFailure`-flagged check starts passing while still listed).
+`docs/format-audit.md`'s commonmark/gfm/markdown row rewritten to match.
+
+Verified: `cargo clippy --all-targets --all-features -- -D warnings` clean; `cargo fmt --check`
+clean; `cargo test -q` full workspace run (see the tail of this session for pass/fail counts).
+
 **2026-08-03: asciidoc's `StreamingParser` bugs fixed — `streaming_parser` upgraded from
 `KnownFailure` to `ApiState::Wired`.** Three distinct bugs in `crates/formats/asciidoc/src/
 batch.rs`, all fixed:

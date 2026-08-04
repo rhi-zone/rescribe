@@ -130,6 +130,23 @@ pub struct Writer<W: Write> {
     /// leading-blank-line-before-the-Nth-block rule (`crate::emit`'s
     /// `emit_blocks`: `i > 0 && !tight` — top level is never tight).
     doc_child_count: usize,
+    /// Stack mirroring currently-open `List` frames (pushed/popped in
+    /// lockstep with `Frame::List`, one entry per nesting level). Each
+    /// entry records the `out` offset of every blank-line separator that
+    /// `container_child_open`/`StartItem` *skipped* because tightness was
+    /// (at the time) optimistically assumed `true` — a position that needs
+    /// a retroactive `"\n"` if `Event::ListTightnessResolved` later says
+    /// the list was actually loose. Cleared harmlessly at `EndList` for a
+    /// genuinely tight list (no event ever arrives to consume them); for a
+    /// list events() corrects, `ListTightnessResolved` splices them all in
+    /// — in reverse order, so inserting at a later mark never invalidates
+    /// an earlier one — before `EndList` pops the frame. This is what lets
+    /// the Writer stay correct for *both* inter-item separators and
+    /// intra-item ones (two blocks directly inside one item, blank-line
+    /// separated) regardless of exactly when in the stream the correction
+    /// arrives, since it works purely off recorded byte offsets rather
+    /// than live frame state.
+    list_correction_marks: Vec<Vec<usize>>,
     /// Whether a front-matter block has already been written. Mirrors the
     /// old `DocBuilder`'s `get_or_insert`: only the first `FrontMatter`
     /// event is honored, and only if it arrives before any document block.
@@ -152,6 +169,7 @@ impl<W: Write> Writer<W> {
             scratch: Vec::new(),
             stack: Vec::new(),
             doc_child_count: 0,
+            list_correction_marks: Vec::new(),
             #[cfg(feature = "frontmatter")]
             frontmatter_written: false,
         }
@@ -240,6 +258,15 @@ impl<W: Write> Writer<W> {
             }) => {
                 let first = *child_count == 0;
                 *child_count += 1;
+                if !first && *tight {
+                    // Skipping this separator on the (possibly still
+                    // provisional) assumption the item is tight — record
+                    // the position in case ListTightnessResolved later
+                    // says otherwise (see list_correction_marks's doc).
+                    if let Some(marks) = self.list_correction_marks.last_mut() {
+                        marks.push(self.out.len());
+                    }
+                }
                 !first && !*tight
             }
             _ => {
@@ -431,10 +458,40 @@ impl<W: Write> Writer<W> {
                     item_idx: 0,
                     mark,
                 });
+                self.list_correction_marks.push(Vec::new());
             }
             Event::EndList => {
                 if let Some(Frame::List { mark, .. }) = self.stack.pop() {
                     self.block_close(mark);
+                }
+                self.list_correction_marks.pop();
+            }
+            Event::ListTightnessResolved { tight } => {
+                // Guaranteed by EventIter: this only ever arrives with the
+                // list's own (still-open) ListItem directly on top of the
+                // stack and its owning List directly beneath — the signal
+                // that triggers it (a real, direct-child Paragraph with no
+                // intervening blockquote) can only fire while such an item
+                // is open, and quote_depth==0 rules out any frame between
+                // them. See Event::ListTightnessResolved's doc comment.
+                let len = self.stack.len();
+                if len >= 2
+                    && let Frame::ListItem { tight: t, .. } = &mut self.stack[len - 1]
+                {
+                    *t = tight;
+                }
+                if len >= 2
+                    && let Frame::List { tight: t, .. } = &mut self.stack[len - 2]
+                {
+                    *t = tight;
+                }
+                if !tight && let Some(marks) = self.list_correction_marks.last() {
+                    for &pos in marks.iter().rev() {
+                        self.out.insert(pos, '\n');
+                    }
+                }
+                if let Some(marks) = self.list_correction_marks.last_mut() {
+                    marks.clear();
                 }
             }
             Event::StartItem {
@@ -451,6 +508,15 @@ impl<W: Write> Writer<W> {
                         ..
                     }) => {
                         let idx = *item_idx;
+                        if idx > 0 && *tight {
+                            // Skipping the inter-item separator on the
+                            // still-provisional tight assumption — record
+                            // for possible retroactive correction (see
+                            // list_correction_marks's doc).
+                            if let Some(marks) = self.list_correction_marks.last_mut() {
+                                marks.push(self.out.len());
+                            }
+                        }
                         let sep = idx > 0 && !*tight;
                         *item_idx += 1;
                         let kind = if *ordered {
