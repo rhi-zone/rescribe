@@ -3207,6 +3207,7 @@ dependencies = [
  "ooxml-pml",
  "ooxml-sml",
  "ooxml-wml",
+ "opml-fmt",
  "org-fmt",
  "pod-fmt",
  "rescribe-core",

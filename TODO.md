@@ -4240,6 +4240,10 @@ The violation is format-parsing deps (quick-xml, zip, etc.) called from producti
 - **`rescribe-write-jats`**: CLEAN — uses `jats-fmt` (fixed 2026-07-26).
 - **`rescribe-read-tei`**: CLEAN — uses `tei-fmt` (fixed 2026-07-26).
 - **`rescribe-write-tei`**: CLEAN — uses `tei-fmt` (fixed 2026-07-26).
+- **`rescribe-read-opml`**: CLEAN — extracted `opml-fmt` (a from-scratch domain-typed
+  crate, not an audit of a pre-existing implementation) and rewrote the adapter as a
+  thin AST↔IR translator (fixed 2026-08-04).
+- **`rescribe-write-opml`**: CLEAN — same (fixed 2026-08-04).
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
 
@@ -4247,7 +4251,9 @@ Fix each when doing that format's vertical. Do NOT fix all at once (horizontal s
 crates that happened to come up during other work). Every reader and writer adapter has
 now been audited against the rule; the complete inventory lives in
 `docs/format-audit.md` § "Adapter parsing/emitting-logic inventory" — 65 formats,
-38 clean, 14 violating, 13 uncertain. Not repeated here. Headlines only:
+39 clean, 13 violating, 13 uncertain (opml moved violating→clean 2026-08-04: `opml-fmt`
+extracted, adapters gutted to thin translators — see below). Not repeated here. Headlines
+only:
 
 - **Three PARTIAL MIGRATION cases** — `commonmark`, `djot`, `ansi`: the `-fmt` crate
   exists and the *reader* uses it, but the writer hand-rolls emission and never calls
@@ -4256,8 +4262,8 @@ now been audited against the rule; the complete inventory lives in
 - **Worst violation: `latex`** — `rescribe-read-latex/src/handwritten.rs` is an 895-line
   recursive-descent LaTeX parser living inside the reader adapter, plus a 662-line
   tree-sitter backend and a 717-line hand-written emitter in the writer. No `latex-fmt`.
-- **No standalone crate at all**: latex, opml, endnotexml, bibtex, biblatex, csl-json,
-  pandoc-json, ipynb, typst (writer side).
+- **No standalone crate at all**: latex, endnotexml, bibtex, biblatex, csl-json,
+  pandoc-json, ipynb, typst (writer side). (opml got one 2026-08-04: `opml-fmt`.)
 - **New findings beyond the bibliographic four**: `pandoc-json` has the same
   schema-in-adapter shape as `csl-json` (not previously listed); the whole markdown
   writer family (`markdown`, `gfm`, `markdown-strict`, `multimarkdown`) plus `typst`'s
