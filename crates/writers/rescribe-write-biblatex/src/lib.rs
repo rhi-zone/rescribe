@@ -2,7 +2,15 @@
 //!
 //! Emits documents as BibLaTeX source with BibLaTeX-specific fields
 //! (date, journaltitle, subtitle, etc.).
+//!
+//! Actual BibLaTeX syntax (entry headers, field escaping, brace wrapping) is
+//! produced by the `biblatex` crate's own `Entry::to_biblatex_string()` /
+//! `Bibliography::to_biblatex_string()` (the same crate `rescribe-read-biblatex`
+//! and `rescribe-read-bibtex` use to parse). This adapter's only job is
+//! building a `biblatex::Entry` from the rescribe IR shapes it accepts — it
+//! does not hand-roll escaping or field/entry syntax itself.
 
+use biblatex::{Bibliography, Chunk, Entry, EntryType, Spanned};
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
@@ -24,53 +32,114 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut ctx = EmitContext::new();
-    emit_nodes(&doc.content.children, &mut ctx);
+    collect_nodes(&doc.content.children, &mut ctx);
+    let output = ctx.bibliography.to_biblatex_string();
     Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
+        output.into_bytes(),
         ctx.warnings,
     ))
 }
 
 struct EmitContext {
-    output: String,
+    bibliography: Bibliography,
     warnings: Vec<FidelityWarning>,
 }
 
 impl EmitContext {
     fn new() -> Self {
         Self {
-            output: String::new(),
+            bibliography: Bibliography::new(),
             warnings: Vec::new(),
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
+    /// Insert a finished entry, warning (rather than silently dropping) if
+    /// its cite key collides with one already present — BibLaTeX itself
+    /// requires unique keys, so a collision here reflects unrepresentable
+    /// source data, not an adapter bug.
+    fn insert(&mut self, entry: Entry) {
+        let key = entry.key.clone();
+        if self.bibliography.insert(entry).is_some() {
+            self.warnings.push(FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::UnsupportedNode(BIBLATEX_ENTRY.to_string()),
+                format!(
+                    "Duplicate BibLaTeX cite key '{key}': an earlier entry with the same key was overwritten"
+                ),
+            ));
+        }
     }
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
+/// Build an `EntryType` from a source-provided type name, warning when the
+/// name isn't part of `biblatex`'s known vocabulary: both
+/// `Entry::to_biblatex_string` and `Entry::to_bibtex_string` silently
+/// collapse any `EntryType::Unknown(_)` to `misc` (there is no public API to
+/// opt out of this), so a custom/unrecognized entry type name is lost on
+/// emission. This is a `biblatex`-crate limitation, not a design choice made
+/// here.
+fn entry_type_for(name: &str, warnings: &mut Vec<FidelityWarning>) -> EntryType {
+    let ty = EntryType::new(name);
+    if matches!(ty, EntryType::Unknown(_)) {
+        warnings.push(FidelityWarning::new(
+            Severity::Minor,
+            WarningKind::UnsupportedNode(format!("biblatex:type={name}")),
+            format!(
+                "Custom BibLaTeX entry type '{name}' is not recognized by the biblatex crate and \
+                 will be emitted as 'misc' (biblatex::EntryType::Unknown collapses to Misc on write)"
+            ),
+        ));
+    }
+    ty
+}
+
+/// Set a field to a single plain (non-verbatim) chunk if `value` is
+/// non-empty. Using `Chunk::Normal` (rather than `Entry::set_as::<String>`,
+/// which produces `Chunk::Verbatim` and gets double-braced by `biblatex`'s
+/// writer) matches the single-brace style both readers read back via
+/// `format_verbatim()` either way.
+fn set_field(entry: &mut Entry, name: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    entry.set(
+        name,
+        vec![Spanned::detached(Chunk::Normal(value.to_string()))],
+    );
+}
+
+fn collect_nodes(nodes: &[Node], ctx: &mut EmitContext) {
     for node in nodes {
-        emit_node(node, ctx);
+        collect_node(node, ctx);
     }
 }
 
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn collect_node(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
-        "document" | "definition_list" => emit_nodes(&node.children, ctx),
-        BIBLATEX_ENTRY => emit_biblatex_entry(node, ctx),
-        BIBTEX_ENTRY => emit_bibtex_entry(node, ctx),
-        "citation_entry" => emit_citation_entry(node, ctx),
+        "document" | "definition_list" => collect_nodes(&node.children, ctx),
+        BIBLATEX_ENTRY => {
+            let entry = build_biblatex_entry(node, &mut ctx.warnings);
+            ctx.insert(entry);
+        }
+        BIBTEX_ENTRY => {
+            let entry = build_bibtex_entry(node, &mut ctx.warnings);
+            ctx.insert(entry);
+        }
+        "citation_entry" => {
+            let entry = build_citation_entry(node, &mut ctx.warnings);
+            ctx.insert(entry);
+        }
         _ => {
             if is_biblatex_type(node.kind.as_str()) {
-                emit_typed_entry(node, ctx);
+                let entry = build_typed_entry(node, &mut ctx.warnings);
+                ctx.insert(entry);
             } else {
                 ctx.warnings.push(FidelityWarning::new(
                     Severity::Minor,
                     WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
                     format!("Unknown node type for BibLaTeX: {}", node.kind.as_str()),
                 ));
-                emit_nodes(&node.children, ctx);
+                collect_nodes(&node.children, ctx);
             }
         }
     }
@@ -112,78 +181,118 @@ fn is_biblatex_type(s: &str) -> bool {
     )
 }
 
-fn emit_biblatex_entry(node: &Node, ctx: &mut EmitContext) {
-    let entry_type = node
-        .props
-        .get_str("biblatex:type")
-        .unwrap_or("misc")
-        .to_lowercase();
+fn build_biblatex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+    let entry_type_name = node.props.get_str("biblatex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("biblatex:key").unwrap_or("unknown");
 
-    ctx.write("@");
-    ctx.write(&entry_type);
-    ctx.write("{");
-    ctx.write(cite_key);
-    ctx.write(",\n");
+    let mut entry = Entry::new(
+        cite_key.to_string(),
+        entry_type_for(entry_type_name, warnings),
+    );
 
-    emit_biblatex_fields(node, ctx);
+    let mut fields: Vec<(&str, String)> = Vec::new();
+    for (key, value) in node.props.iter() {
+        if let Some(field_name) = key.strip_prefix("biblatex:")
+            && field_name != "type"
+            && field_name != "key"
+            && let rescribe_core::PropValue::String(s) = value
+        {
+            fields.push((field_name, s.clone()));
+        }
+    }
+    fields.sort_by(|a, b| a.0.cmp(b.0));
+    for (name, value) in fields {
+        set_field(&mut entry, name, &value);
+    }
 
-    ctx.write("}\n\n");
+    entry
 }
 
-fn emit_bibtex_entry(node: &Node, ctx: &mut EmitContext) {
-    let entry_type = node
-        .props
-        .get_str("bibtex:type")
-        .unwrap_or("misc")
-        .to_lowercase();
+fn build_bibtex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+    let entry_type_name = node.props.get_str("bibtex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    ctx.write("@");
-    ctx.write(&entry_type);
-    ctx.write("{");
-    ctx.write(cite_key);
-    ctx.write(",\n");
+    let mut entry = Entry::new(
+        cite_key.to_string(),
+        entry_type_for(entry_type_name, warnings),
+    );
 
-    // Convert BibTeX fields to BibLaTeX style
-    emit_bibtex_to_biblatex_fields(node, ctx);
+    // BibLaTeX field mappings from BibTeX.
+    let field_mappings = [
+        ("bibtex:journal", "journaltitle"),
+        ("bibtex:year", "date"),
+        ("bibtex:address", "location"),
+    ];
+    for (bibtex_field, biblatex_field) in field_mappings {
+        if let Some(value) = node.props.get_str(bibtex_field) {
+            set_field(&mut entry, biblatex_field, value);
+        }
+    }
 
-    ctx.write("}\n\n");
+    // Direct mappings (same field name in both).
+    for (key, value) in node.props.iter() {
+        if let Some(field_name) = key.strip_prefix("bibtex:")
+            && field_name != "type"
+            && field_name != "key"
+            && field_name != "journal"
+            && field_name != "year"
+            && field_name != "address"
+            && let rescribe_core::PropValue::String(s) = value
+        {
+            set_field(&mut entry, field_name, s);
+        }
+    }
+
+    entry
 }
 
-fn emit_citation_entry(node: &Node, ctx: &mut EmitContext) {
+fn build_citation_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
     let csl_type = node.props.get_str("type").unwrap_or("misc");
-    let entry_type = csl_to_biblatex_type(csl_type);
+    let entry_type_name = csl_to_biblatex_type(csl_type);
     let cite_key = node.props.get_str(prop::ID).unwrap_or("unknown");
 
-    ctx.write("@");
-    ctx.write(entry_type);
-    ctx.write("{");
-    ctx.write(cite_key);
-    ctx.write(",\n");
+    let mut entry = Entry::new(
+        cite_key.to_string(),
+        entry_type_for(entry_type_name, warnings),
+    );
 
-    emit_csl_fields(node, ctx);
+    if let Some(title) = node.props.get_str("title") {
+        set_field(&mut entry, "title", title);
+    }
+    if let Some(author) = node.props.get_str("author") {
+        set_field(&mut entry, "author", author);
+    }
+    if let Some(container) = node.props.get_str("container-title") {
+        if csl_type == "article-journal" {
+            set_field(&mut entry, "journaltitle", container);
+        } else {
+            set_field(&mut entry, "booktitle", container);
+        }
+    }
+    if let Some(issued) = node.props.get_str("issued") {
+        set_field(&mut entry, "date", issued);
+    }
 
-    ctx.write("}\n\n");
-}
+    let direct_mappings = [
+        ("volume", "volume"),
+        ("issue", "number"),
+        ("page", "pages"),
+        ("publisher", "publisher"),
+        ("publisher-place", "location"),
+        ("DOI", "doi"),
+        ("URL", "url"),
+        ("ISBN", "isbn"),
+        ("ISSN", "issn"),
+        ("abstract", "abstract"),
+        ("note", "note"),
+    ];
+    for (csl_name, biblatex_name) in direct_mappings {
+        if let Some(value) = node.props.get_str(csl_name) {
+            set_field(&mut entry, biblatex_name, value);
+        }
+    }
 
-fn emit_typed_entry(node: &Node, ctx: &mut EmitContext) {
-    let entry_type = node.kind.as_str().to_lowercase();
-    let cite_key = node
-        .props
-        .get_str("key")
-        .or(node.props.get_str(prop::ID))
-        .unwrap_or("unknown");
-
-    ctx.write("@");
-    ctx.write(&entry_type);
-    ctx.write("{");
-    ctx.write(cite_key);
-    ctx.write(",\n");
-
-    emit_standard_fields(node, ctx);
-
-    ctx.write("}\n\n");
+    entry
 }
 
 fn csl_to_biblatex_type(csl: &str) -> &'static str {
@@ -202,102 +311,20 @@ fn csl_to_biblatex_type(csl: &str) -> &'static str {
     }
 }
 
-fn emit_biblatex_fields(node: &Node, ctx: &mut EmitContext) {
-    let mut fields: Vec<(&str, String)> = Vec::new();
+fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+    let entry_type_name = node.kind.as_str();
+    let cite_key = node
+        .props
+        .get_str("key")
+        .or(node.props.get_str(prop::ID))
+        .unwrap_or("unknown");
 
-    for (key, value) in node.props.iter() {
-        if let Some(field_name) = key.strip_prefix("biblatex:")
-            && field_name != "type"
-            && field_name != "key"
-            && let rescribe_core::PropValue::String(s) = value
-        {
-            fields.push((field_name, s.clone()));
-        }
-    }
+    let mut entry = Entry::new(
+        cite_key.to_string(),
+        entry_type_for(entry_type_name, warnings),
+    );
 
-    fields.sort_by(|a, b| a.0.cmp(b.0));
-
-    for (name, value) in fields {
-        emit_field(name, &value, ctx);
-    }
-}
-
-fn emit_bibtex_to_biblatex_fields(node: &Node, ctx: &mut EmitContext) {
-    // BibLaTeX field mappings from BibTeX
-    let field_mappings = [
-        ("bibtex:journal", "journaltitle"),
-        ("bibtex:year", "date"),
-        ("bibtex:address", "location"),
-    ];
-
-    for (bibtex_field, biblatex_field) in field_mappings {
-        if let Some(value) = node.props.get_str(bibtex_field) {
-            emit_field(biblatex_field, value, ctx);
-        }
-    }
-
-    // Direct mappings (same field name in both)
-    for (key, value) in node.props.iter() {
-        if let Some(field_name) = key.strip_prefix("bibtex:")
-            && field_name != "type"
-            && field_name != "key"
-            && field_name != "journal"
-            && field_name != "year"
-            && field_name != "address"
-            && let rescribe_core::PropValue::String(s) = value
-        {
-            emit_field(field_name, s, ctx);
-        }
-    }
-}
-
-fn emit_csl_fields(node: &Node, ctx: &mut EmitContext) {
-    if let Some(title) = node.props.get_str("title") {
-        emit_field("title", title, ctx);
-    }
-
-    if let Some(author) = node.props.get_str("author") {
-        emit_field("author", author, ctx);
-    }
-
-    // Container title maps to journaltitle in BibLaTeX
-    if let Some(container) = node.props.get_str("container-title") {
-        let csl_type = node.props.get_str("type").unwrap_or("");
-        if csl_type == "article-journal" {
-            emit_field("journaltitle", container, ctx);
-        } else {
-            emit_field("booktitle", container, ctx);
-        }
-    }
-
-    // Date handling - BibLaTeX uses date field
-    if let Some(issued) = node.props.get_str("issued") {
-        emit_field("date", issued, ctx);
-    }
-
-    let direct_mappings = [
-        ("volume", "volume"),
-        ("issue", "number"),
-        ("page", "pages"),
-        ("publisher", "publisher"),
-        ("publisher-place", "location"),
-        ("DOI", "doi"),
-        ("URL", "url"),
-        ("ISBN", "isbn"),
-        ("ISSN", "issn"),
-        ("abstract", "abstract"),
-        ("note", "note"),
-    ];
-
-    for (csl_name, biblatex_name) in direct_mappings {
-        if let Some(value) = node.props.get_str(csl_name) {
-            emit_field(biblatex_name, value, ctx);
-        }
-    }
-}
-
-fn emit_standard_fields(node: &Node, ctx: &mut EmitContext) {
-    // BibLaTeX standard fields
+    // BibLaTeX standard fields.
     let field_mappings = [
         ("author", "author"),
         ("title", "title"),
@@ -331,38 +358,16 @@ fn emit_standard_fields(node: &Node, ctx: &mut EmitContext) {
     ];
 
     let mut emitted = std::collections::HashSet::new();
-
     for (prop_name, field_name) in field_mappings {
         if !emitted.contains(field_name)
             && let Some(value) = node.props.get_str(prop_name)
         {
-            emit_field(field_name, value, ctx);
+            set_field(&mut entry, field_name, value);
             emitted.insert(field_name);
         }
     }
-}
 
-fn emit_field(name: &str, value: &str, ctx: &mut EmitContext) {
-    ctx.write("  ");
-    ctx.write(name);
-    ctx.write(" = {");
-    ctx.write(&escape_biblatex(value));
-    ctx.write("},\n");
-}
-
-fn escape_biblatex(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '#' | '$' | '%' | '&' | '_' => {
-                result.push('\\');
-                result.push(c);
-            }
-            '{' | '}' => result.push(c),
-            _ => result.push(c),
-        }
-    }
-    result
+    entry
 }
 
 #[cfg(test)]
@@ -436,5 +441,24 @@ mod tests {
 
         // BibLaTeX should use date field
         assert!(output.contains("date = {2024},"));
+    }
+
+    #[test]
+    fn test_unknown_entry_type_warns_and_falls_back_to_misc() {
+        let entry = Node::new(NodeKind::from(BIBLATEX_ENTRY))
+            .prop("biblatex:type", "frobnicate")
+            .prop("biblatex:key", "x")
+            .prop("biblatex:title", "T");
+
+        let doc = Document::new().with_content(Node::new(NodeKind::from("document")).child(entry));
+        let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        assert!(output.contains("@misc{x,"));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("frobnicate"))
+        );
     }
 }

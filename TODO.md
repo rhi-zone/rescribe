@@ -5633,6 +5633,60 @@ reader silently dropped them entirely — SPECIAL_ELEMENTS treated the whole wra
 them into `misc` bibliography fields, but no fixture exercises this path yet since no known
 real-world exporter has been observed emitting these specific combinations.
 
+**Resolved (2026-08-04): `rescribe-write-bibtex`/`rescribe-write-biblatex`'s hand-rolled
+emission removed — narrower fix than the `bibtex-fmt`/`biblatex-fmt` extraction called for
+above.** Both writer adapters (`escape_bibtex()`/`escape_biblatex()` plus manual
+per-field/per-entry string building, 643 ln / 440 ln) now build a `biblatex::Entry`/
+`Bibliography` from the same IR shapes they always accepted (`bibliography_entry`/
+`bibliography_field`, the legacy flat `bibtex:entry`/`biblatex:entry`, typed entries, and
+`citation_entry`) and call the crate's own `Entry::to_bibtex_string()`/
+`Bibliography::to_bibtex_string()` (`Entry::to_biblatex_string()`/
+`Bibliography::to_biblatex_string()` for BibLaTeX) to produce output — no hand-rolled
+escaping or entry/field syntax remains in either adapter. `rescribe-write-biblatex`'s
+`Cargo.toml` also switched from raw `path = "../.."` dependencies to `.workspace = true`
+(matching every sibling writer crate; the hard "no path dependencies" constraint had been
+silently violated there since the crate's creation). This is **not** the `bibtex-fmt`
+extraction the paragraph above calls for — the reader side is untouched: both
+`rescribe-read-bibtex` and `rescribe-read-biblatex` still call `biblatex::Bibliography::
+parse` directly, so the `R`-side "adapter contains parsing logic, no standalone `-fmt`
+wrapper crate" violation stands, tracked in `docs/format-audit.md`'s "Violating" table.
+
+Two `biblatex`-crate write-API limitations were found while doing this (both confirmed by
+direct experiment against the crate, not guessed) and are surfaced via `FidelityWarning`
+rather than worked around, since there's no public API to avoid them:
+
+1. **Uncertain/approximate dates are dropped in BibTeX output.** `Entry::to_bibtex_string()`
+   special-cases the `date` field: it re-parses whatever chunks are stored under that key
+   into a `biblatex::Date` and always re-serializes via `DateValue::to_fieldset()`, which
+   discards the `uncertain`/`approximate` flags unconditionally (confirmed: `?`/`~`/`%`
+   suffixes vanish even when the raw chunks already contain them). BibLaTeX output is
+   unaffected — `Entry::to_biblatex_string()` keeps a single `date` field with the suffix
+   intact. `rescribe-write-bibtex` now emits a `FidelityWarning` when this would happen; no
+   fixture currently exercises uncertain/approximate BibTeX dates.
+2. **Custom/unrecognized entry types collapse to `misc`.** Both `EntryType::to_bibtex()` and
+   `EntryType::to_biblatex()` map `EntryType::Unknown(_)` (any type name outside biblatex's
+   own vocabulary) to `Misc`, and both `to_bibtex_string()`/`to_biblatex_string()` call this
+   conversion internally with no way to opt out. The previous hand-rolled adapters emitted
+   any entry-type string verbatim; delegating to the crate means a custom `@mytype{...}`
+   entry now round-trips as `@misc{...}`, losing the original type name. Both writers now
+   emit a `FidelityWarning` in this case; no fixture currently exercises a custom entry
+   type, so this wasn't previously pinned by any test either.
+
+Existing writer unit tests were updated to match the delegated crate's actual output where
+it differs stylistically from the old hand-rolled format (e.g. numeric `month = {03}`
+instead of the old `month = {mar}` abbreviation — both are valid BibTeX, `biblatex`'s
+`DateValue::to_fieldset()` always emits the numeric form). All prior test assertions about
+escaping (`#`/`$`/`%`/`&`/`_`), multi-author joining, and brace-wrapped field values still
+pass unchanged — `biblatex`'s own escaping matches the old hand-rolled rules for the
+characters previously covered, and additionally escapes per-field correctly (e.g. `url`/
+`doi`/`file` fields use `biblatex::mechanics::is_verbatim_field` to skip `~^#&%$_` escaping,
+which the old uniform `escape_bibtex()` did not — a fidelity improvement, not a regression,
+though not fixture-verified either). `fixtures/bibtex/`/`fixtures/biblatex/` are reader-only
+(parse assertions; see `fixtures/spec.md`) and were unaffected. `cargo test -q -p
+rescribe-write-bibtex -p rescribe-write-biblatex -p rescribe-read-bibtex -p
+rescribe-read-biblatex` and `cargo clippy --all-targets --all-features -p
+rescribe-write-bibtex -p rescribe-write-biblatex -- -D warnings` both pass clean.
+
 **Resolved by investigation (2026-07-28): RIS's `SN`/`TY` ambiguity is genuine, not an
 oversight — `field:scheme = "sn"` stays.** The open question above (whether RIS's `TY`
 reference-type tag could be used to resolve `SN` to `isbn` vs. `issn`) was checked against

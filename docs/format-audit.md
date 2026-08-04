@@ -199,6 +199,22 @@ clean.
 | biblatex | 4† | 2† | U | biblatex | production | harness |
 | csl-json | 4† | 2† | U | serde_json | production | harness |
 | ris | 4 | 4 | U | hand | – (harness N/A) | production |
+
+**2026-08-04:** `rescribe-write-bibtex`/`rescribe-write-biblatex` no longer hand-roll BibTeX/
+BibLaTeX syntax and escaping — both now build a `biblatex::Entry`/`Bibliography` and delegate
+serialization to the crate's own `to_bibtex_string()`/`to_biblatex_string()` (see the
+"Violating" table below for the updated per-format notes). The `W` scores above are left
+unchanged pending a fuller audit pass (fuzz/oracle-harness/fixture-coverage work wasn't part
+of this fix); only the hand-rolled-emission violation is resolved. Two `biblatex`-crate write
+API limitations surfaced and are flagged via `FidelityWarning` rather than worked around: (1)
+`Entry::to_bibtex_string()` unconditionally drops BibLaTeX's uncertain/approximate date
+markers (`?`/`~`/`%`) when splitting a date into `year`/`month`/`day` fields for BibTeX output
+— there is no public API to opt out (BibLaTeX output is unaffected); (2) both
+`to_bibtex_string()`/`to_biblatex_string()` collapse any entry type unrecognized by
+`biblatex::EntryType` (`Unknown(_)`) to `misc`, silently discarding the original custom type
+name — again no public opt-out. Neither is covered by an existing fixture. The reader-side `R`
+violation (both readers still call `biblatex::Bibliography::parse` directly, no standalone
+`bibtex-fmt`/`biblatex-fmt` wrapper crate) is unchanged and tracked separately in TODO.md.
 | endnotexml | 3 | 3 | U | quick-xml (endnotexml-fmt) | fuzz (targets exist, compile-clean; not yet run — no `cargo-fuzz` binary in this session's sandbox) | fuzz (same caveat) |
 
 ### Data / interchange
@@ -651,8 +667,8 @@ count and the fraction that is format syntax rather than AST↔IR translation.
 | gfm | (pulldown) | no | **yes** | large | reader walks `pulldown_cmark` events (sanctioned); writer (350 ln) hand-rolled with no backing crate |
 | markdown-strict | (pulldown) | no | **yes** | large | same shape as gfm; writer 377 ln |
 | latex | **no** | **yes** | **yes** | large | worst case: `handwritten.rs` (895 ln) is a full recursive-descent LaTeX parser *inside the reader adapter*, plus a 662-ln tree-sitter backend; writer `builder.rs` (717 ln) is a hand-written emitter |
-| bibtex | **no** | **yes** | **yes** | medium | reader calls third-party `biblatex::Bibliography::parse` directly; writer (643 ln) hand-rolls BibTeX syntax + escaping |
-| biblatex | **no** | **yes** | **yes** | medium | identical shape to bibtex |
+| bibtex | **no** | **yes** | no | medium | reader calls third-party `biblatex::Bibliography::parse` directly (still no standalone `bibtex-fmt` wrapper crate — R violation stands); writer's hand-rolled BibTeX syntax + escaping **removed 2026-08-04** — now builds a `biblatex::Entry`/`Bibliography` and delegates emission to `Entry::to_bibtex_string()`/`Bibliography::to_bibtex_string()` |
+| biblatex | **no** | **yes** | no | medium | same as bibtex: reader still calls `biblatex::Bibliography::parse` directly; writer delegates to `Entry::to_biblatex_string()`/`Bibliography::to_biblatex_string()` as of 2026-08-04 |
 | csl-json | **no** | **yes** | **yes** | large | the CSL-JSON *schema* (`CslItem`/`CslName`/`CslDate`) lives in the adapter, both sides, over raw `serde_json` |
 
 `endnotexml` moved to Clean 2026-08-04: `endnotexml-fmt` extracted (see TODO.md), both

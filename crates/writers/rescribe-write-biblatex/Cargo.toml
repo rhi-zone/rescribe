@@ -1,8 +1,12 @@
 [package]
 name = "rescribe-write-biblatex"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "BibLaTeX writer for rescribe"
 
 [dependencies]
-rescribe-core = { path = "../../rescribe-core" }
-rescribe-std = { path = "../../nodes/rescribe-std" }
+biblatex = "0.11"
+rescribe-core.workspace = true
+rescribe-std.workspace = true
