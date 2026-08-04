@@ -93,6 +93,8 @@
 //! assert!(String::from_utf8(bytes).unwrap().starts_with("# Hello"));
 //! ```
 
+#[cfg(feature = "math")]
+use crate::emit::escape_math;
 use crate::emit::{escape_text, escape_title, escape_url, list_item_marker};
 use crate::events::Event;
 #[cfg(feature = "tables")]
@@ -147,6 +149,11 @@ pub struct Writer<W: Write> {
     /// arrives, since it works purely off recorded byte offsets rather
     /// than live frame state.
     list_correction_marks: Vec<Vec<usize>>,
+    /// Definition-list counterpart of `list_correction_marks` — same
+    /// mechanism, consumed by `Event::DefinitionListTightnessResolved`
+    /// instead of `Event::ListTightnessResolved`.
+    #[cfg(feature = "definition-lists")]
+    def_list_correction_marks: Vec<Vec<usize>>,
     /// Whether a front-matter block has already been written. Mirrors the
     /// old `DocBuilder`'s `get_or_insert`: only the first `FrontMatter`
     /// event is honored, and only if it arrives before any document block.
@@ -170,6 +177,8 @@ impl<W: Write> Writer<W> {
             stack: Vec::new(),
             doc_child_count: 0,
             list_correction_marks: Vec::new(),
+            #[cfg(feature = "definition-lists")]
+            def_list_correction_marks: Vec::new(),
             #[cfg(feature = "frontmatter")]
             frontmatter_written: false,
         }
@@ -215,10 +224,14 @@ impl<W: Write> Writer<W> {
     // ── Context predicates ───────────────────────────────────────────────
 
     fn accepts_blocks(&self) -> bool {
-        matches!(
-            self.stack.last(),
-            None | Some(Frame::Blockquote { .. } | Frame::ListItem { .. })
-        )
+        match self.stack.last() {
+            None | Some(Frame::Blockquote { .. } | Frame::ListItem { .. }) => true,
+            #[cfg(feature = "footnotes")]
+            Some(Frame::FootnoteDefinition { .. }) => true,
+            #[cfg(feature = "definition-lists")]
+            Some(Frame::DefinitionListDefinition { .. }) => true,
+            _ => false,
+        }
     }
 
     fn accepts_inline(&self) -> bool {
@@ -232,6 +245,8 @@ impl<W: Write> Writer<W> {
             ) => true,
             #[cfg(feature = "strikethrough")]
             Some(Frame::Strikethrough { .. }) => true,
+            #[cfg(feature = "definition-lists")]
+            Some(Frame::DefinitionListTitle) => true,
             #[cfg(feature = "tables")]
             Some(Frame::TableCell) => true,
             _ => false,
@@ -249,6 +264,18 @@ impl<W: Write> Writer<W> {
     fn container_child_open(&mut self) -> bool {
         match self.stack.last_mut() {
             Some(Frame::Blockquote { child_count, .. }) => {
+                let first = *child_count == 0;
+                *child_count += 1;
+                !first
+            }
+            #[cfg(feature = "footnotes")]
+            Some(Frame::FootnoteDefinition { child_count, .. }) => {
+                let first = *child_count == 0;
+                *child_count += 1;
+                !first
+            }
+            #[cfg(feature = "definition-lists")]
+            Some(Frame::DefinitionListDefinition { child_count, .. }) => {
                 let first = *child_count == 0;
                 *child_count += 1;
                 !first
@@ -288,18 +315,33 @@ impl<W: Write> Writer<W> {
             return;
         }
         let top_is_paragraph = matches!(self.stack[self.stack.len() - 1], Frame::Paragraph { .. });
-        let parent_is_item = matches!(self.stack[self.stack.len() - 2], Frame::ListItem { .. });
-        if top_is_paragraph && parent_is_item {
+        let parent_is_tight_container =
+            matches!(self.stack[self.stack.len() - 2], Frame::ListItem { .. });
+        #[cfg(feature = "definition-lists")]
+        let parent_is_tight_container = parent_is_tight_container
+            || matches!(
+                self.stack[self.stack.len() - 2],
+                Frame::DefinitionListDefinition { .. }
+            );
+        if top_is_paragraph && parent_is_tight_container {
             self.process(Event::EndParagraph);
         }
     }
 
-    /// If an inline event arrives with a bare `ListItem` on top of the stack
-    /// (a tight list item's un-wrapped inline run), lazily open an implicit
-    /// paragraph so the normal `accepts_inline`-gated write-through path
-    /// handles it uniformly.
+    /// If an inline event arrives with a bare `ListItem` (or, with
+    /// `definition-lists`, a bare `DefinitionListDefinition`) on top of the
+    /// stack — a tight container's un-wrapped inline run — lazily open an
+    /// implicit paragraph so the normal `accepts_inline`-gated write-through
+    /// path handles it uniformly.
     fn ensure_inline_context(&mut self) {
-        if matches!(self.stack.last(), Some(Frame::ListItem { .. })) {
+        let is_tight_container = matches!(self.stack.last(), Some(Frame::ListItem { .. }));
+        #[cfg(feature = "definition-lists")]
+        let is_tight_container = is_tight_container
+            || matches!(
+                self.stack.last(),
+                Some(Frame::DefinitionListDefinition { .. })
+            );
+        if is_tight_container {
             self.process(Event::StartParagraph);
         }
     }
@@ -621,6 +663,140 @@ impl<W: Write> Writer<W> {
             // not something introduced or fixed here; see TODO.md).
             Event::LinkDef { .. } => {}
 
+            // ── Footnotes ─────────────────────────────────────────────────
+            #[cfg(feature = "footnotes")]
+            Event::StartFootnoteDefinition { label } => {
+                let mark = self.block_open();
+                self.push_out("[^");
+                self.push_out(&label);
+                self.push_out("]: ");
+                self.stack.push(Frame::FootnoteDefinition {
+                    mark,
+                    child_count: 0,
+                });
+            }
+            #[cfg(feature = "footnotes")]
+            Event::EndFootnoteDefinition => {
+                if let Some(Frame::FootnoteDefinition { mark, .. }) = self.stack.pop() {
+                    // Fixed 4-space continuation indent — GFM footnote
+                    // continuation lines don't scale with the marker's own
+                    // width (see `emit_footnote_definition`'s doc comment).
+                    self.reindent_list_item(mark, "    ");
+                    self.block_close(mark);
+                }
+            }
+            #[cfg(feature = "footnotes")]
+            Event::FootnoteReference { label } => {
+                self.ensure_inline_context();
+                if self.accepts_inline() {
+                    self.push_out("[^");
+                    self.push_out(&label);
+                    self.push_out("]");
+                }
+            }
+
+            // ── Definition lists ─────────────────────────────────────────
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionList => {
+                let mark = self.block_open();
+                self.stack.push(Frame::DefinitionList {
+                    mark,
+                    tight: true,
+                    item_count: 0,
+                    def_count: 0,
+                });
+                self.def_list_correction_marks.push(Vec::new());
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionList => {
+                if let Some(Frame::DefinitionList { mark, .. }) = self.stack.pop() {
+                    self.block_close(mark);
+                }
+                self.def_list_correction_marks.pop();
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::DefinitionListTightnessResolved { tight } => {
+                if let Some(Frame::DefinitionList { tight: t, .. }) = self.stack.last_mut() {
+                    *t = tight;
+                }
+                if !tight && let Some(marks) = self.def_list_correction_marks.last() {
+                    for &pos in marks.iter().rev() {
+                        self.out.insert(pos, '\n');
+                    }
+                }
+                if let Some(marks) = self.def_list_correction_marks.last_mut() {
+                    marks.clear();
+                }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionListTitle => {
+                self.close_dangling_implicit_paragraph();
+                // Item groups are always blank-separated, regardless of
+                // tightness — see `crate::emit::emit_definition_list`'s doc
+                // comment.
+                let sep =
+                    if let Some(Frame::DefinitionList { item_count, .. }) = self.stack.last_mut() {
+                        let sep = *item_count > 0;
+                        *item_count += 1;
+                        sep
+                    } else {
+                        false
+                    };
+                if sep {
+                    self.push_out("\n");
+                }
+                self.stack.push(Frame::DefinitionListTitle);
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionListTitle => {
+                if matches!(self.stack.pop(), Some(Frame::DefinitionListTitle)) {
+                    self.push_out("\n");
+                    if let Some(Frame::DefinitionList { def_count, .. }) = self.stack.last_mut() {
+                        *def_count = 0;
+                    }
+                    // Optimistically skip the term→first-definition blank
+                    // line (tight is not knowable yet — it's only resolved
+                    // once, at DefinitionListTightnessResolved, after every
+                    // item in the list has been seen). Record the position
+                    // in case that correction says otherwise.
+                    if let Some(marks) = self.def_list_correction_marks.last_mut() {
+                        marks.push(self.out.len());
+                    }
+                }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionListDefinition => {
+                self.close_dangling_implicit_paragraph();
+                if let Some(Frame::DefinitionList { def_count, .. }) = self.stack.last_mut() {
+                    if *def_count > 0 {
+                        // Optimistically skip the definition→definition
+                        // blank line — same not-yet-knowable-tightness
+                        // reasoning as the term→first-definition case
+                        // above.
+                        if let Some(marks) = self.def_list_correction_marks.last_mut() {
+                            marks.push(self.out.len());
+                        }
+                    }
+                    *def_count += 1;
+                }
+                let mark = self.out.len();
+                self.push_out(":   ");
+                self.stack.push(Frame::DefinitionListDefinition {
+                    mark,
+                    child_count: 0,
+                });
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionListDefinition => {
+                self.close_dangling_implicit_paragraph();
+                if let Some(Frame::DefinitionListDefinition { mark, .. }) = self.stack.pop() {
+                    self.reindent_list_item(mark, "    ");
+                    if !matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
+                        self.out.truncate(mark);
+                    }
+                }
+            }
+
             #[cfg(feature = "tables")]
             Event::StartTable { alignments } => {
                 let mark = self.block_open();
@@ -805,6 +981,24 @@ impl<W: Write> Writer<W> {
                     self.push_out("  \n");
                 }
             }
+            #[cfg(feature = "math")]
+            Event::InlineMath(source) => {
+                self.ensure_inline_context();
+                if self.accepts_inline() {
+                    self.push_out("$");
+                    self.push_out(&escape_math(&source));
+                    self.push_out("$");
+                }
+            }
+            #[cfg(feature = "math")]
+            Event::DisplayMath(source) => {
+                self.ensure_inline_context();
+                if self.accepts_inline() {
+                    self.push_out("$$");
+                    self.push_out(&escape_math(&source));
+                    self.push_out("$$");
+                }
+            }
         }
     }
 }
@@ -881,6 +1075,42 @@ enum Frame {
     TableRow,
     #[cfg(feature = "tables")]
     TableCell,
+    /// A footnote definition: `child_count` tracks whether an inter-block
+    /// blank-line separator is needed for its (block-level-only) content —
+    /// same mechanism as `Blockquote`'s.
+    #[cfg(feature = "footnotes")]
+    FootnoteDefinition {
+        mark: usize,
+        child_count: usize,
+    },
+    /// A definition list. `item_count` gates the always-blank inter-item
+    /// separator; `def_count` (reset at each `DefinitionListTitle`) gates
+    /// the intra-item term→first-definition and definition→definition
+    /// separators, which are conditional on `tight`. `tight` starts `true`
+    /// (mirroring `Frame::List`) and is corrected once, if needed, by
+    /// `Event::DefinitionListTightnessResolved`.
+    #[cfg(feature = "definition-lists")]
+    DefinitionList {
+        mark: usize,
+        tight: bool,
+        item_count: usize,
+        def_count: usize,
+    },
+    /// Marker frame while inside `StartDefinitionListTitle`/
+    /// `EndDefinitionListTitle` — write-through, no mark needed (unlike
+    /// `Heading`, nothing is decorated afterward).
+    #[cfg(feature = "definition-lists")]
+    DefinitionListTitle,
+    /// A single definition (`dd`) body. `child_count` tracks blank-line
+    /// separation between multiple blocks *within* one definition (always
+    /// blank-separated, independent of the list's own `tight` — see
+    /// `pulldown-cmark`'s `definition_lists_test_6`, which places two
+    /// paragraphs in one `dd`).
+    #[cfg(feature = "definition-lists")]
+    DefinitionListDefinition {
+        mark: usize,
+        child_count: usize,
+    },
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -1075,6 +1305,18 @@ mod tests {
             // handling via a hand-built, bug-free event sequence.
             "line one  \nline two\n",
         ];
+        #[allow(unused_mut)]
+        let mut inputs: Vec<&str> = inputs.to_vec();
+        #[cfg(feature = "footnotes")]
+        inputs.push("Text.[^1]\n\n[^1]: A note.\n");
+        #[cfg(feature = "definition-lists")]
+        inputs.push("apple\n:   red fruit\n\norange\n:   orange fruit\n");
+        #[cfg(feature = "definition-lists")]
+        inputs.push("apple\n:   red fruit\n:   computer company\n");
+        #[cfg(feature = "math")]
+        inputs.push("Euler's identity: $e to the i pi plus 1 equals 0$\n");
+        #[cfg(feature = "math")]
+        inputs.push("$$a squared plus b squared equals c squared$$\n");
         for input in inputs {
             let (doc, _) = crate::parse::parse(input.as_bytes());
             let built = crate::emit::emit(&doc);
@@ -1159,6 +1401,33 @@ mod tests {
             pre_finish > 0,
             "Writer wrote zero bytes to the sink before finish() — not a genuine incremental \
              streaming writer"
+        );
+    }
+
+    /// The `ListTightnessResolved`-style correction splice must work for
+    /// definition lists too — this is the one path the tight-only inputs in
+    /// `test_writer_byte_identical_to_builder` never exercise.
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_writer_loose_definition_list_matches_builder() {
+        let input = "apple\n\n:   red fruit\n\norange\n\n:   orange fruit\n";
+        let (doc, _) = crate::parse::parse(input.as_bytes());
+        let built = crate::emit::emit(&doc);
+
+        let mut w = Writer::new(Vec::<u8>::new());
+        for e in crate::events::events_str(input) {
+            w.write_event(e);
+        }
+        let streamed = w.finish().unwrap();
+
+        let (ast_expected, _) = crate::parse::parse(&built);
+        let (ast_out, _) = crate::parse::parse(&streamed);
+        assert_eq!(
+            ast_expected.strip_spans(),
+            ast_out.strip_spans(),
+            "streaming Writer diverged from emit() for loose definition list\nbuilt:\n{}\nstreamed:\n{}",
+            String::from_utf8_lossy(&built),
+            String::from_utf8_lossy(&streamed),
         );
     }
 

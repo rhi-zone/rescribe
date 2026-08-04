@@ -148,6 +148,55 @@ pub enum Event<'a> {
     },
     EndImage,
 
+    // ── Footnotes (`footnotes` feature) ──────────────────────────────────────
+    /// A footnote definition (`[^label]: content`) — behaves exactly like
+    /// `StartBlockquote`/`EndBlockquote` (content is always block-level, with
+    /// no tight-inline shortcut; pulldown-cmark always wraps footnote
+    /// definition content in real `Paragraph` tags).
+    #[cfg(feature = "footnotes")]
+    StartFootnoteDefinition {
+        label: Cow<'a, str>,
+    },
+    #[cfg(feature = "footnotes")]
+    EndFootnoteDefinition,
+    /// A reference to a footnote (`[^label]`).
+    #[cfg(feature = "footnotes")]
+    FootnoteReference {
+        label: Cow<'a, str>,
+    },
+
+    // ── Definition lists (`definition-lists` feature) ───────────────────────
+    #[cfg(feature = "definition-lists")]
+    StartDefinitionList,
+    #[cfg(feature = "definition-lists")]
+    EndDefinitionList,
+    /// Corrects a definition list's tightness once it becomes fully known —
+    /// same mechanism and same reason as [`Event::ListTightnessResolved`]
+    /// (see its doc comment): `Tag::DefinitionList` carries no tightness bit
+    /// of its own, so `EventIter` emits `StartDefinitionList` without a
+    /// tightness field and, if the list turns out loose, emits this event
+    /// exactly once, immediately before the matching `EndDefinitionList`.
+    #[cfg(feature = "definition-lists")]
+    DefinitionListTightnessResolved {
+        tight: bool,
+    },
+    /// A definition list term (`dt`). Always inline-only content —
+    /// pulldown-cmark never wraps a title in its own nested `Paragraph` tag,
+    /// so (unlike `StartItem`/`StartDefinitionListDefinition`) this needs no
+    /// synthetic-paragraph handling.
+    #[cfg(feature = "definition-lists")]
+    StartDefinitionListTitle,
+    #[cfg(feature = "definition-lists")]
+    EndDefinitionListTitle,
+    /// A single definition (`dd`) body. Like `StartItem`, may be followed
+    /// directly by bare inline events (tight) with no wrapping `Paragraph`
+    /// tag — `EventIter` synthesizes `StartParagraph`/`EndParagraph` around
+    /// such runs the same way it does for tight list items.
+    #[cfg(feature = "definition-lists")]
+    StartDefinitionListDefinition,
+    #[cfg(feature = "definition-lists")]
+    EndDefinitionListDefinition,
+
     // ── Leaf events ──────────────────────────────────────────────────────────
     Text(Cow<'a, str>),
     /// Inline code span.
@@ -162,6 +211,12 @@ pub enum Event<'a> {
     SoftBreak,
     HardBreak,
     ThematicBreak,
+    /// Inline math (`$math$`, `math` feature).
+    #[cfg(feature = "math")]
+    InlineMath(Cow<'a, str>),
+    /// Display math (`$$math$$`, `math` feature).
+    #[cfg(feature = "math")]
+    DisplayMath(Cow<'a, str>),
 }
 
 /// Type alias for events with `'static` lifetime (all `Cow` fields are owned).
@@ -251,6 +306,36 @@ impl<'a> Event<'a> {
             Event::SoftBreak => Event::SoftBreak,
             Event::HardBreak => Event::HardBreak,
             Event::ThematicBreak => Event::ThematicBreak,
+            #[cfg(feature = "footnotes")]
+            Event::StartFootnoteDefinition { label } => Event::StartFootnoteDefinition {
+                label: Cow::Owned(label.into_owned()),
+            },
+            #[cfg(feature = "footnotes")]
+            Event::EndFootnoteDefinition => Event::EndFootnoteDefinition,
+            #[cfg(feature = "footnotes")]
+            Event::FootnoteReference { label } => Event::FootnoteReference {
+                label: Cow::Owned(label.into_owned()),
+            },
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionList => Event::StartDefinitionList,
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionList => Event::EndDefinitionList,
+            #[cfg(feature = "definition-lists")]
+            Event::DefinitionListTightnessResolved { tight } => {
+                Event::DefinitionListTightnessResolved { tight }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionListTitle => Event::StartDefinitionListTitle,
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionListTitle => Event::EndDefinitionListTitle,
+            #[cfg(feature = "definition-lists")]
+            Event::StartDefinitionListDefinition => Event::StartDefinitionListDefinition,
+            #[cfg(feature = "definition-lists")]
+            Event::EndDefinitionListDefinition => Event::EndDefinitionListDefinition,
+            #[cfg(feature = "math")]
+            Event::InlineMath(cow) => Event::InlineMath(Cow::Owned(cow.into_owned())),
+            #[cfg(feature = "math")]
+            Event::DisplayMath(cow) => Event::DisplayMath(Cow::Owned(cow.into_owned())),
         }
     }
 }
@@ -281,19 +366,43 @@ struct ListState {
     tight: bool,
 }
 
-/// State tracked per currently-open list item.
-struct ItemFrame {
-    /// Whether a synthetic `StartParagraph` is currently open for this item
-    /// (see `item_stack`'s doc comment on `EventIter`).
+/// Which kind of tight-inline-shortcut container a [`TightFrame`] represents.
+/// `Item` and (when the `definition-lists` feature is on)
+/// `DefinitionListDefinition` are structurally identical from `EventIter`'s
+/// point of view — both may receive bare inline content with no wrapping
+/// `Paragraph` tag when their enclosing list/definition-list is tight — but
+/// the tightness-correction signal they produce targets a different stack
+/// (`list_stack` vs `def_list_stack`), so the frame remembers which.
+enum TightFrameKind {
+    Item,
+    #[cfg(feature = "definition-lists")]
+    DefinitionListDefinition,
+}
+
+/// State tracked per currently-open tight-inline-shortcut container (a list
+/// item or, with `definition-lists`, a definition body).
+struct TightFrame {
+    kind: TightFrameKind,
+    /// Whether a synthetic `StartParagraph` is currently open for this
+    /// container (see `tight_stack`'s doc comment on `EventIter`).
     synthetic_open: bool,
-    /// Nesting depth of blockquotes opened since this item began (relative
-    /// depth, not absolute document depth). A real `Paragraph` nested
-    /// inside `Item > Blockquote > Paragraph` is never surgerized by
-    /// pulldown-cmark regardless of list tightness (its own tight-list
-    /// rewrite only touches an item's *direct* block children), so it must
-    /// not be mistaken for the tight/loose signal — the signal only counts
-    /// when `quote_depth == 0`.
+    /// Nesting depth of blockquotes (and, with `footnotes`, footnote
+    /// definitions — see `StartFootnoteDefinition`'s handling) opened since
+    /// this container began (relative depth, not absolute document depth).
+    /// A real `Paragraph` nested inside `Item > Blockquote > Paragraph` is
+    /// never surgerized by pulldown-cmark regardless of list tightness (its
+    /// own tight-list rewrite only touches a container's *direct* block
+    /// children), so it must not be mistaken for the tight/loose signal —
+    /// the signal only counts when `quote_depth == 0`.
     quote_depth: u32,
+}
+
+/// State tracked for definition-list tightness detection — mirrors
+/// [`ListState`] exactly, one level for `list_stack`'s definition-list
+/// counterpart.
+#[cfg(feature = "definition-lists")]
+struct DefListState {
+    tight: bool,
 }
 
 /// Streaming event iterator over a CommonMark `&str`.
@@ -312,17 +421,23 @@ pub struct EventIter<'a> {
     image: Option<ImageState>,
     /// Stack of list states for tightness tracking.
     list_stack: Vec<ListState>,
-    /// Stack of per-item synthetic-paragraph state, one entry per currently
-    /// open `Tag::Item`. `true` means a synthetic `StartParagraph` is
-    /// currently open for that item (see the pre-dispatch gate in `next()`).
-    /// pulldown-cmark omits `Start/End(Paragraph)` around a tight list
-    /// item's bare inline content, but `parse()`'s AST always wraps that
-    /// content in an implicit `Block::Paragraph` (`parse.rs`'s
-    /// `flush_tight_inlines`) — this stack lets `EventIter` synthesize the
-    /// matching `StartParagraph`/`EndParagraph` pair without buffering the
-    /// item. Also carries the per-item state needed for list-tightness
-    /// detection (see `ItemFrame`).
-    item_stack: Vec<ItemFrame>,
+    /// Stack of definition-list states for tightness tracking — mirrors
+    /// `list_stack`, one entry per currently open `Tag::DefinitionList`.
+    #[cfg(feature = "definition-lists")]
+    def_list_stack: Vec<DefListState>,
+    /// Stack of per-container synthetic-paragraph state, one entry per
+    /// currently open `Tag::Item` or (with `definition-lists`)
+    /// `Tag::DefinitionListDefinition`. `true` means a synthetic
+    /// `StartParagraph` is currently open for that container (see the
+    /// pre-dispatch gate in `next()`). pulldown-cmark omits
+    /// `Start/End(Paragraph)` around such a container's bare inline content
+    /// when tight, but `parse()`'s AST always wraps that content in an
+    /// implicit `Block::Paragraph` (`parse.rs`'s `flush_tight_inlines`) —
+    /// this stack lets `EventIter` synthesize the matching
+    /// `StartParagraph`/`EndParagraph` pair without buffering the
+    /// container. Also carries the per-container state needed for
+    /// tightness detection (see `TightFrame`).
+    tight_stack: Vec<TightFrame>,
     /// Depth counter for "real" inline-bearing containers that already
     /// come with their own explicit open/close tags (`Paragraph`,
     /// `Heading`, table cells) — incremented/decremented alongside those
@@ -358,7 +473,9 @@ impl<'a> EventIter<'a> {
             code_block: None,
             image: None,
             list_stack: Vec::new(),
-            item_stack: Vec::new(),
+            #[cfg(feature = "definition-lists")]
+            def_list_stack: Vec::new(),
+            tight_stack: Vec::new(),
             text_container_depth: 0,
             started: false,
             ended: false,
@@ -417,32 +534,35 @@ impl<'a> Iterator for EventIter<'a> {
 
             use pulldown_cmark::{CodeBlockKind, Event as PdEvent, Tag, TagEnd};
 
-            // Synthetic-paragraph gate for tight list items (see
-            // `item_stack`'s doc comment). Only applies directly under an
-            // `Item` — skipped while buffering a code block or image (their
-            // internal `Text` events are not item-level content) and while
-            // inside a real inline-bearing container (`text_container_depth
-            // > 0`, e.g. a loose item's actual `Paragraph`).
+            // Synthetic-paragraph gate for tight list items and (with
+            // `definition-lists`) tight definition bodies — see
+            // `tight_stack`'s doc comment. Only applies directly under such
+            // a container — skipped while buffering a code block or image
+            // (their internal `Text` events are not container-level
+            // content) and while inside a real inline-bearing container
+            // (`text_container_depth > 0`, e.g. a loose item's actual
+            // `Paragraph`).
             if self.code_block.is_none()
                 && self.image.is_none()
                 && self.text_container_depth == 0
-                && let Some(open) = self.item_stack.last().map(|f| f.synthetic_open)
+                && let Some(open) = self.tight_stack.last().map(|f| f.synthetic_open)
             {
                 let is_inline_flow = is_inline_flow_event(&pd_event);
                 if open && !is_inline_flow {
-                    // Leaving the item's bare inline content (a nested
-                    // block starts, or the item itself ends): close the
-                    // synthetic paragraph before letting `pd_event` through.
-                    self.item_stack.last_mut().unwrap().synthetic_open = false;
+                    // Leaving the container's bare inline content (a nested
+                    // block starts, or the container itself ends): close
+                    // the synthetic paragraph before letting `pd_event`
+                    // through.
+                    self.tight_stack.last_mut().unwrap().synthetic_open = false;
                     self.pending_pd.push_front((pd_event, _range));
                     return Some(Event::EndParagraph);
                 }
                 if !open && is_inline_flow {
-                    // Bare inline content arriving directly under the item,
-                    // with no wrapping Paragraph from pulldown-cmark: open
-                    // the synthetic paragraph before letting `pd_event`
-                    // through.
-                    self.item_stack.last_mut().unwrap().synthetic_open = true;
+                    // Bare inline content arriving directly under the
+                    // container, with no wrapping Paragraph from
+                    // pulldown-cmark: open the synthetic paragraph before
+                    // letting `pd_event` through.
+                    self.tight_stack.last_mut().unwrap().synthetic_open = true;
                     self.pending_pd.push_front((pd_event, _range));
                     return Some(Event::StartParagraph);
                 }
@@ -452,17 +572,30 @@ impl<'a> Iterator for EventIter<'a> {
                 // ── Block opens ──────────────────────────────────────────────
                 PdEvent::Start(Tag::Paragraph) => {
                     // A *real* Paragraph tag arriving as a direct child of
-                    // the innermost open item (no intervening blockquote)
-                    // is only ever emitted by pulldown-cmark when the whole
-                    // enclosing list is loose — see `ListState`'s and
+                    // the innermost open tight container (no intervening
+                    // blockquote) is only ever emitted by pulldown-cmark
+                    // when the whole enclosing list/definition-list is
+                    // loose — see `ListState`'s and
                     // `Event::ListTightnessResolved`'s doc comments. Record
                     // the signal now; the correction event itself is only
-                    // emitted later, at `EndList`, once (see there).
-                    if let Some(item) = self.item_stack.last()
-                        && item.quote_depth == 0
-                        && let Some(ls) = self.list_stack.last_mut()
+                    // emitted later, at `EndList`/`EndDefinitionList`, once
+                    // (see there).
+                    if let Some(frame) = self.tight_stack.last()
+                        && frame.quote_depth == 0
                     {
-                        ls.tight = false;
+                        match frame.kind {
+                            TightFrameKind::Item => {
+                                if let Some(ls) = self.list_stack.last_mut() {
+                                    ls.tight = false;
+                                }
+                            }
+                            #[cfg(feature = "definition-lists")]
+                            TightFrameKind::DefinitionListDefinition => {
+                                if let Some(ds) = self.def_list_stack.last_mut() {
+                                    ds.tight = false;
+                                }
+                            }
+                        }
                     }
                     self.text_container_depth += 1;
                     return Some(Event::StartParagraph);
@@ -474,8 +607,8 @@ impl<'a> Iterator for EventIter<'a> {
                     });
                 }
                 PdEvent::Start(Tag::BlockQuote(_)) => {
-                    if let Some(item) = self.item_stack.last_mut() {
-                        item.quote_depth += 1;
+                    if let Some(frame) = self.tight_stack.last_mut() {
+                        frame.quote_depth += 1;
                     }
                     return Some(Event::StartBlockquote);
                 }
@@ -512,7 +645,8 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "task-lists")]
                 PdEvent::Start(Tag::Item) => {
-                    self.item_stack.push(ItemFrame {
+                    self.tight_stack.push(TightFrame {
+                        kind: TightFrameKind::Item,
                         synthetic_open: false,
                         quote_depth: 0,
                     });
@@ -535,7 +669,8 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(not(feature = "task-lists"))]
                 PdEvent::Start(Tag::Item) => {
-                    self.item_stack.push(ItemFrame {
+                    self.tight_stack.push(TightFrame {
+                        kind: TightFrameKind::Item,
                         synthetic_open: false,
                         quote_depth: 0,
                     });
@@ -592,6 +727,37 @@ impl<'a> Iterator for EventIter<'a> {
                 PdEvent::Start(Tag::TableCell) => {
                     self.text_container_depth += 1;
                     return Some(Event::StartTableCell);
+                }
+                #[cfg(feature = "footnotes")]
+                PdEvent::Start(Tag::FootnoteDefinition(label)) => {
+                    // Behaves like BlockQuote: content is always block-level
+                    // (see StartFootnoteDefinition's doc comment), so guard
+                    // any enclosing tight container's quote_depth exactly as
+                    // BlockQuote does.
+                    if let Some(frame) = self.tight_stack.last_mut() {
+                        frame.quote_depth += 1;
+                    }
+                    return Some(Event::StartFootnoteDefinition {
+                        label: Cow::Owned(label.into_string()),
+                    });
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::Start(Tag::DefinitionList) => {
+                    self.def_list_stack.push(DefListState { tight: true });
+                    return Some(Event::StartDefinitionList);
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::Start(Tag::DefinitionListTitle) => {
+                    return Some(Event::StartDefinitionListTitle);
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::Start(Tag::DefinitionListDefinition) => {
+                    self.tight_stack.push(TightFrame {
+                        kind: TightFrameKind::DefinitionListDefinition,
+                        synthetic_open: false,
+                        quote_depth: 0,
+                    });
+                    return Some(Event::StartDefinitionListDefinition);
                 }
 
                 // ── Inline opens ──────────────────────────────────────────────
@@ -660,8 +826,8 @@ impl<'a> Iterator for EventIter<'a> {
                     });
                 }
                 PdEvent::End(TagEnd::BlockQuote(_)) => {
-                    if let Some(item) = self.item_stack.last_mut() {
-                        item.quote_depth = item.quote_depth.saturating_sub(1);
+                    if let Some(frame) = self.tight_stack.last_mut() {
+                        frame.quote_depth = frame.quote_depth.saturating_sub(1);
                     }
                     return Some(Event::EndBlockquote);
                 }
@@ -688,11 +854,40 @@ impl<'a> Iterator for EventIter<'a> {
                     return Some(Event::EndList);
                 }
                 PdEvent::End(TagEnd::Item) => {
-                    self.item_stack.pop();
+                    self.tight_stack.pop();
                     return Some(Event::EndItem);
                 }
                 PdEvent::End(TagEnd::HtmlBlock) => {
                     // Nothing extra to emit — Html events already forwarded.
+                }
+                #[cfg(feature = "footnotes")]
+                PdEvent::End(TagEnd::FootnoteDefinition) => {
+                    if let Some(frame) = self.tight_stack.last_mut() {
+                        frame.quote_depth = frame.quote_depth.saturating_sub(1);
+                    }
+                    return Some(Event::EndFootnoteDefinition);
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::End(TagEnd::DefinitionList) => {
+                    if let Some(ds) = self.def_list_stack.pop()
+                        && !ds.tight
+                    {
+                        // Same one-shot correction pattern as
+                        // TagEnd::List — see Event::ListTightnessResolved's
+                        // doc comment.
+                        self.pending.push_back(Event::EndDefinitionList);
+                        return Some(Event::DefinitionListTightnessResolved { tight: false });
+                    }
+                    return Some(Event::EndDefinitionList);
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::End(TagEnd::DefinitionListTitle) => {
+                    return Some(Event::EndDefinitionListTitle);
+                }
+                #[cfg(feature = "definition-lists")]
+                PdEvent::End(TagEnd::DefinitionListDefinition) => {
+                    self.tight_stack.pop();
+                    return Some(Event::EndDefinitionListDefinition);
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::End(TagEnd::Table) => {
@@ -808,8 +1003,24 @@ impl<'a> Iterator for EventIter<'a> {
                 PdEvent::Rule => {
                     return Some(Event::ThematicBreak);
                 }
+                #[cfg(feature = "footnotes")]
+                PdEvent::FootnoteReference(label) => {
+                    return Some(Event::FootnoteReference {
+                        label: Cow::Owned(label.into_string()),
+                    });
+                }
+                #[cfg(feature = "math")]
+                PdEvent::InlineMath(math) => {
+                    return Some(Event::InlineMath(Cow::Owned(math.into_string())));
+                }
+                #[cfg(feature = "math")]
+                PdEvent::DisplayMath(math) => {
+                    return Some(Event::DisplayMath(Cow::Owned(math.into_string())));
+                }
 
-                // ── Ignored (pulldown extensions not modeled here) ────────────
+                // ── Ignored (reached only when the corresponding construct
+                // feature is off, so pulldown-cmark never produces the
+                // event) ───────────────────────────────────────────────────
                 _ => {}
             }
         }
@@ -856,6 +1067,31 @@ fn is_inline_flow_event(ev: &pulldown_cmark::Event<'_>) -> bool {
             | PdEvent::Start(Tag::Image { .. })
             | PdEvent::End(TagEnd::Image)
     ) || is_inline_flow_strikethrough(ev)
+        || is_inline_flow_footnote_reference(ev)
+        || is_inline_flow_math(ev)
+}
+
+#[cfg(feature = "footnotes")]
+fn is_inline_flow_footnote_reference(ev: &pulldown_cmark::Event<'_>) -> bool {
+    matches!(ev, pulldown_cmark::Event::FootnoteReference(_))
+}
+
+#[cfg(not(feature = "footnotes"))]
+fn is_inline_flow_footnote_reference(_ev: &pulldown_cmark::Event<'_>) -> bool {
+    false
+}
+
+#[cfg(feature = "math")]
+fn is_inline_flow_math(ev: &pulldown_cmark::Event<'_>) -> bool {
+    matches!(
+        ev,
+        pulldown_cmark::Event::InlineMath(_) | pulldown_cmark::Event::DisplayMath(_)
+    )
+}
+
+#[cfg(not(feature = "math"))]
+fn is_inline_flow_math(_ev: &pulldown_cmark::Event<'_>) -> bool {
+    false
 }
 
 #[cfg(feature = "strikethrough")]
@@ -1007,6 +1243,63 @@ mod tests {
             })
             .collect();
         assert_eq!(checked, vec![Some(false), Some(true)]);
+    }
+
+    #[test]
+    #[cfg(feature = "footnotes")]
+    fn test_events_footnote() {
+        let evs = collect("Text.[^1]\n\n[^1]: A note.\n");
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::FootnoteReference { label } if label == "1"))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartFootnoteDefinition { label } if label == "1"))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::EndFootnoteDefinition))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_events_definition_list() {
+        let evs = collect("apple\n:   red fruit\n\norange\n:   orange fruit\n");
+        assert!(evs.iter().any(|e| matches!(e, Event::StartDefinitionList)));
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartDefinitionListTitle))
+                .count(),
+            2
+        );
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartDefinitionListDefinition))
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_events_inline_math() {
+        let evs = collect("$x plus y$\n");
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::InlineMath(s) if s == "x plus y"))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_events_display_math() {
+        let evs = collect("$$x plus y$$\n");
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::DisplayMath(s) if s == "x plus y"))
+        );
     }
 
     #[test]

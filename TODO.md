@@ -3340,37 +3340,71 @@ those rows should be aware `events()` is not yet at parity for `docx`/`pptx`, an
   `crates/rescribe-fixtures/tests/run.rs`):** YAML + TOML front matter, GFM tables, GFM
   task lists, GFM strikethrough (refactored from always-on to feature-gated).
 
-  **Explicitly deferred, not silently dropped:** footnotes, definition lists, math. These
-  three remain unimplemented in `commonmark-fmt` (feature names `footnotes`/
-  `definition-lists`/`math` are reserved in `Cargo.toml` — inert today, no `Options` bit,
-  no AST variant — so downstream `Cargo.toml`s can request them now without a future
-  breaking rename). Concretely still open:
-  - `commonmark-fmt`: wire `Options::ENABLE_FOOTNOTES` → `Block`/`Inline`/`Event` variants
-    for `FootnoteReference`/`FootnoteDefinition` (mirror the `tables` implementation shape
-    in `parse.rs`/`events.rs`/`emit.rs`/`writer.rs`); `Options::ENABLE_DEFINITION_LIST` →
-    `DefinitionList`/`DefinitionListTitle`/`DefinitionListDefinition`; `Options::ENABLE_MATH`
-    → `InlineMath`/`DisplayMath` (check whether to model as `math_inline`/`math_display`
-    IR nodes, matching `pulldown.rs`'s existing mapping, or raw-preserve — undecided, a
-    real design fork, not resolved here).
-  - The markdown `footnote` fixture is excluded from the default-backend `markdown` test
-    in `crates/rescribe-fixtures/tests/run.rs` via a new `run_format_fixtures_excluding`
-    helper (and from `markdown_backends_agree`'s comparison) — tracked here, not silently
-    passing. Once footnotes land in `commonmark-fmt` + the adapters, remove both
-    exclusions.
-  - Per CLAUDE.md, a reader that drops a semantic construct without warning is incorrect.
-    The default backend currently has **no fidelity warning at all** for footnote/
-    definition-list/math source syntax — unlike YAML/TOML front matter (which was
-    actively misparsed into wrong nodes, now fixed), these three constructs currently
-    degrade *gracefully* to plain prose (CommonMark has no syntax collision with them, so
-    nothing is corrupted structurally) — but the semantic construct is still silently
-    lost. A heuristic best-effort detector was deliberately NOT added in this session
-    beyond a light source-text scan for footnote-style `[^label]:` and definition-list-
-    style `term\n: definition` lines (in
-    `crates/readers/rescribe-read-markdown/src/commonmark.rs::detect_unsupported_extensions`)
-    — a `$`-based math heuristic was considered and rejected as too false-positive-prone
-    (matches ordinary currency amounts in prose) without further refinement (e.g. requiring
-    a matched pair of `$…$` with no whitespace immediately inside). Revisit before
-    `math` fidelity-warning coverage is claimed complete.
+  **Update 2026-08-04: footnotes/definition-lists/math landed in `commonmark-fmt` itself
+  — the items below are historical record of what was open, not current state.** All
+  three Cargo features are real: `Options::ENABLE_FOOTNOTES`/`ENABLE_DEFINITION_LIST`/
+  `ENABLE_MATH` gated in `options.rs`; `Block::FootnoteDefinition`/`DefinitionList` (+
+  `DefinitionListItem`) and `Inline::FootnoteReference`/`InlineMath`/`DisplayMath` added
+  to the AST (all with `Span`); real construction/emission/streaming-events/streaming-
+  writer across `parse.rs`/`emit.rs`/`events.rs`/`writer.rs`, mirroring the `tables`
+  implementation's shape as directed, not its exact node-kind names.
+
+  **The math design fork ("undecided" below) is now resolved — by matching existing
+  precedent, not a fresh decision.** `rescribe-read-markdown/src/pulldown.rs` (the legacy
+  pulldown backend, consuming the identical pulldown-cmark event stream) already fully
+  implements all three constructs: `Event::FootnoteReference`/`Tag::FootnoteDefinition` →
+  `footnote_ref`/`footnote_def` IR nodes; `Tag::DefinitionList[Title/Definition]` →
+  `definition_list`/`definition_term`/`definition_desc`; `Event::InlineMath`/`DisplayMath`
+  → `math_inline`/`math_display` IR nodes with `math:format="latex"` + `math:source`. That
+  last pattern also matches the MathML raw-preservation convention independently
+  established for docbook-fmt/jats-fmt/html-fmt (same `math_inline`/`math_display` node
+  kinds, same `math:format`/`math:source` prop names, `math:format="mathml"` instead of
+  `"latex"` — see those crates' entries and `docs/adr/`). So: same node kinds, same prop
+  names, format-appropriate `math:format` value — not a coincidence, the two independent
+  sessions converged because it's the obvious mapping once both exist to compare against.
+  `commonmark-fmt`'s own AST doesn't carry `math:format` at all (that's an IR-adapter
+  concern) — just `source: String`, since CommonMark math is always TeX/LaTeX syntax by
+  convention.
+
+  **One genuine, non-implementation limitation found and documented, not silently
+  papered over:** unlike backtick code spans (escaping a run of N backticks by wrapping in
+  N+1 is free — delimiter length carries no other meaning), CommonMark's `$`/`$$` math
+  delimiter *length is itself semantic* (one means inline, two mean display), so there is
+  no "use more delimiters" escape hatch for a literal `$` inside math source. The only
+  in-band way to stop a `$` from closing the span early is a preceding backslash — but
+  pulldown-cmark captures the span's raw source **verbatim, backslash included**
+  (confirmed against pulldown-cmark's own `math_test_9`: `$\$$` round-trips as literal
+  `\$`, not `$` — the backslash is not stripped). `emit.rs`'s `escape_math` still inserts
+  the backslash (keeps output parseable), but this means math source containing a literal,
+  unescaped `$` cannot round-trip byte-for-byte through `emit`/`parse` — a property of the
+  format's own grammar, not an implementation gap. Documented in `escape_math`'s doc
+  comment; the crate's own fuzz-style roundtrip generators (`safe_text`-style, lowercase-
+  alpha only) never produce `$`, so this doesn't surface as a test failure.
+
+  **Downstream consequence found while running the workspace-wide verification commands
+  this task's own instructions specify, not fixed — flagged for a caller decision rather
+  than guessed at, since fixing it means touching files this task named out of scope:**
+  `crates/rescribe-fixtures/Cargo.toml` already requests `commonmark-fmt` with the
+  `extensions` umbrella feature (predates this pass — a forward-looking declaration).
+  Cargo unifies features across every crate built together in one invocation, so *any*
+  whole-workspace build (not just `--all-features` — plain `cargo clippy --all-targets`/
+  `cargo test` at the repo root already build every workspace member together) now
+  activates the three new AST variants for every `commonmark-fmt` consumer, including two
+  that pattern-match its `Block`/`Inline` exhaustively without expecting them:
+  `rescribe-read-commonmark/src/lib.rs` (2 non-exhaustive-match compile errors),
+  `rescribe-read-markdown/src/commonmark.rs` (2 more), and
+  `crates/rescribe-fixtures/tests/streaming_apis.rs` (4 more — one set per API-mode
+  comparison). `commonmark-fmt` itself is fully green in isolation (`cargo test -p
+  commonmark-fmt --all-features`, `cargo clippy -p commonmark-fmt --all-targets
+  --all-features -- -D warnings`, `cargo fmt --check -p commonmark-fmt` all pass); a
+  plain default-feature workspace build is unaffected (none of the three adapters listed
+  above requests `footnotes`/`definition-lists`/`math` on their own — only
+  `rescribe-fixtures`'s pre-existing `extensions` request pulls them in when the whole
+  workspace is built together). Proper closure needs real fidelity-preserving handling in
+  those adapters (raw-preserve or IR-model, per CLAUDE.md — not a `todo!()`/silent-drop
+  catch-all), which is adapter-layer work this task explicitly scoped out
+  (`rescribe-read-markdown`/`rescribe-write-markdown` named directly;
+  `rescribe-read-commonmark`/`rescribe-fixtures` not named but the same category).
 
   **Two real, pre-existing bugs found (not introduced) and fixed while building the
   `markdown_backends_agree` parity test, since that's what parity tests are for:**

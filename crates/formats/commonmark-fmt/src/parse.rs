@@ -1,5 +1,7 @@
 //! CommonMark parser — wraps pulldown-cmark's offset iterator into the [`CmDoc`] AST.
 
+#[cfg(feature = "definition-lists")]
+use crate::ast::DefinitionListItem;
 use crate::ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
 };
@@ -112,6 +114,53 @@ enum Frame {
     TableCell {
         inlines: Vec<Inline>,
         start: usize,
+    },
+    /// A footnote definition: accumulates block content, exactly like
+    /// `Blockquote` (footnote definitions never use the tight-inline
+    /// shortcut — pulldown-cmark always wraps their content in real
+    /// `Paragraph` tags; see `math.rs`/`footnotes.rs` upstream test suite).
+    #[cfg(feature = "footnotes")]
+    FootnoteDefinition {
+        label: String,
+        blocks: Vec<Block>,
+        start: usize,
+    },
+    /// A definition list: accumulates completed `DefinitionListItem`s. Tracks
+    /// the in-progress term/definitions group so consecutive
+    /// `DefinitionListDefinition`s (there can be more than one per term) are
+    /// grouped under the term that precedes them, and whether the list is
+    /// tight — same signal `Frame::List`'s `tight` field uses (an explicit
+    /// `Paragraph` tag inside a definition means the whole list is loose).
+    #[cfg(feature = "definition-lists")]
+    DefinitionList {
+        items: Vec<DefinitionListItem>,
+        pending_term: Option<Vec<Inline>>,
+        pending_defs: Vec<Vec<Block>>,
+        term_start: usize,
+        /// End offset for the still-open pending item's span — updated at
+        /// every `DefinitionListTitle`/`DefinitionListDefinition` close so
+        /// the pending item always has a valid span even if flushed with
+        /// zero definitions.
+        last_end: usize,
+        tight: bool,
+        start: usize,
+    },
+    /// A definition list term (`dt`): accumulates inline content only —
+    /// pulldown-cmark never wraps a title in a nested `Paragraph` tag.
+    #[cfg(feature = "definition-lists")]
+    DefinitionListTitle {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    /// A single definition (`dd`) body: accumulates block content, with the
+    /// same tight-inline accumulation `Frame::Item` uses (tight definition
+    /// lists get bare inline content directly, with no wrapping `Paragraph`
+    /// tag from pulldown-cmark).
+    #[cfg(feature = "definition-lists")]
+    DefinitionListDefinition {
+        blocks: Vec<Block>,
+        tight_para: bool,
+        tight_inlines: Vec<Inline>,
     },
 }
 
@@ -274,6 +323,41 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     start,
                 });
             }
+            #[cfg(feature = "footnotes")]
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                stack.push(Frame::FootnoteDefinition {
+                    label: label.into_string(),
+                    blocks: vec![],
+                    start,
+                });
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::Start(Tag::DefinitionList) => {
+                stack.push(Frame::DefinitionList {
+                    items: vec![],
+                    pending_term: None,
+                    pending_defs: vec![],
+                    term_start: start,
+                    last_end: start,
+                    tight: true,
+                    start,
+                });
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::Start(Tag::DefinitionListTitle) => {
+                stack.push(Frame::DefinitionListTitle {
+                    inlines: vec![],
+                    start,
+                });
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::Start(Tag::DefinitionListDefinition) => {
+                stack.push(Frame::DefinitionListDefinition {
+                    blocks: vec![],
+                    tight_para: false,
+                    tight_inlines: vec![],
+                });
+            }
 
             // ── Inline opens ──────────────────────────────────────────────────
             Event::Start(Tag::Emphasis) => {
@@ -354,6 +438,8 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     {
                         *tight_para = true;
                         blocks.push(block);
+                    } else if push_tight_paragraph_to_definition(&mut stack, &block) {
+                        // handled inside push_tight_paragraph_to_definition
                     } else {
                         push_block(&mut stack, block);
                     }
@@ -579,6 +665,112 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     push_block(&mut stack, block);
                 }
             }
+            #[cfg(feature = "footnotes")]
+            Event::End(TagEnd::FootnoteDefinition) => {
+                let frame = stack.pop();
+                if let Some(Frame::FootnoteDefinition {
+                    label,
+                    blocks,
+                    start: s,
+                }) = frame
+                {
+                    let block = Block::FootnoteDefinition {
+                        label,
+                        blocks,
+                        span: Span { start: s, end },
+                    };
+                    push_block(&mut stack, block);
+                }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::End(TagEnd::DefinitionListTitle) => {
+                let frame = stack.pop();
+                if let Some(Frame::DefinitionListTitle {
+                    inlines,
+                    start: title_start,
+                }) = frame
+                    && let Some(Frame::DefinitionList {
+                        items,
+                        pending_term,
+                        pending_defs,
+                        term_start,
+                        last_end,
+                        ..
+                    }) = stack.last_mut()
+                {
+                    if let Some(term) = pending_term.take() {
+                        items.push(DefinitionListItem {
+                            term,
+                            definitions: std::mem::take(pending_defs),
+                            span: Span {
+                                start: *term_start,
+                                end: *last_end,
+                            },
+                        });
+                    }
+                    *pending_term = Some(inlines);
+                    *term_start = title_start;
+                    *last_end = end;
+                }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::End(TagEnd::DefinitionListDefinition) => {
+                let frame = stack.pop();
+                if let Some(Frame::DefinitionListDefinition {
+                    mut blocks,
+                    tight_para,
+                    mut tight_inlines,
+                    ..
+                }) = frame
+                {
+                    flush_tight_inlines(&mut blocks, &mut tight_inlines);
+                    if tight_para
+                        && let Some(Frame::DefinitionList { tight, .. }) = stack.last_mut()
+                    {
+                        *tight = false;
+                    }
+                    if let Some(Frame::DefinitionList {
+                        pending_defs,
+                        last_end,
+                        ..
+                    }) = stack.last_mut()
+                    {
+                        pending_defs.push(blocks);
+                        *last_end = end;
+                    }
+                }
+            }
+            #[cfg(feature = "definition-lists")]
+            Event::End(TagEnd::DefinitionList) => {
+                let frame = stack.pop();
+                if let Some(Frame::DefinitionList {
+                    mut items,
+                    pending_term,
+                    pending_defs,
+                    term_start,
+                    last_end,
+                    tight,
+                    start: s,
+                }) = frame
+                {
+                    if let Some(term) = pending_term {
+                        items.push(DefinitionListItem {
+                            term,
+                            definitions: pending_defs,
+                            span: Span {
+                                start: term_start,
+                                end: last_end,
+                            },
+                        });
+                    }
+                    let block = Block::DefinitionList {
+                        items,
+                        tight,
+                        span: Span { start: s, end },
+                    };
+                    push_block(&mut stack, block);
+                }
+            }
             Event::End(TagEnd::Link) => {
                 let frame = stack.pop();
                 if let Some(Frame::Link {
@@ -687,13 +879,36 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     *c = Some(checked);
                 }
             }
+            #[cfg(feature = "footnotes")]
+            Event::FootnoteReference(label) => {
+                let inline = Inline::FootnoteReference {
+                    label: label.into_string(),
+                    span: Span { start, end },
+                };
+                push_inline(&mut stack, inline);
+            }
+            #[cfg(feature = "math")]
+            Event::InlineMath(math) => {
+                let inline = Inline::InlineMath {
+                    source: math.into_string(),
+                    span: Span { start, end },
+                };
+                push_inline(&mut stack, inline);
+            }
+            #[cfg(feature = "math")]
+            Event::DisplayMath(math) => {
+                let inline = Inline::DisplayMath {
+                    source: math.into_string(),
+                    span: Span { start, end },
+                };
+                push_inline(&mut stack, inline);
+            }
 
             // ── Ignored events ───────────────────────────────────────────────
-            // FootnoteReference, Math, etc. are pulldown-cmark extensions we
-            // don't model here (see `footnotes`/`math` features — currently
-            // unimplemented, tracked in TODO.md). When the corresponding
-            // feature is off, its Options bit is never set, so pulldown never
-            // produces these events for us to reach this arm.
+            // Reached only when the corresponding construct feature is off —
+            // its Options bit is never set, so pulldown-cmark never produces
+            // that event for us to see here (e.g. TaskListMarker with
+            // `task-lists` off, FootnoteReference with `footnotes` off).
             _ => {}
         }
     }
@@ -733,6 +948,28 @@ fn push_frontmatter_text(_stack: &mut [Frame], _s: &str) -> bool {
     false
 }
 
+/// If the top-of-stack frame is a `DefinitionListDefinition`, record that it
+/// had an explicit `Paragraph` child (marking the whole list loose, mirroring
+/// `Frame::Item`'s identical signal for `Frame::List`) and push `block` onto
+/// it. Returns `true` if handled this way.
+#[cfg(feature = "definition-lists")]
+fn push_tight_paragraph_to_definition(stack: &mut [Frame], block: &Block) -> bool {
+    if let Some(Frame::DefinitionListDefinition {
+        blocks, tight_para, ..
+    }) = stack.last_mut()
+    {
+        *tight_para = true;
+        blocks.push(block.clone());
+        true
+    } else {
+        false
+    }
+}
+#[cfg(not(feature = "definition-lists"))]
+fn push_tight_paragraph_to_definition(_stack: &mut [Frame], _block: &Block) -> bool {
+    false
+}
+
 /// Push a completed block onto the nearest block-accepting frame.
 fn push_block(stack: &mut [Frame], block: Block) {
     for frame in stack.iter_mut().rev() {
@@ -756,6 +993,21 @@ fn push_block(stack: &mut [Frame], block: Block) {
                 // here first, the block would land ahead of text that
                 // precedes it in the source. Flush any pending tight_inlines
                 // now, before appending, to preserve source order.
+                flush_tight_inlines(blocks, tight_inlines);
+                blocks.push(block);
+                return;
+            }
+            #[cfg(feature = "footnotes")]
+            Frame::FootnoteDefinition { blocks, .. } => {
+                blocks.push(block);
+                return;
+            }
+            #[cfg(feature = "definition-lists")]
+            Frame::DefinitionListDefinition {
+                blocks,
+                tight_inlines,
+                ..
+            } => {
                 flush_tight_inlines(blocks, tight_inlines);
                 blocks.push(block);
                 return;
@@ -799,6 +1051,10 @@ fn inline_span(inline: &Inline) -> Span {
         | Inline::Image { span, .. } => span.clone(),
         #[cfg(feature = "strikethrough")]
         Inline::Strikethrough { span, .. } => span.clone(),
+        #[cfg(feature = "footnotes")]
+        Inline::FootnoteReference { span, .. } => span.clone(),
+        #[cfg(feature = "math")]
+        Inline::InlineMath { span, .. } | Inline::DisplayMath { span, .. } => span.clone(),
     }
 }
 
@@ -819,8 +1075,13 @@ fn push_inline(stack: &mut [Frame], inline: Inline) {
             Frame::Strikethrough { inlines, .. } => inlines,
             #[cfg(feature = "tables")]
             Frame::TableCell { inlines, .. } => inlines,
+            #[cfg(feature = "definition-lists")]
+            Frame::DefinitionListTitle { inlines, .. } => inlines,
             // Tight list item: accumulate inlines for later wrapping in a paragraph.
             Frame::Item { tight_inlines, .. } => tight_inlines,
+            // Tight definition body: same shortcut as tight list items.
+            #[cfg(feature = "definition-lists")]
+            Frame::DefinitionListDefinition { tight_inlines, .. } => tight_inlines,
             // Image alt text is handled before push_inline is called.
             _ => continue,
         };
@@ -1131,6 +1392,102 @@ mod tests {
             assert_eq!(head.cells.len(), 2);
             assert_eq!(rows.len(), 1);
             assert_eq!(rows[0].cells.len(), 2);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "footnotes")]
+    fn test_footnote() {
+        let (doc, diags) = parse(b"Text.[^1]\n\n[^1]: A note.\n");
+        assert!(diags.is_empty());
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::FootnoteReference { label, .. } if label == "1"))
+            );
+        } else {
+            panic!("expected paragraph");
+        }
+        assert!(matches!(
+            &doc.blocks[1],
+            Block::FootnoteDefinition { label, .. } if label == "1"
+        ));
+        if let Block::FootnoteDefinition { blocks, .. } = &doc.blocks[1] {
+            assert_eq!(blocks.len(), 1);
+            assert!(matches!(&blocks[0], Block::Paragraph { .. }));
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_definition_list_tight() {
+        let (doc, diags) = parse(b"apple\n:   red fruit\n\norange\n:   orange fruit\n");
+        assert!(diags.is_empty());
+        assert!(matches!(
+            &doc.blocks[0],
+            Block::DefinitionList { tight: true, .. }
+        ));
+        if let Block::DefinitionList { items, .. } = &doc.blocks[0] {
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].definitions.len(), 1);
+            assert_eq!(items[0].definitions[0].len(), 1);
+            assert!(matches!(
+                &items[0].definitions[0][0],
+                Block::Paragraph { .. }
+            ));
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_definition_list_loose() {
+        let (doc, diags) = parse(b"apple\n\n:   red fruit\n\norange\n\n:   orange fruit\n");
+        assert!(diags.is_empty());
+        assert!(matches!(
+            &doc.blocks[0],
+            Block::DefinitionList { tight: false, .. }
+        ));
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_definition_list_multi_def() {
+        let (doc, diags) = parse(b"apple\n:   red fruit\n:   computer company\n");
+        assert!(diags.is_empty());
+        if let Block::DefinitionList { items, .. } = &doc.blocks[0] {
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].definitions.len(), 2);
+        } else {
+            panic!("expected definition list");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_inline_math() {
+        let (doc, diags) = parse(b"Euler's identity: $e^{i\\pi}+1=0$\n");
+        assert!(diags.is_empty());
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(
+                |i| matches!(i, Inline::InlineMath { source, .. } if source == "e^{i\\pi}+1=0")
+            ));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_display_math() {
+        let (doc, diags) = parse(b"$$a^2+b^2=c^2$$\n");
+        assert!(diags.is_empty());
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(
+                |i| matches!(i, Inline::DisplayMath { source, .. } if source == "a^2+b^2=c^2")
+            ));
+        } else {
+            panic!("expected paragraph");
         }
     }
 

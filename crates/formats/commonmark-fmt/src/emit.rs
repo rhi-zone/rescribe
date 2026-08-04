@@ -164,6 +164,114 @@ impl Emitter {
             } => {
                 self.emit_table(alignments, head, rows);
             }
+            #[cfg(feature = "footnotes")]
+            Block::FootnoteDefinition { label, blocks, .. } => {
+                self.emit_footnote_definition(label, blocks);
+            }
+            #[cfg(feature = "definition-lists")]
+            Block::DefinitionList { items, tight, .. } => {
+                self.emit_definition_list(items, *tight);
+            }
+        }
+    }
+
+    /// Emit a footnote definition (`[^label]: content`).
+    ///
+    /// GFM footnote continuation lines require a *fixed* 4-space indent
+    /// (`pulldown_cmark::firstpass::scan_containers`'s
+    /// `ItemBody::FootnoteDefinition(..) if has_gfm_footnotes() =>
+    /// line_start.scan_space(4)`) — unlike list items, this does not scale
+    /// with the marker's own width.
+    #[cfg(feature = "footnotes")]
+    fn emit_footnote_definition(&mut self, label: &str, blocks: &[Block]) {
+        let inner = {
+            let mut e = Emitter::new();
+            e.emit_blocks(blocks, false);
+            e.finish()
+        };
+        let marker = format!("[^{label}]: ");
+        let mut lines = inner.lines().peekable();
+        if lines.peek().is_none() {
+            self.push(&marker);
+            self.newline();
+        } else {
+            let mut first = true;
+            for line in lines {
+                if first {
+                    self.push(&marker);
+                    self.push(line);
+                    self.newline();
+                    first = false;
+                } else if line.is_empty() {
+                    self.newline();
+                } else {
+                    self.push("    ");
+                    self.push(line);
+                    self.newline();
+                }
+            }
+        }
+    }
+
+    /// Emit a definition list (`term\n:   definition`).
+    ///
+    /// Item groups are always blank-line separated (matches pulldown-cmark's
+    /// own examples — this holds even for a tight list; see
+    /// `parse.rs`'s definition-list roundtrip tests). Within a group,
+    /// `tight` controls whether the term/first-definition and
+    /// definition/definition boundaries get a blank line too, mirroring
+    /// `emit_list`'s `tight` handling for list items.
+    #[cfg(feature = "definition-lists")]
+    fn emit_definition_list(&mut self, items: &[DefinitionListItem], tight: bool) {
+        for (idx, item) in items.iter().enumerate() {
+            if idx > 0 {
+                self.newline();
+            }
+            self.emit_inlines(&item.term);
+            self.newline();
+            if !tight {
+                self.newline();
+            }
+            for (didx, def_blocks) in item.definitions.iter().enumerate() {
+                if didx > 0 && !tight {
+                    self.newline();
+                }
+                self.emit_definition(def_blocks, tight);
+            }
+        }
+    }
+
+    /// Emit a single `:   definition` body, indenting continuation lines by
+    /// 4 spaces (matching the marker `":   "`'s width — see
+    /// `pd::scanners::scan_definition_list_definition_marker_with_indent`,
+    /// which computes the continuation indent from however many spaces
+    /// follow `:`, up to 4).
+    #[cfg(feature = "definition-lists")]
+    fn emit_definition(&mut self, blocks: &[Block], tight: bool) {
+        let inner = {
+            let mut e = Emitter::new();
+            e.emit_blocks(blocks, tight);
+            e.finish()
+        };
+        let mut lines = inner.lines().peekable();
+        if lines.peek().is_none() {
+            self.push(":\n");
+        } else {
+            let mut first = true;
+            for line in lines {
+                if first {
+                    self.push(":   ");
+                    self.push(line);
+                    self.newline();
+                    first = false;
+                } else if line.is_empty() {
+                    self.newline();
+                } else {
+                    self.push("    ");
+                    self.push(line);
+                    self.newline();
+                }
+            }
         }
     }
 
@@ -327,6 +435,24 @@ impl Emitter {
                 }
                 self.push_char(')');
             }
+            #[cfg(feature = "footnotes")]
+            Inline::FootnoteReference { label, .. } => {
+                self.push("[^");
+                self.push(label);
+                self.push_char(']');
+            }
+            #[cfg(feature = "math")]
+            Inline::InlineMath { source, .. } => {
+                self.push_char('$');
+                self.push(&escape_math(source));
+                self.push_char('$');
+            }
+            #[cfg(feature = "math")]
+            Inline::DisplayMath { source, .. } => {
+                self.push("$$");
+                self.push(&escape_math(source));
+                self.push("$$");
+            }
         }
     }
 }
@@ -411,6 +537,32 @@ pub(crate) fn escape_title(t: &str) -> String {
     t.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Escape a literal `$` inside math source so it doesn't prematurely close
+/// the `$…$`/`$$…$$` span.
+///
+/// **Known limitation, not fixable within CommonMark's dollar-math grammar:**
+/// unlike backtick code spans (where a run of N backticks can always be
+/// escaped by wrapping in N+1 backticks — the delimiter length carries no
+/// other meaning), a `$`/`$$` delimiter's *length* is itself semantic (one
+/// `$` means inline math, two mean display math), so there is no
+/// "use more delimiters" escape hatch. The only in-band way to stop a `$`
+/// from closing the span early is a preceding backslash — but pulldown-cmark
+/// captures the span's raw source verbatim, backslash included (confirmed
+/// against `pulldown-cmark`'s own `math_test_9`: `$\$$` round-trips through
+/// HTML as literal `\$`, not `$` — the backslash is not stripped). This means
+/// math source containing a literal, unescaped `$` cannot round-trip
+/// byte-for-byte through `emit`/`parse` — the reparsed source will contain
+/// the backslash this function had to insert. Tracked in TODO.md; this is a
+/// property of the format's grammar, not an implementation gap.
+#[cfg(feature = "math")]
+pub(crate) fn escape_math(s: &str) -> String {
+    if s.contains('$') {
+        s.replace('$', "\\$")
+    } else {
+        s.to_string()
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -474,6 +626,42 @@ mod tests {
     #[cfg(feature = "task-lists")]
     fn test_roundtrip_task_list() {
         roundtrip("- [ ] todo\n- [x] done\n");
+    }
+
+    #[test]
+    #[cfg(feature = "footnotes")]
+    fn test_roundtrip_footnote() {
+        roundtrip("Text.[^1]\n\n[^1]: A note.\n");
+    }
+
+    #[test]
+    #[cfg(feature = "footnotes")]
+    fn test_roundtrip_footnote_multi_block() {
+        roundtrip("Text.[^1]\n\n[^1]: First paragraph.\n\n    Second paragraph.\n");
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_roundtrip_definition_list_tight() {
+        roundtrip("apple\n:   red fruit\n\norange\n:   orange fruit\n");
+    }
+
+    #[test]
+    #[cfg(feature = "definition-lists")]
+    fn test_roundtrip_definition_list_multi_def() {
+        roundtrip("apple\n:   red fruit\n:   computer company\n");
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_roundtrip_inline_math() {
+        roundtrip("Euler's identity: $e to the i pi plus 1 equals 0$\n");
+    }
+
+    #[test]
+    #[cfg(feature = "math")]
+    fn test_roundtrip_display_math() {
+        roundtrip("$$a squared plus b squared equals c squared$$\n");
     }
 
     #[test]

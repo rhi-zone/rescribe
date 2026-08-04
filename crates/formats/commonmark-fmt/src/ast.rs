@@ -118,6 +118,28 @@ pub enum Block {
         rows: Vec<TableRow>,
         span: Span,
     },
+    /// A GFM footnote definition (`[^label]: content`,
+    /// `Options::ENABLE_FOOTNOTES`). May appear anywhere a block can — the
+    /// definition need not be adjacent to its reference(s).
+    #[cfg(feature = "footnotes")]
+    FootnoteDefinition {
+        label: String,
+        blocks: Vec<Block>,
+        span: Span,
+    },
+    /// A definition list (`term\n:   definition`,
+    /// `Options::ENABLE_DEFINITION_LIST`).
+    #[cfg(feature = "definition-lists")]
+    DefinitionList {
+        items: Vec<DefinitionListItem>,
+        /// Whether the list is tight (definition bodies are bare inline
+        /// content) or loose (definition bodies are wrapped in explicit
+        /// `Block::Paragraph`s). Mirrors `Block::List`'s `tight` field —
+        /// pulldown-cmark determines this the same way for both constructs
+        /// (see `parse.rs`'s `Frame::DefinitionList`/`Frame::List` handling).
+        tight: bool,
+        span: Span,
+    },
 }
 
 #[cfg(feature = "tables")]
@@ -158,6 +180,36 @@ impl TableCell {
     pub fn strip_spans(&self) -> TableCell {
         TableCell {
             inlines: self.inlines.iter().map(|i| i.strip_spans()).collect(),
+            span: Span::NONE,
+        }
+    }
+}
+
+/// One term-and-definitions group in a [`Block::DefinitionList`].
+///
+/// `definitions` is a `Vec<Vec<Block>>` (not a flattened `Vec<Block>`)
+/// because a single term (`dt`) can be followed by more than one definition
+/// (`dd`) — each with its own independent block content — and GFM's
+/// grammar allows this (`apple\n:   red fruit\n:   computer company\n`).
+#[cfg(feature = "definition-lists")]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+pub struct DefinitionListItem {
+    pub term: Vec<Inline>,
+    pub definitions: Vec<Vec<Block>>,
+    pub span: Span,
+}
+
+#[cfg(feature = "definition-lists")]
+impl DefinitionListItem {
+    pub fn strip_spans(&self) -> DefinitionListItem {
+        DefinitionListItem {
+            term: self.term.iter().map(|i| i.strip_spans()).collect(),
+            definitions: self
+                .definitions
+                .iter()
+                .map(|def| def.iter().map(|b| b.strip_spans()).collect())
+                .collect(),
             span: Span::NONE,
         }
     }
@@ -210,6 +262,18 @@ impl Block {
                 alignments: alignments.clone(),
                 head: head.strip_spans(),
                 rows: rows.iter().map(|r| r.strip_spans()).collect(),
+                span: Span::NONE,
+            },
+            #[cfg(feature = "footnotes")]
+            Block::FootnoteDefinition { label, blocks, .. } => Block::FootnoteDefinition {
+                label: label.clone(),
+                blocks: blocks.iter().map(|b| b.strip_spans()).collect(),
+                span: Span::NONE,
+            },
+            #[cfg(feature = "definition-lists")]
+            Block::DefinitionList { items, tight, .. } => Block::DefinitionList {
+                items: items.iter().map(|i| i.strip_spans()).collect(),
+                tight: *tight,
                 span: Span::NONE,
             },
         }
@@ -317,6 +381,31 @@ pub enum Inline {
         title: Option<String>,
         span: Span,
     },
+    /// A reference to a footnote definition (`[^label]`,
+    /// `Options::ENABLE_FOOTNOTES`).
+    #[cfg(feature = "footnotes")]
+    FootnoteReference {
+        label: String,
+        span: Span,
+    },
+    /// Inline math (`$math$`, `Options::ENABLE_MATH`). `source` is the raw
+    /// text between the delimiters, captured verbatim (TeX/LaTeX syntax by
+    /// convention — commonmark-fmt does not parse it).
+    #[cfg(feature = "math")]
+    InlineMath {
+        source: String,
+        span: Span,
+    },
+    /// Display math (`$$math$$`, `Options::ENABLE_MATH`). Emitted by
+    /// pulldown-cmark as an inline leaf event (not a block), so it is
+    /// modeled here as an `Inline` variant even though it typically renders
+    /// on its own line — mirroring pulldown-cmark's own event shape rather
+    /// than inventing a block-level wrapper it doesn't have.
+    #[cfg(feature = "math")]
+    DisplayMath {
+        source: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -367,6 +456,21 @@ impl Inline {
                 alt: alt.clone(),
                 url: url.clone(),
                 title: title.clone(),
+                span: Span::NONE,
+            },
+            #[cfg(feature = "footnotes")]
+            Inline::FootnoteReference { label, .. } => Inline::FootnoteReference {
+                label: label.clone(),
+                span: Span::NONE,
+            },
+            #[cfg(feature = "math")]
+            Inline::InlineMath { source, .. } => Inline::InlineMath {
+                source: source.clone(),
+                span: Span::NONE,
+            },
+            #[cfg(feature = "math")]
+            Inline::DisplayMath { source, .. } => Inline::DisplayMath {
+                source: source.clone(),
                 span: Span::NONE,
             },
         }

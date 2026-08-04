@@ -56,6 +56,8 @@ pub mod writer;
 #[cfg(feature = "writer-streaming")]
 pub use writer::Writer;
 
+#[cfg(all(feature = "reader-ast", feature = "definition-lists"))]
+pub use ast::DefinitionListItem;
 #[cfg(all(feature = "reader-ast", feature = "frontmatter"))]
 pub use ast::FrontMatter;
 #[cfg(feature = "reader-ast")]

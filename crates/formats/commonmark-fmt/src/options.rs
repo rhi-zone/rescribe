@@ -38,6 +38,15 @@ pub(crate) fn build_options() -> Options {
         opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
         opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
     }
+    #[cfg(feature = "footnotes")]
+    // GitHub-compatible ("new-style") footnotes, not `ENABLE_OLD_FOOTNOTES`
+    // (php-markdown-extra-style): matches the syntax GitHub, GitLab, and
+    // most CommonMark-based tooling actually implement.
+    opts.insert(Options::ENABLE_FOOTNOTES);
+    #[cfg(feature = "definition-lists")]
+    opts.insert(Options::ENABLE_DEFINITION_LIST);
+    #[cfg(feature = "math")]
+    opts.insert(Options::ENABLE_MATH);
     opts
 }
 
