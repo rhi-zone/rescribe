@@ -1,35 +1,14 @@
 //! Texinfo format AST types.
 
 // ── Span & Diagnostics ────────────────────────────────────────────────────────
+//
+// Shared with every other migrated `-fmt` crate via `rescribe-format-api`.
+// `Diagnostic`'s `code: &'static str` field (absent from texinfo's own,
+// pre-migration shape) defaults to `""` at any construction site — texinfo's
+// parser is currently infallible and never actually constructs a
+// `Diagnostic` (see `parse.rs`), so there are no call sites to update.
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Self = Self { start: 0, end: 0 };
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        Self::NONE
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub severity: Severity,
-    pub span: Span,
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── AST ───────────────────────────────────────────────────────────────────────
 

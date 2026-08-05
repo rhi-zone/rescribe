@@ -93,18 +93,9 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming Texinfo events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming Texinfo events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
+pub use rescribe_format_api::Handler;
 
 /// Directive prefixes that [`crate::parse::parse`]'s top-level loop consumes
 /// without producing a block. Kept verbatim in sync with the equivalent list
@@ -191,7 +182,7 @@ enum Mode {
 ///
 /// Memory: O(largest unit in the document). See the [module-level
 /// docs](self) for the exact boundary rules and known limitations.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -205,7 +196,7 @@ pub struct StreamingParser<H: Handler> {
     title_emitted: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
