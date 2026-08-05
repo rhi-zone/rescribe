@@ -12,7 +12,7 @@ use std::borrow::Cow;
 ///
 /// Parsing is always infallible: malformed constructs produce diagnostics
 /// rather than errors.
-pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
     let mut p = EventIter::new(input);
     let mut blocks = Vec::new();
     loop {
@@ -36,6 +36,29 @@ pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
         },
         diagnostics,
     )
+}
+
+/// Parse AsciiDoc from bytes (the [`rescribe_format_api::Parse`] trait's
+/// contract). Always succeeds; non-UTF-8 input produces a single `Warning`
+/// diagnostic and an empty document, mirroring `commonmark-fmt::parse`'s
+/// handling of the same case.
+pub(crate) fn parse(input: &[u8]) -> (AsciiDoc, Vec<Diagnostic>) {
+    match std::str::from_utf8(input) {
+        Ok(s) => parse_str(s),
+        Err(_) => (
+            AsciiDoc {
+                blocks: vec![],
+                attributes: Default::default(),
+                span: Span::NONE,
+            },
+            vec![Diagnostic {
+                span: Span::NONE,
+                severity: crate::ast::Severity::Warning,
+                message: "input is not valid UTF-8".to_string(),
+                code: "asciidoc::invalid-utf8",
+            }],
+        ),
+    }
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────

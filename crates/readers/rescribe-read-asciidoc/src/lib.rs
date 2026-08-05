@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, rescribe_core::ParseError> {
-    let (ast, _diagnostics) = asciidoc::parse(input);
+    let (ast, _diagnostics) = asciidoc::parse_str(input);
     let children = doc_to_nodes(&ast);
     let root = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(root);

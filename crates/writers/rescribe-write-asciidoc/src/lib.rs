@@ -5,6 +5,7 @@
 
 use asciidoc::{AsciiDoc, Block, DefinitionItem, ImageData, Inline, QuoteType, TableRow};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as AsciiDoc.
@@ -18,8 +19,8 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let ast = doc_to_ast(doc);
-    let output = asciidoc::build(&ast);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = ast.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn doc_to_ast(doc: &Document) -> AsciiDoc {

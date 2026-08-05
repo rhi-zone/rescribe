@@ -30,6 +30,14 @@
 use crate::ast::{AsciiDoc, Diagnostic};
 use crate::events::OwnedEvent;
 
+/// Handler trait for streaming AsciiDoc events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see that
+/// crate's docs for why bounding `H` by one shared trait (instead of each
+/// format crate declaring its own concrete `Handler`) is required for a
+/// common `StreamingParse` trait to exist at all. Implemented automatically
+/// for any `FnMut(OwnedEvent)`.
+pub use rescribe_format_api::Handler;
+
 /// Chunk-driven AsciiDoc parser that returns the full AST on finish.
 #[derive(Default)]
 pub struct BatchParser {
@@ -49,20 +57,7 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (AsciiDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
-    }
-}
-
-/// Handler trait for streaming AsciiDoc events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
+        crate::parse::parse_str(&s)
     }
 }
 
@@ -82,7 +77,7 @@ enum BlockState {
 /// Memory: O(largest block). Delimited blocks (`----`…`----`, `====`…`====`,
 /// etc.) are buffered until the closing delimiter. All other content is
 /// buffered until the next blank line.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
@@ -94,7 +89,7 @@ pub struct StreamingParser<H: Handler> {
     started: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     ///
     /// `events("")` emits an unconditional `StartDocument`/`EndDocument` pair even for
@@ -197,7 +192,7 @@ impl<H: Handler> StreamingParser<H> {
         self.block_lines.clear();
         // AsciiDoc events() wraps each sub-document in StartDocument/EndDocument.
         // We emit those at the document level instead, stripping the per-block wrappers.
-        for event in crate::events(&text) {
+        for event in crate::events_str(&text) {
             let owned = event.into_owned();
             match owned {
                 OwnedEvent::StartDocument => {
@@ -354,7 +349,7 @@ mod tests {
 
         let bulk: Vec<OwnedEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events(&s).map(|e| e.into_owned()).collect()
+            crate::events_str(&s).map(|e| e.into_owned()).collect()
         };
 
         let mut streamed: Vec<OwnedEvent> = Vec::new();
