@@ -331,6 +331,9 @@ path = "../crates/formats/tei-fmt"
 [dependencies.opml-fmt]
 path = "../crates/formats/opml-fmt"
 
+[dependencies.zip-fmt]
+path = "../crates/formats/zip-fmt"
+
 [dependencies.endnotexml-fmt]
 path = "../crates/formats/endnotexml-fmt"
 
@@ -1164,6 +1167,20 @@ bench = false
 [[bin]]
 name = "fuzz_multimarkdown_fmt_roundtrip"
 path = "fuzz_targets/multimarkdown_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zip_fmt_reader"
+path = "fuzz_targets/zip_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zip_fmt_roundtrip"
+path = "fuzz_targets/zip_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

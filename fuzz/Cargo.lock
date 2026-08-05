@@ -1278,9 +1278,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83c41efbf8f90ac44de7f3a868f0867851d261b56291732d0cbf7cceaaeb55a6"
 dependencies = [
  "bitflags",
- "getopts",
  "memchr",
- "pulldown-cmark-escape",
  "unicase",
 ]
 
@@ -1536,6 +1534,7 @@ dependencies = [
  "tsv-fmt",
  "typst-fmt",
  "xml-entities",
+ "zip-fmt",
 ]
 
 [[package]]
@@ -1796,7 +1795,7 @@ dependencies = [
 name = "rescribe-read-multimarkdown"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark 0.13.1",
+ "multimarkdown-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1861,6 +1860,8 @@ dependencies = [
 name = "rescribe-read-pdf"
 version = "0.1.0"
 dependencies = [
+ "euclid",
+ "lopdf",
  "pdf-extract",
  "rescribe-core",
  "rescribe-std",
@@ -3406,6 +3407,14 @@ dependencies = [
  "zeroize",
  "zopfli",
  "zstd",
+]
+
+[[package]]
+name = "zip-fmt"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "zip 7.2.0",
 ]
 
 [[package]]
