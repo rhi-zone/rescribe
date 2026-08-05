@@ -1136,6 +1136,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "format-crate-trait"
+version = "0.1.0"
+dependencies = [
+ "opml-fmt",
+ "zip-fmt",
+]
+
+[[package]]
 name = "fountain-fmt"
 version = "0.1.0"
 dependencies = [
