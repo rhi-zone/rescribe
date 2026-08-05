@@ -187,9 +187,9 @@ fn pod_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = pod_fmt::parse(&input);
+        let (doc, _diags) = pod_fmt::PodDoc::parse(input.as_bytes());
         let expected = pod_ast_to_events(&doc);
-        let actual: Vec<_> = pod_fmt::events(&input).collect();
+        let actual: Vec<_> = pod_fmt::PodDoc::events(input.as_bytes()).collect();
         assert_eq!(
             expected,
             actual,
@@ -235,7 +235,8 @@ fn pod_streaming_parser_matches_events_and_is_incremental() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<pod_fmt::OwnedEvent> = pod_fmt::events(input_str).collect();
+        let bulk: Vec<pod_fmt::OwnedEvent> =
+            pod_fmt::PodDoc::events(input_str.as_bytes()).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -309,11 +310,11 @@ fn pod_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = pod_fmt::parse(&input);
-        let built = pod_fmt::build(&doc);
+        let (doc, _diags) = pod_fmt::PodDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = pod_fmt::Writer::new(Vec::<u8>::new());
-        for e in pod_fmt::events(&input) {
+        for e in pod_fmt::PodDoc::events(input.as_bytes()) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

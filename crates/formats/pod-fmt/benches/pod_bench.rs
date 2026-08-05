@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use pod_fmt::{build, parse};
+use pod_fmt::PodDoc;
+use rescribe_format_api::{Emit, Parse};
 
 const SMALL: &str = r#"=head1 NAME
 
@@ -126,7 +127,7 @@ Test Author E<lt>test@example.comE<gt>
 fn bench_pod_parse_small(c: &mut Criterion) {
     c.bench_function("pod_parse_small", |b| {
         b.iter(|| {
-            let _ = parse(std::hint::black_box(SMALL));
+            let _ = PodDoc::parse(std::hint::black_box(SMALL.as_bytes()));
         });
     });
 }
@@ -134,36 +135,36 @@ fn bench_pod_parse_small(c: &mut Criterion) {
 fn bench_pod_parse_medium(c: &mut Criterion) {
     c.bench_function("pod_parse_medium", |b| {
         b.iter(|| {
-            let _ = parse(std::hint::black_box(MEDIUM));
+            let _ = PodDoc::parse(std::hint::black_box(MEDIUM.as_bytes()));
         });
     });
 }
 
 fn bench_pod_roundtrip_small(c: &mut Criterion) {
     c.bench_function("pod_roundtrip_small", |b| {
-        let (doc, _) = parse(SMALL);
+        let (doc, _) = PodDoc::parse(SMALL.as_bytes());
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = doc.emit();
+            let _ = PodDoc::parse(std::hint::black_box(&out));
         });
     });
 }
 
 fn bench_pod_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("pod_roundtrip_medium", |b| {
-        let (doc, _) = parse(MEDIUM);
+        let (doc, _) = PodDoc::parse(MEDIUM.as_bytes());
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = doc.emit();
+            let _ = PodDoc::parse(std::hint::black_box(&out));
         });
     });
 }
 
 fn bench_pod_emit_medium(c: &mut Criterion) {
     c.bench_function("pod_emit_medium", |b| {
-        let (doc, _) = parse(MEDIUM);
+        let (doc, _) = PodDoc::parse(MEDIUM.as_bytes());
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = doc.emit();
         });
     });
 }

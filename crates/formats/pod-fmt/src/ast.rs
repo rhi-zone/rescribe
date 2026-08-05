@@ -1,45 +1,8 @@
 /// Source span (byte offsets into the original input).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
+pub use rescribe_format_api::Span;
 
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-/// Severity level for diagnostics.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-/// A parse-time diagnostic message.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+/// Severity level for diagnostics, and a parse-time diagnostic message.
+pub use rescribe_format_api::{Diagnostic, Severity};
 
 /// A parsed POD document.
 #[derive(Debug, Clone, PartialEq)]

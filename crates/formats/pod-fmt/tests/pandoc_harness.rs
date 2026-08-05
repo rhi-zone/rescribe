@@ -8,7 +8,7 @@
 //!   cargo test -q -p pod-fmt -- --ignored --nocapture
 
 use pod_fmt::ast::{Block, Inline, PodDoc};
-use pod_fmt::parse;
+use rescribe_format_api::Parse;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -143,7 +143,7 @@ fn pandoc_pod_corpus() {
         }
 
         let input = std::fs::read_to_string(&file).unwrap();
-        let (doc, diags) = parse(&input);
+        let (doc, diags) = PodDoc::parse(input.as_bytes());
         let words = extract_words(&doc);
         eprintln!(
             "{}: parsed {} blocks, {} words, {} diagnostics",
@@ -223,7 +223,7 @@ L<perlpod>, L<Pod::Simple>
 
 =cut
 "#;
-    let (doc, _diags) = parse(sample);
+    let (doc, _diags) = PodDoc::parse(sample.as_bytes());
     assert!(
         !doc.blocks.is_empty(),
         "expected at least one block from sample input"

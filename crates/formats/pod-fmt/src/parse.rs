@@ -1,7 +1,11 @@
 use crate::ast::{Block, DefinitionItem, Diagnostic, Inline, PodDoc, Span};
 
 /// Parse a POD string into a [`PodDoc`], returning diagnostics for any issues.
-pub fn parse(input: &str) -> (PodDoc, Vec<Diagnostic>) {
+///
+/// `pub(crate)`: the public entry point is
+/// [`Parse::parse`](rescribe_format_api::Parse::parse) on [`PodDoc`], which
+/// bridges the trait's `&[u8]` input to this `&str`-based implementation.
+pub(crate) fn parse(input: &str) -> (PodDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse_blocks();
     let diagnostics = std::mem::take(&mut p.diagnostics);
@@ -124,10 +128,12 @@ impl<'a> Parser<'a> {
 
         // =end without matching =begin
         if line.starts_with("=end") {
-            self.diagnostics.push(Diagnostic::warning(
-                "=end without matching =begin",
-                Span::NONE,
-            ));
+            self.diagnostics.push(Diagnostic {
+                span: Span::NONE,
+                severity: crate::ast::Severity::Warning,
+                message: "=end without matching =begin".to_string(),
+                code: "",
+            });
             self.pos += 1;
             return None;
         }
@@ -149,18 +155,24 @@ impl<'a> Parser<'a> {
 
         // =back without matching =over
         if line.starts_with("=back") {
-            self.diagnostics.push(Diagnostic::warning(
-                "=back without matching =over",
-                Span::NONE,
-            ));
+            self.diagnostics.push(Diagnostic {
+                span: Span::NONE,
+                severity: crate::ast::Severity::Warning,
+                message: "=back without matching =over".to_string(),
+                code: "",
+            });
             self.pos += 1;
             return None;
         }
 
         // =item outside =over
         if line.starts_with("=item") {
-            self.diagnostics
-                .push(Diagnostic::warning("=item outside =over", Span::NONE));
+            self.diagnostics.push(Diagnostic {
+                span: Span::NONE,
+                severity: crate::ast::Severity::Warning,
+                message: "=item outside =over".to_string(),
+                code: "",
+            });
             self.pos += 1;
             return None;
         }

@@ -1,15 +1,47 @@
 //! POD (Plain Old Documentation) parser, emitter, and AST.
 //!
-//! Standalone crate with no rescribe dependency.
+//! Standalone crate with **no rescribe dependency** — usable as a general
+//! Rust POD library. `rescribe-read-pod` and `rescribe-write-pod` are thin
+//! adapter layers on top.
 //!
-//! # API
+//! # API layers
 //!
-//! ```rust
-//! use pod_fmt::{parse, build};
+//! `PodDoc` implements the five shared `rescribe-format-api` traits:
 //!
-//! let (doc, _diagnostics) = parse("=head1 Title\n\nBody text.\n");
-//! let output = build(&doc);
+//! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
+//! // AST reader
+//! let (doc, diags): (PodDoc, Vec<Diagnostic>) = PodDoc::parse(input);
+//!
+//! // Streaming reader — iterator over owned events (eagerly expanded from
+//! // the AST parse() already builds; see events.rs's module doc)
+//! let it: OwnedEventIter = PodDoc::events(input);
+//!
+//! // Batch reader — chunk-driven, genuinely incremental (see batch.rs)
+//! let mut p = PodDoc::streaming_parser(|ev| ...);
+//! p.feed(chunk); // repeat
+//! p.finish();
+//!
+//! // Builder writer — emit from AST
+//! let bytes: Vec<u8> = doc.emit();
+//!
+//! // Streaming writer — emit from events
+//! let mut w = PodDoc::writer(sink);
+//! w.write_event(event); // repeat
+//! w.finish(); // flushes to sink
 //! ```
+//!
+//! `PodDoc` has no lifetime parameter (unlike `rst_fmt::RstDoc<'a>`), so
+//! unlike `rst-fmt`, `Parse` and `Events` are both implementable here —
+//! bridging their shared `&[u8]` input to this crate's own `&str`-based
+//! `parse()` is a plain UTF-8 decode (lossy, since the trait is infallible),
+//! not a structural mismatch.
+//!
+//! [`collect_inline_text`] remains a separate, non-trait entry point: it
+//! collects plain text from a slice of `Inline`s, a materially different
+//! contract from any of the five trait methods, not a redundant duplicate
+//! of one (same reasoning as `commonmark-fmt`'s `parse_str`/`events_str`).
 
 pub mod ast;
 pub mod emit;
@@ -28,8 +60,8 @@ pub mod batch;
 pub mod writer;
 
 pub use ast::{Block, DefinitionItem, Diagnostic, Inline, PodDoc, Severity, Span};
-pub use emit::{build, collect_inline_text};
-pub use parse::parse;
+pub use emit::collect_inline_text;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 
 #[cfg(feature = "reader-streaming")]
 pub use events::{Event, EventIter, OwnedEvent};
@@ -40,18 +72,71 @@ pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 #[cfg(feature = "writer-streaming")]
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of [`Event`] items.
-#[cfg(feature = "reader-streaming")]
-pub fn events(input: &str) -> OwnedEventIter {
-    let (doc, _) = parse::parse(input);
-    OwnedEventIter {
-        doc,
-        pos: 0,
-        events: None,
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `PodDoc` implements the five shared API-mode traits directly — the old
+// crate-root `parse`/`build`/`events` free functions (thin wrappers
+// duplicating what is now the trait method) are gone; `parse::parse` and
+// `emit::build` remain as `pub(crate)` internals the trait impls delegate to.
+
+impl Parse for PodDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
     }
 }
 
-/// An owned event iterator that holds the parsed doc and yields events.
+impl Emit for PodDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+#[cfg(feature = "reader-streaming")]
+impl Events for PodDoc {
+    // Events are eagerly expanded from the AST parse() builds (see
+    // `OwnedEventIter` below) — the borrowed `Event<'a>` type `events.rs`
+    // defines can't be returned from a `fn(&[u8]) -> Self::EventIter<'_>`
+    // that constructs its own `PodDoc` locally (no caller-owned AST to
+    // borrow from), so this impl always yields `OwnedEvent`, the same shape
+    // `zip-fmt`'s `Events` impl uses for the same reason (decompression /
+    // fresh-parse can't borrow either).
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = OwnedEventIter;
+
+    fn events(input: &[u8]) -> OwnedEventIter {
+        let s = String::from_utf8_lossy(input);
+        let (doc, _) = parse::parse(&s);
+        OwnedEventIter {
+            doc,
+            pos: 0,
+            events: None,
+        }
+    }
+}
+
+#[cfg(feature = "reader-batch")]
+impl StreamingParse for PodDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+#[cfg(feature = "writer-streaming")]
+impl StreamingWrite for PodDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
+
+/// A streaming event iterator that eagerly expands a freshly-parsed
+/// [`PodDoc`] into owned events. See [`Events for PodDoc`](Events) — this is
+/// what `<PodDoc as Events>::events` returns.
 #[cfg(feature = "reader-streaming")]
 pub struct OwnedEventIter {
     doc: PodDoc,
@@ -147,14 +232,14 @@ mod tests {
 
     #[test]
     fn test_parse_heading() {
-        let (doc, _) = parse("=head1 NAME\n");
+        let (doc, _) = parse::parse("=head1 NAME\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::Heading { .. }));
     }
 
     #[test]
     fn test_parse_heading_level2() {
-        let (doc, _) = parse("=head2 DESCRIPTION\n");
+        let (doc, _) = parse::parse("=head2 DESCRIPTION\n");
         if let Block::Heading { level, .. } = &doc.blocks[0] {
             assert_eq!(*level, 2);
         } else {
@@ -164,14 +249,14 @@ mod tests {
 
     #[test]
     fn test_parse_paragraph() {
-        let (doc, _) = parse("=pod\n\nThis is a paragraph.\n");
+        let (doc, _) = parse::parse("=pod\n\nThis is a paragraph.\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
     }
 
     #[test]
     fn test_parse_bold() {
-        let (doc, _) = parse("=pod\n\nThis is B<bold> text.\n");
+        let (doc, _) = parse::parse("=pod\n\nThis is B<bold> text.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Bold(..))));
         } else {
@@ -181,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_parse_italic() {
-        let (doc, _) = parse("=pod\n\nThis is I<italic> text.\n");
+        let (doc, _) = parse::parse("=pod\n\nThis is I<italic> text.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Italic(..))));
         } else {
@@ -191,7 +276,7 @@ mod tests {
 
     #[test]
     fn test_parse_code() {
-        let (doc, _) = parse("=pod\n\nUse C<my $var> here.\n");
+        let (doc, _) = parse::parse("=pod\n\nUse C<my $var> here.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Code(..))));
         } else {
@@ -201,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_parse_link() {
-        let (doc, _) = parse("=pod\n\nSee L<perlpod> for details.\n");
+        let (doc, _) = parse::parse("=pod\n\nSee L<perlpod> for details.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Link { .. })));
         } else {
@@ -211,14 +296,14 @@ mod tests {
 
     #[test]
     fn test_parse_verbatim() {
-        let (doc, _) = parse("=pod\n\n    print \"Hello\";\n");
+        let (doc, _) = parse::parse("=pod\n\n    print \"Hello\";\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::CodeBlock { .. }));
     }
 
     #[test]
     fn test_parse_list() {
-        let (doc, _) = parse("=over\n\n=item * First\n\n=item * Second\n\n=back\n");
+        let (doc, _) = parse::parse("=over\n\n=item * First\n\n=item * Second\n\n=back\n");
         if let Block::List { items, .. } = &doc.blocks[0] {
             assert_eq!(items.len(), 2);
         } else {
@@ -228,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_parse_escape() {
-        let (doc, _) = parse("=pod\n\nE<lt>tag E<gt>\n");
+        let (doc, _) = parse::parse("=pod\n\nE<lt>tag E<gt>\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             let text = inlines
                 .iter()
@@ -247,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_parse_double_brackets() {
-        let (doc, _) = parse("=pod\n\nC<< $a <=> $b >>\n");
+        let (doc, _) = parse::parse("=pod\n\nC<< $a <=> $b >>\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             let code = inlines.iter().find(|i| matches!(i, Inline::Code(..)));
             assert!(code.is_some());
@@ -259,7 +344,7 @@ mod tests {
 
     #[test]
     fn test_parse_filename() {
-        let (doc, _) = parse("=pod\n\nSee F<config.txt> for details.\n");
+        let (doc, _) = parse::parse("=pod\n\nSee F<config.txt> for details.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Filename(..))));
         } else {
@@ -269,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_parse_non_breaking() {
-        let (doc, _) = parse("=pod\n\nUse S<no break here> please.\n");
+        let (doc, _) = parse::parse("=pod\n\nUse S<no break here> please.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::NonBreaking(..))));
         } else {
@@ -279,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_parse_index_entry() {
-        let (doc, _) = parse("=pod\n\nSee X<term> here.\n");
+        let (doc, _) = parse::parse("=pod\n\nSee X<term> here.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::IndexEntry(..))));
         } else {
@@ -289,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_parse_null() {
-        let (doc, _) = parse("=pod\n\nSee Z<> here.\n");
+        let (doc, _) = parse::parse("=pod\n\nSee Z<> here.\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             assert!(inlines.iter().any(|i| matches!(i, Inline::Null(..))));
         } else {
@@ -299,21 +384,21 @@ mod tests {
 
     #[test]
     fn test_parse_begin_end() {
-        let (doc, _) = parse("=begin html\n\n<p>Raw HTML</p>\n\n=end html\n");
+        let (doc, _) = parse::parse("=begin html\n\n<p>Raw HTML</p>\n\n=end html\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::RawBlock { .. }));
     }
 
     #[test]
     fn test_parse_for() {
-        let (doc, _) = parse("=for html <br/>\n");
+        let (doc, _) = parse::parse("=for html <br/>\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::ForBlock { .. }));
     }
 
     #[test]
     fn test_parse_encoding() {
-        let (doc, _) = parse("=encoding UTF-8\n");
+        let (doc, _) = parse::parse("=encoding UTF-8\n");
         assert_eq!(doc.blocks.len(), 1);
         if let Block::Encoding { encoding, .. } = &doc.blocks[0] {
             assert_eq!(encoding, "UTF-8");
@@ -324,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_parse_definition_list() {
-        let (doc, _) = parse("=over 4\n\n=item Term\n\nDescription.\n\n=back\n");
+        let (doc, _) = parse::parse("=over 4\n\n=item Term\n\nDescription.\n\n=back\n");
         assert!(matches!(doc.blocks[0], Block::DefinitionList { .. }));
         if let Block::DefinitionList { items, .. } = &doc.blocks[0] {
             assert_eq!(items.len(), 1);
@@ -334,7 +419,7 @@ mod tests {
     #[test]
     fn test_parse_nested_list() {
         let (doc, _) =
-            parse("=over\n\n=item * Outer\n\n=over\n\n=item * Inner\n\n=back\n\n=back\n");
+            parse::parse("=over\n\n=item * Outer\n\n=over\n\n=item * Inner\n\n=back\n\n=back\n");
         if let Block::List { items, .. } = &doc.blocks[0] {
             assert_eq!(items.len(), 1);
             assert!(items[0].iter().any(|b| matches!(b, Block::List { .. })));
@@ -345,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_parse_nested_formatting() {
-        let (doc, _) = parse("=pod\n\nB<I<bold italic>>\n");
+        let (doc, _) = parse::parse("=pod\n\nB<I<bold italic>>\n");
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
             if let Inline::Bold(ch, _) = &inlines[0] {
                 assert!(ch.iter().any(|i| matches!(i, Inline::Italic(..))));
@@ -367,7 +452,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("=head1 NAME"));
     }
 
@@ -380,7 +465,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("Hello, world!"));
     }
 
@@ -396,7 +481,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("B<bold>"));
     }
 
@@ -412,7 +497,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("I<italic>"));
     }
 
@@ -425,7 +510,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("C<$var>"));
     }
 
@@ -438,7 +523,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("C<< $a <=> $b >>"));
     }
 
@@ -455,7 +540,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("L<perlpod>"));
     }
 
@@ -472,7 +557,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("L<documentation|perlpod>"));
     }
 
@@ -495,7 +580,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("=over"));
         assert!(out.contains("=item *"));
         assert!(out.contains("=back"));
@@ -510,7 +595,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("    print 'Hello';"));
     }
 
@@ -523,7 +608,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.starts_with("=pod"));
         assert!(out.ends_with("=cut\n"));
     }

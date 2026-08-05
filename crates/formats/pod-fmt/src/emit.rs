@@ -1,7 +1,10 @@
 pub use crate::ast::*;
 
 /// Build a POD string from a [`PodDoc`].
-pub fn build(doc: &PodDoc) -> String {
+///
+/// `pub(crate)`: the public entry point is
+/// [`Emit::emit`](rescribe_format_api::Emit::emit) on [`PodDoc`].
+pub(crate) fn build(doc: &PodDoc) -> String {
     let mut ctx = BuildContext::new();
     ctx.write("=pod\n\n");
     for block in &doc.blocks {
