@@ -3,7 +3,7 @@
 use crate::ast::*;
 
 /// Build a VimWiki string from a [`VimwikiDoc`].
-pub fn build(doc: &VimwikiDoc) -> String {
+pub(crate) fn build(doc: &VimwikiDoc) -> String {
     let mut ctx = BuildContext::new();
     for block in &doc.blocks {
         build_block(block, &mut ctx);

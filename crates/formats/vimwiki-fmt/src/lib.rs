@@ -2,6 +2,19 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-vimwiki` and `rescribe-write-vimwiki` as thin adapter layers.
+//!
+//! # API layers
+//!
+//! `VimwikiDoc` implements all five shared `rescribe-format-api` traits —
+//! `Parse`, `Emit`, `Events`, `StreamingParse`, `StreamingWrite`. This
+//! crate's native `parse::parse`/`events::events` take `&str`, not `&[u8]`;
+//! the `Parse`/`Events` impls bridge via `std::str::from_utf8` (mirroring
+//! `commonmark-fmt`'s `Parse`/`Events` impls), producing an empty
+//! document/iterator plus a `Warning` diagnostic on invalid UTF-8.
+//! `parse::parse(&str)` and `events::events(&str)` remain public,
+//! module-qualified entry points for callers that already have a `&str` and
+//! want to skip the UTF-8 re-check — a materially different contract from
+//! the trait methods, same as `commonmark-fmt`'s kept `parse_str`.
 
 pub mod ast;
 pub mod batch;
@@ -14,14 +27,66 @@ pub use ast::{
     Block, DefinitionItem, Diagnostic, Inline, ListItem, Severity, Span, TableRow, VimwikiDoc,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_inline_text};
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of events.
-pub fn events(input: &str) -> events::EventIter<'_> {
-    events::events(input)
+// -- Trait implementations ----------------------------------------------------
+
+impl rescribe_format_api::Parse for VimwikiDoc {
+    /// Non-UTF-8 input yields an empty document and a single `Warning`
+    /// diagnostic (mirrors `commonmark-fmt`'s `Parse` impl) — this crate's
+    /// native `parse::parse` takes `&str`, not `&[u8]`.
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse(s),
+            Err(_) => (
+                VimwikiDoc::default(),
+                vec![Diagnostic {
+                    span: Span::NONE,
+                    severity: Severity::Warning,
+                    message: "input is not valid UTF-8".to_string(),
+                    code: "vimwiki::invalid-utf8",
+                }],
+            ),
+        }
+    }
+}
+
+impl rescribe_format_api::Emit for VimwikiDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::Events for VimwikiDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document
+    /// (mirrors `commonmark-fmt`'s `Events` impl).
+    fn events(input: &[u8]) -> EventIter<'_> {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::events(s),
+            Err(_) => events::events(""),
+        }
+    }
+}
+
+impl rescribe_format_api::StreamingParse for VimwikiDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for VimwikiDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // -- Tests --------------------------------------------------------------------
@@ -29,6 +94,8 @@ pub fn events(input: &str) -> events::EventIter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emit::build;
+    use crate::parse::parse;
 
     #[test]
     fn test_parse_heading() {

@@ -9,11 +9,11 @@
 //! The harness reports but does NOT fail on low text coverage — the goal is to
 //! catalogue gaps, not gate CI.  Tests DO fail if the parser panics.
 
+use rescribe_format_api::Parse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use vimwiki_fmt::ast::{Block, Inline, VimwikiDoc};
-use vimwiki_fmt::parse;
 
 // -- Path discovery -----------------------------------------------------------
 
@@ -171,7 +171,7 @@ fn pandoc_vimwiki_oracle() {
     };
 
     // Parse — must not panic.
-    let (doc, _diags) = parse(sample);
+    let (doc, _diags) = VimwikiDoc::parse(sample.as_bytes());
     let our_words = extract_words(&doc);
 
     match pandoc_to_plain(&pandoc, sample) {
@@ -204,7 +204,7 @@ fn pandoc_vimwiki_oracle() {
 #[test]
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/vimwiki/oracle/input.wiki");
-    let (doc, _diags) = parse(sample);
+    let (doc, _diags) = VimwikiDoc::parse(sample.as_bytes());
     // Must produce at least one block.
     assert!(
         !doc.blocks.is_empty(),

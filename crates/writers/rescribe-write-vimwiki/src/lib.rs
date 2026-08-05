@@ -4,6 +4,7 @@
 //! Thin adapter over `vimwiki-fmt` crate.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use vimwiki_fmt::*;
 
@@ -22,9 +23,9 @@ pub fn emit_with_options(
         blocks,
         span: Span::NONE,
     };
-    let output = vimwiki_fmt::build(&vimwiki_doc);
+    let output = vimwiki_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn node_to_block(node: &Node) -> Block {

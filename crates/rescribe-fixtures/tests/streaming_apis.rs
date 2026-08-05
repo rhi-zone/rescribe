@@ -7943,6 +7943,7 @@ fn twiki_streaming_writer_matches_builder_over_all_fixtures() {
 // `emit_block_events`/`emit_inline_events`.
 mod vimwiki_events_check {
     use super::{assert_or_known_failure, find_input, fixtures_root};
+    use rescribe_format_api::{Events, Parse};
     use std::borrow::Cow;
     use vimwiki_fmt::ast::{Block, Inline, VimwikiDoc};
     use vimwiki_fmt::events::OwnedEvent;
@@ -8089,9 +8090,9 @@ mod vimwiki_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = vimwiki_fmt::parse::parse(&input);
+            let (doc, _diags) = VimwikiDoc::parse(input.as_bytes());
             let expected = vw_ast_to_events(&doc);
-            let actual: Vec<OwnedEvent> = vimwiki_fmt::events(&input)
+            let actual: Vec<OwnedEvent> = VimwikiDoc::events(input.as_bytes())
                 .map(|e| e.into_owned())
                 .collect();
             checked += 1;
@@ -8137,9 +8138,10 @@ fn vimwiki_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<vimwiki_fmt::OwnedEvent> = vimwiki_fmt::events(input_str)
-            .map(|e| e.into_owned())
-            .collect();
+        let bulk: Vec<vimwiki_fmt::OwnedEvent> =
+            vimwiki_fmt::VimwikiDoc::events(input_str.as_bytes())
+                .map(|e| e.into_owned())
+                .collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -8188,11 +8190,11 @@ fn vimwiki_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = vimwiki_fmt::parse(&input);
-        let built = vimwiki_fmt::build(&doc);
+        let (doc, _) = vimwiki_fmt::VimwikiDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("vimwiki emit output is UTF-8");
 
         let mut w = vimwiki_fmt::Writer::new(Vec::<u8>::new());
-        for e in vimwiki_fmt::events(&input) {
+        for e in vimwiki_fmt::VimwikiDoc::events(input.as_bytes()) {
             w.write_event(e.into_owned());
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

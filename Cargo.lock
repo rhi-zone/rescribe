@@ -3828,6 +3828,7 @@ name = "rescribe-read-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -4423,6 +4424,7 @@ name = "rescribe-write-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -5756,6 +5758,7 @@ name = "vimwiki-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
