@@ -308,9 +308,9 @@ fn rtf_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = rtf_fmt::parse(&input);
+        let (doc, _diags) = rtf_fmt::RtfDoc::parse(&input);
         let expected = rtf_ast_to_events(&doc);
-        let actual: Vec<_> = rtf_fmt::events(&input).collect();
+        let actual: Vec<_> = rtf_fmt::RtfDoc::events(&input).collect();
         assert_eq!(
             expected,
             actual,
@@ -346,7 +346,7 @@ fn rtf_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<rtf_fmt::OwnedEvent> = rtf_fmt::events(&input).collect();
+        let bulk: Vec<rtf_fmt::OwnedEvent> = rtf_fmt::RtfDoc::events(&input).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -398,11 +398,11 @@ fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = rtf_fmt::parse(&input);
-        let built = rtf_fmt::emit(&doc);
+        let (doc, _diags) = rtf_fmt::RtfDoc::parse(&input);
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = rtf_fmt::sem_writer::Writer::new(Vec::<u8>::new());
-        for e in rtf_fmt::events(&input) {
+        for e in rtf_fmt::RtfDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

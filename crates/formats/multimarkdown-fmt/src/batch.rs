@@ -32,25 +32,19 @@
 
 use crate::events::OwnedEvent;
 
-/// Handler closure or type for batch-mode MultiMarkdown events.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler closure or type for batch-mode MultiMarkdown events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
+/// Implemented automatically for any `FnMut(OwnedEvent)`.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming parser for MultiMarkdown. See the module docs for the
 /// buffering limitation this inherits from commonmark-fmt.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     buf: Vec<u8>,
     handler: H,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     pub fn new(handler: H) -> Self {
         StreamingParser {
             buf: Vec::new(),

@@ -4,8 +4,8 @@
 //! `typst-syntax` gives a materialized tree (no native event/SAX parsing
 //! mode), so there is no way to produce IR-shaped events without parsing
 //! first — unlike `endnotexml-fmt`/`opml-fmt`, whose `events()` genuinely
-//! never materializes an AST. [`events`] therefore parses the full input via
-//! [`crate::parse::parse`] once, then returns an [`EventIter`] that holds
+//! never materializes an AST. [`events_str`] therefore parses the full
+//! input via [`crate::parse::parse_str`] once, then returns an [`EventIter`] that holds
 //! the parsed blocks plus an explicit work stack (`Vec<Task>`) as its
 //! traversal cursor: each `next()` call pops one item off that stack and
 //! does O(1) work, expanding a block/inline into its Start event, its
@@ -108,12 +108,19 @@ pub enum Event {
     Raw(String),
 }
 
-/// Return a streaming event iterator over `input`'s parsed structure.
+/// Return a streaming event iterator over `input`'s (`&str`) parsed
+/// structure.
 ///
 /// Parses once internally (see module docs for why); the returned iterator
 /// then walks the parsed structure incrementally.
-pub fn events(input: &str) -> EventIter {
-    let (doc, _diags) = crate::parse::parse(input);
+///
+/// Kept as a public, non-trait entry point alongside
+/// [`rescribe_format_api::Events::events`](crate::TypstDoc) (see `lib.rs`'s
+/// trait impl block): it takes `&str` rather than `&[u8]`, a materially
+/// different contract (no UTF-8 validation step) — not a redundant
+/// duplicate of the trait method, which the trait impl calls into.
+pub fn events_str(input: &str) -> EventIter {
+    let (doc, _diags) = crate::parse::parse_str(input);
     EventIter::from_doc(doc)
 }
 
@@ -141,7 +148,7 @@ pub struct EventIter {
 impl EventIter {
     /// Build an iterator over an already-parsed [`TypstDoc`], without
     /// re-parsing. Used by [`events`] and by callers that already hold a
-    /// `TypstDoc` from [`crate::parse::parse`].
+    /// `TypstDoc` from [`crate::parse::parse_str`].
     pub fn from_doc(doc: TypstDoc) -> Self {
         let stack = vec![
             Task::Event(Event::EndDocument),
@@ -348,7 +355,7 @@ impl Iterator for EventIter {
 /// Project a [`TypstDoc`] directly to its event sequence, without going
 /// through `events()`'s (re-)parse. Used as the equivalence oracle: over
 /// every fixture, `events_from_doc(&parse(input).0)` must equal
-/// `events(input).collect()`.
+/// `events_str(input).collect()`.
 pub fn events_from_doc(doc: &TypstDoc) -> Vec<Event> {
     EventIter::from_doc(doc.clone()).collect()
 }
@@ -748,9 +755,9 @@ mod tests {
     #[test]
     fn events_matches_parse_projection() {
         let input = "= Title\n\nHello *bold* world.\n\n- one\n- two\n";
-        let (doc, _diags) = crate::parse::parse(input);
+        let (doc, _diags) = crate::parse::parse_str(input);
         let expected = events_from_doc(&doc);
-        let actual: Vec<_> = events(input).collect();
+        let actual: Vec<_> = events_str(input).collect();
         assert_eq!(expected, actual);
     }
 }

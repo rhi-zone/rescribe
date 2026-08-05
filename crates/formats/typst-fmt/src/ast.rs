@@ -11,7 +11,7 @@
 //! is a rowan-style green tree meant to be produced by parsing, not hand
 //! assembled) and the fuzz roundtrip property required by this crate's
 //! completion checklist (`parse(emit(arbitrary_ast)).strip_spans() ==
-//! arbitrary_ast`) needs one shared type on both ends. [`parse`](crate::parse::parse)
+//! arbitrary_ast`) needs one shared type on both ends. [`parse`](crate::parse::parse_str)
 //! builds a `TypstDoc` by walking `typst_syntax`'s tree; [`emit`](crate::emit::emit)
 //! consumes a `TypstDoc` to produce markup bytes.
 //!
@@ -28,16 +28,11 @@
 //! `fixtures/typst/COVERAGE.md` for the exact boundary of what is
 //! semantically modeled vs. raw-preserved today.
 
-/// Byte offset span in the source input.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
+/// Byte offset span in the source input — the shared
+/// `rescribe_format_api::Span`, not a locally declared type. See that
+/// crate for why `Span`/`Diagnostic`/`Severity` are shared across every
+/// format crate.
+pub use rescribe_format_api::Span;
 
 /// A parsed Typst document: a flat sequence of top-level blocks.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -136,7 +131,7 @@ pub enum Inline {
     /// enclosing paragraph rather than splitting the paragraph around them.
     /// Distinct from [`Block::MathDisplay`], which the *writer* side uses
     /// for a standalone block-level `$ ... $` construct (never produced by
-    /// [`crate::parse::parse`] today — see `fixtures/typst/COVERAGE.md`).
+    /// [`crate::parse::parse_str`] today — see `fixtures/typst/COVERAGE.md`).
     MathDisplay(String),
     Footnote(Vec<Inline>),
     /// `#smallcaps[...]`.
@@ -145,7 +140,7 @@ pub enum Inline {
     /// rescribe's `style:quote_type` property (`"double"`/`"single"`).
     /// Writer-only today: `"..."`/`'...'` in Typst source is
     /// `typst-syntax`'s `SmartQuote` token wrapping plain text, not a
-    /// nestable span construct, so [`crate::parse::parse`] has no path
+    /// nestable span construct, so [`crate::parse::parse_str`] has no path
     /// that produces a grouped `Quoted` node (it produces standalone quote-
     /// character `Text` nodes instead, matching the pre-existing adapter).
     Quoted {
@@ -157,9 +152,7 @@ pub enum Inline {
     Raw(String),
 }
 
-/// Diagnostic message from parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
-}
+/// Diagnostic message from parsing — the shared
+/// `rescribe_format_api::{Diagnostic, Severity}`, not locally declared
+/// types.
+pub use rescribe_format_api::{Diagnostic, Severity};

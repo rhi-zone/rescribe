@@ -2498,6 +2498,7 @@ name = "org-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3648,6 +3649,7 @@ version = "0.1.0"
 dependencies = [
  "multimarkdown-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -3767,6 +3769,7 @@ name = "rescribe-read-rtf"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "rtf-fmt",
 ]
@@ -3841,6 +3844,7 @@ name = "rescribe-read-typst"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "typst",
  "typst-fmt",
@@ -4231,6 +4235,7 @@ version = "0.1.0"
 dependencies = [
  "multimarkdown-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4279,6 +4284,7 @@ version = "0.1.0"
 dependencies = [
  "org-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4353,6 +4359,7 @@ name = "rescribe-write-rtf"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "rtf-fmt",
 ]
@@ -4453,6 +4460,7 @@ name = "rescribe-write-typst"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "typst-fmt",
 ]
@@ -4533,6 +4541,9 @@ dependencies = [
 [[package]]
 name = "rtf-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "rusqlite"
@@ -4970,6 +4981,7 @@ name = "t2t"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -5009,6 +5021,7 @@ name = "texinfo"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -5322,6 +5335,7 @@ dependencies = [
 name = "typst-fmt"
 version = "0.1.0"
 dependencies = [
+ "rescribe-format-api",
  "typst-syntax",
 ]
 

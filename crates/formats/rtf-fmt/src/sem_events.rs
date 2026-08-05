@@ -484,12 +484,19 @@ impl Iterator for SemanticEventIter {
 /// streamed lazily via a frame stack.
 ///
 /// See [`crate::token_events`] for the lower-level raw RTF token stream.
-pub fn events(input: &[u8]) -> SemanticEventIter {
+///
+/// This is the implementation behind [`rescribe_format_api::Events::events`]
+/// for [`crate::ast::RtfDoc`]; use that trait method from outside the crate.
+pub(crate) fn events(input: &[u8]) -> SemanticEventIter {
     let (doc, _diagnostics) = crate::parse::parse(input);
     SemanticEventIter::new(doc)
 }
 
 /// Convenience wrapper for callers that already have a `&str`.
+///
+/// Kept as a separate public entry point (not just a trait wrapper): it
+/// takes `&str`, a materially different contract from
+/// [`rescribe_format_api::Events::events`]'s `&[u8]`.
 pub fn events_str(input: &str) -> SemanticEventIter {
     events(input.as_bytes())
 }

@@ -16,14 +16,85 @@ pub use ast::{
     OrgError, Severity, Span, TableRow, merge_text_inlines,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::build;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
+pub use parse::parse_str;
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+///
+/// Takes `&str` (not `&[u8]`) — a materially different contract from
+/// [`rescribe_format_api::Events::events`], which this crate also
+/// implements for `OrgDoc`. Kept as a public, documented separate entry
+/// point (mirroring `commonmark-fmt`'s `events_str`) for callers that
+/// already have a `&str`, and used directly by `crates/rescribe-fixtures`'
+/// cross-API equivalence tests.
 pub fn events(input: &str) -> events::EventIter<'_> {
     events::events(input)
+}
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `OrgDoc` is not lifetime-generic (unlike `RstDoc`), so unlike rst-fmt, all
+// five shared traits fit here. `parse_str`/`events` (both `&str`-based, see
+// their doc comments above) stay as documented separate entry points rather
+// than becoming the trait methods themselves — `Parse::parse`/
+// `Events::events` take `&[u8]` and convert internally.
+
+impl rescribe_format_api::Parse for OrgDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse_str(s),
+            Err(_) => (
+                OrgDoc::default(),
+                vec![Diagnostic {
+                    span: Span::NONE,
+                    severity: Severity::Warning,
+                    message: "input is not valid UTF-8".to_string(),
+                    code: "org::invalid-utf8",
+                }],
+            ),
+        }
+    }
+}
+
+impl rescribe_format_api::Emit for OrgDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::Events for OrgDoc {
+    type Event<'a> = events::Event<'a>;
+    type EventIter<'a> = events::EventIter<'a>;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document rather
+    /// than panicking — the trait's `events()` is infallible by contract and
+    /// has no diagnostic channel (unlike `Parse::parse`). Callers that need
+    /// to distinguish "empty document" from "invalid UTF-8" should decode
+    /// the bytes themselves and call [`events()`](crate::events) directly.
+    fn events(input: &[u8]) -> events::EventIter<'_> {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::EventIter::new(s),
+            Err(_) => events::EventIter::new(""),
+        }
+    }
+}
+
+impl rescribe_format_api::StreamingParse for OrgDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for OrgDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -33,7 +104,7 @@ mod tests {
     use super::*;
 
     fn parse_ok(input: &str) -> OrgDoc {
-        let (doc, _diags) = parse(input);
+        let (doc, _diags) = parse::parse_str(input);
         doc
     }
 
@@ -172,7 +243,7 @@ mod tests {
     // ── Builder tests ─────────────────────────────────────────────────────────
 
     fn build_str(doc: &OrgDoc) -> String {
-        build(doc)
+        emit::build(doc)
     }
 
     fn simple_doc(block: Block) -> OrgDoc {
@@ -595,9 +666,9 @@ mod tests {
     #[test]
     fn test_roundtrip_figure_image() {
         let input = "#+CAPTION: A landscape photo\n[[file:landscape.png]]\n";
-        let (doc, _) = parse(input);
+        let (doc, _) = parse::parse_str(input);
         let emitted = build_str(&doc);
-        let (doc2, _) = parse(&emitted);
+        let (doc2, _) = parse::parse_str(&emitted);
         assert_eq!(doc.blocks.len(), 1);
         assert_eq!(doc2.blocks.len(), 1);
         assert!(matches!(doc.blocks[0].strip_spans(), Block::Figure { .. }));
@@ -608,7 +679,7 @@ mod tests {
     fn test_roundtrip_figure_table_with_name() {
         let input =
             "#+CAPTION: Named table\n#+NAME: tbl:data\n| Col A | Col B |\n| r1c1  | r1c2  |\n";
-        let (doc, _) = parse(input);
+        let (doc, _) = parse::parse_str(input);
         assert_eq!(doc.blocks.len(), 1);
         let Block::Figure { name, .. } = &doc.blocks[0] else {
             panic!("expected Figure");
@@ -616,7 +687,7 @@ mod tests {
         assert_eq!(name.as_deref(), Some("tbl:data"));
         let emitted = build_str(&doc);
         assert!(emitted.contains("#+NAME: tbl:data"), "emitted: {emitted:?}");
-        let (doc2, _) = parse(&emitted);
+        let (doc2, _) = parse::parse_str(&emitted);
         assert_eq!(doc2.blocks.len(), 1);
         assert!(matches!(doc2.blocks[0].strip_spans(), Block::Figure { .. }));
     }
@@ -637,9 +708,9 @@ mod tests {
     #[test]
     fn test_roundtrip_block_footnote_def() {
         let input = "[fn:note] Some footnote content.";
-        let (doc, _) = parse(input);
+        let (doc, _) = parse::parse_str(input);
         let emitted = build_str(&doc);
-        let (doc2, _) = parse(&emitted);
+        let (doc2, _) = parse::parse_str(&emitted);
         assert_eq!(doc.blocks.len(), 1);
         assert_eq!(doc2.blocks.len(), 1);
         // strip_spans equality

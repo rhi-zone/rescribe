@@ -33,26 +33,36 @@
 //!
 //! # API layers
 //!
+//! `MmdDoc` implements the five shared `rescribe-format-api` traits:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader
-//! pub fn parse(input: &[u8]) -> (MmdDoc, Vec<Diagnostic>);
+//! let (doc, diags): (MmdDoc, Vec<Diagnostic>) = MmdDoc::parse(input);
 //!
 //! // Streaming reader — true incremental iterator, see events.rs's module doc
-//! pub fn events(input: &[u8]) -> Option<EventIter<'_>>;
+//! let it: EventIter = MmdDoc::events(input);
 //!
 //! // Batch reader — chunk-driven
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = MmdDoc::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat
 //! p.finish();
 //!
 //! // Builder writer — emit from AST
-//! pub fn emit(doc: &MmdDoc) -> Vec<u8>;
+//! let bytes: Vec<u8> = doc.emit();
 //!
 //! // Streaming writer — emit from events
-//! let mut w = Writer::new(sink);
+//! let mut w = MmdDoc::writer(sink);
 //! w.write_event(event); // repeat
 //! w.finish(); // flushes to sink
 //! ```
+//!
+//! `parse::parse_str`/`events::events_str` (take `&str`, skip the UTF-8
+//! check) and `events::events` (byte slice, `Option<EventIter>` — `None`
+//! signals invalid UTF-8) remain as separate, non-trait entry points: they
+//! have a materially different contract from the trait methods, not a
+//! redundant duplicate of them.
 //!
 //! # Limitations
 //!
@@ -89,17 +99,76 @@ pub mod writer;
 pub use ast::{
     ColumnAlignment, Diagnostic, LinkDef, ListKind, MetadataEntry, MetadataStyle, MmdBlock,
     MmdDefinitionListItem, MmdDoc, MmdInline, MmdListItem, MmdTableCell, MmdTableRow,
-    OrderedMarker, Span,
+    OrderedMarker, Severity, Span,
 };
 pub use batch::{Handler, StreamingParser};
-pub use emit::emit;
 pub use events::{Event, EventIter, OwnedEvent, events, events_str};
-pub use parse::parse;
+pub use parse::parse_str;
 pub use writer::Writer;
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `MmdDoc` implements the five shared API-mode traits directly — the old
+// crate-root `parse`/`emit` free functions (thin wrappers duplicating what is
+// now the trait method) are gone. `parse::parse_str`/`events::events_str`
+// (`&str`, skip the UTF-8 check) and `events::events` (byte slice,
+// `Option<EventIter>` — `None` signals invalid UTF-8) stay as documented
+// crate API, mirroring commonmark-fmt's own reasoning: they have a
+// materially different contract from the trait methods (str input skipping
+// the UTF-8 check; `Option` signaling invalid UTF-8, which the infallible
+// `Events::events` trait method cannot express).
+impl rescribe_format_api::Parse for MmdDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl rescribe_format_api::Emit for MmdDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl rescribe_format_api::Events for MmdDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document
+    /// (`StartDocument`/`EndDocument` only) rather than panicking or
+    /// returning `Option` — the trait's `events()` is infallible by
+    /// contract and has no diagnostic channel (unlike `Parse::parse`).
+    /// Callers that need to *distinguish* "empty document" from "invalid
+    /// UTF-8" should use [`events()`](crate::events::events) directly,
+    /// which returns `Option<EventIter>` for exactly that reason.
+    fn events(input: &[u8]) -> EventIter<'_> {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::EventIter::new(s),
+            Err(_) => events::EventIter::new(""),
+        }
+    }
+}
+
+impl rescribe_format_api::StreamingParse for MmdDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for MmdDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
 
 #[cfg(test)]
 mod smoke {
     use super::*;
+    use rescribe_format_api::{Emit as _, Parse as _};
 
     const SAMPLE: &str = "Title: Sample Document\nAuthor: Jane Doe\n\n\
         # Overview [MultiMarkdownOverview] ##\n\n\
@@ -108,7 +177,7 @@ mod smoke {
 
     #[test]
     fn smoke_parse() {
-        let (doc, diags) = parse(SAMPLE.as_bytes());
+        let (doc, diags) = MmdDoc::parse(SAMPLE.as_bytes());
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc.metadata_style, MetadataStyle::Bare);
         assert_eq!(doc.metadata.len(), 2);
@@ -125,10 +194,10 @@ mod smoke {
 
     #[test]
     fn smoke_roundtrip() {
-        let (doc1, diags1) = parse(SAMPLE.as_bytes());
+        let (doc1, diags1) = MmdDoc::parse(SAMPLE.as_bytes());
         assert!(diags1.is_empty());
-        let emitted = emit(&doc1);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc1.emit();
+        let (doc2, diags2) = MmdDoc::parse(&emitted);
         assert!(diags2.is_empty(), "diagnostics: {diags2:?}");
         assert_eq!(doc1.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
     }
@@ -159,7 +228,7 @@ mod smoke {
 
     #[test]
     fn smoke_writer() {
-        let (doc, _diags) = parse(SAMPLE.as_bytes());
+        let (doc, _diags) = MmdDoc::parse(SAMPLE.as_bytes());
         let evs: Vec<_> = events(SAMPLE.as_bytes())
             .unwrap()
             .map(|e| e.into_owned())
@@ -172,7 +241,7 @@ mod smoke {
         // Streaming writer content-equivalent to the builder path (modulo
         // metadata delimiter style, which events() doesn't carry — see
         // crate::writer's module doc).
-        let (doc2, diags2) = parse(&bytes);
+        let (doc2, diags2) = MmdDoc::parse(&bytes);
         assert!(diags2.is_empty(), "diagnostics: {diags2:?}");
         assert_eq!(doc.strip_spans().blocks, doc2.strip_spans().blocks);
         assert_eq!(doc.metadata, doc2.metadata);

@@ -9,7 +9,10 @@ use crate::ast::*;
 ///
 /// Parsing is always infallible: malformed constructs are silently tolerated
 /// and may produce entries in the returned [`Diagnostic`] list.
-pub fn parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>) {
+///
+/// This is the implementation behind [`rescribe_format_api::Parse::parse`]
+/// for [`RtfDoc`]; use that trait method from outside the crate.
+pub(crate) fn parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.run();
     // The parser's internal color_table always has index-0 = auto/default
@@ -30,6 +33,10 @@ pub fn parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>) {
 }
 
 /// Convenience wrapper for callers that already have a `&str`.
+///
+/// Kept as a separate public entry point (not just a trait wrapper): it
+/// takes `&str`, a materially different contract from
+/// [`rescribe_format_api::Parse::parse`]'s `&[u8]`.
 pub fn parse_str(input: &str) -> (RtfDoc, Vec<Diagnostic>) {
     parse(input.as_bytes())
 }

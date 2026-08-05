@@ -20,7 +20,7 @@
 //! two sanctioned "buffer all input" exceptions and why each is allowed.
 //! For large-file use cases where the whole document must not be resident
 //! at once, prefer loading the full input and using
-//! [`crate::events::events`] directly, or the upstream `typst-syntax`
+//! [`crate::events::events_str`] directly, or the upstream `typst-syntax`
 //! crate's own edit-based incremental reparsing for the editor use case.
 //!
 //! # Example
@@ -60,38 +60,32 @@ impl BatchParser {
     /// text).
     pub fn finish(self) -> (TypstDoc, Vec<Diagnostic>) {
         match std::str::from_utf8(&self.buf) {
-            Ok(s) => crate::parse::parse(s),
+            Ok(s) => crate::parse::parse_str(s),
             Err(e) => (
                 TypstDoc::default(),
                 vec![Diagnostic {
                     message: format!("input is not valid UTF-8: {e}"),
                     span: crate::ast::Span::NONE,
+                    severity: crate::ast::Severity::Warning,
+                    code: "",
                 }],
             ),
         }
     }
 }
 
-/// Handler closure or type for batch-mode Typst events. Implemented
-/// automatically for any `FnMut(Event)`.
-pub trait Handler {
-    fn handle(&mut self, event: Event);
-}
-
-impl<F: FnMut(Event)> Handler for F {
-    fn handle(&mut self, event: Event) {
-        self(event);
-    }
-}
+/// Handler closure or type for batch-mode Typst events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming parser for Typst. See module docs for the buffering
 /// limitation this crate exempts (mirroring `commonmark-fmt`/pulldown-cmark).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<Event>> {
     buf: Vec<u8>,
     handler: H,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<Event>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -109,7 +103,7 @@ impl<H: Handler> StreamingParser<H> {
     pub fn finish(mut self) -> Vec<Diagnostic> {
         match std::str::from_utf8(&self.buf) {
             Ok(s) => {
-                let (doc, diags) = crate::parse::parse(s);
+                let (doc, diags) = crate::parse::parse_str(s);
                 for ev in EventIter::from_doc(doc) {
                     self.handler.handle(ev);
                 }
@@ -118,6 +112,8 @@ impl<H: Handler> StreamingParser<H> {
             Err(e) => vec![Diagnostic {
                 message: format!("input is not valid UTF-8: {e}"),
                 span: crate::ast::Span::NONE,
+                severity: crate::ast::Severity::Warning,
+                code: "",
             }],
         }
     }
@@ -137,7 +133,7 @@ mod tests {
         p.feed(&SAMPLE.as_bytes()[mid..]);
         let (doc, diags) = p.finish();
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
-        let (expected, _) = crate::parse::parse(SAMPLE);
+        let (expected, _) = crate::parse::parse_str(SAMPLE);
         assert_eq!(doc.strip_spans(), expected.strip_spans());
     }
 
@@ -150,7 +146,7 @@ mod tests {
         p.feed(&SAMPLE.as_bytes()[mid..]);
         let diags = p.finish();
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
-        let expected: Vec<_> = crate::events::events(SAMPLE).collect();
+        let expected: Vec<_> = crate::events::events_str(SAMPLE).collect();
         assert_eq!(evs, expected);
     }
 }

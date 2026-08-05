@@ -3,7 +3,11 @@
 use crate::ast::{Block, CheckboxState, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
 
 /// Build an Org-mode string from an [`OrgDoc`].
-pub fn build(doc: &OrgDoc) -> String {
+///
+/// Not exposed as public API: [`rescribe_format_api::Emit::emit`] (implemented
+/// for `OrgDoc` in `lib.rs`) is the public entry point, wrapping this via
+/// `.into_bytes()`.
+pub(crate) fn build(doc: &OrgDoc) -> String {
     let mut ctx = BuildContext::new();
 
     // Emit metadata as #+KEY: value lines

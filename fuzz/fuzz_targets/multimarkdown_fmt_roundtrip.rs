@@ -36,6 +36,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use multimarkdown_fmt::{MetadataEntry, MetadataStyle, MmdBlock, MmdDoc, MmdInline, Span};
+use rescribe_format_api::{Emit as _, Parse as _};
 
 /// Push a space onto `v`, merging into a trailing `Text` node if there is
 /// one (see `Gen::inlines`'s doc comment on why merging is required).
@@ -241,13 +242,13 @@ fuzz_target!(|data: &[u8]| {
     let mut g = Gen::new(data);
     let doc = g.doc();
 
-    let emitted = multimarkdown_fmt::emit(&doc);
+    let emitted = doc.emit();
     let emitted_str = match std::str::from_utf8(&emitted) {
         Ok(s) => s,
         Err(_) => return,
     };
 
-    let (doc2, diags) = multimarkdown_fmt::parse(emitted.as_slice());
+    let (doc2, diags) = MmdDoc::parse(emitted.as_slice());
     assert!(
         diags.is_empty(),
         "unexpected diagnostics reparsing generated document: {diags:?}\nemitted: {emitted_str}"

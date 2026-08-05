@@ -264,7 +264,7 @@ fn t2t_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = t2t::parse::parse(&input);
+        let (doc, _diags) = t2t::T2tDoc::parse(input.as_bytes());
         let expected = t2t_ast_to_events(&doc);
         let actual: Vec<_> = t2t::events(&input).collect();
         assert_eq!(
@@ -351,8 +351,8 @@ fn t2t_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = t2t::parse::parse(&input);
-        let built = t2t::emit::emit(&doc);
+        let (doc, _diags) = t2t::T2tDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = t2t::writer::Writer::new(Vec::<u8>::new());
         for e in t2t::events(&input) {

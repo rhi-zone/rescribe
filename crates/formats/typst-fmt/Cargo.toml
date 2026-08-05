@@ -16,5 +16,6 @@ writer-builder = ["reader-ast", "writer-streaming"]
 
 [dependencies]
 typst-syntax = { workspace = true }
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

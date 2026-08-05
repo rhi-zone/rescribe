@@ -11,7 +11,8 @@
 //!     --fixtures fixtures/rtf \
 //!     [--top 40]
 
-use rtf_fmt::{Block, Inline, parse};
+use rescribe_format_api::Parse;
+use rtf_fmt::{Block, Inline, RtfDoc};
 use std::collections::{HashMap, HashSet};
 
 // ── Kind labels ───────────────────────────────────────────────────────────────
@@ -166,7 +167,7 @@ fn analyze(dir: &str) -> (HashMap<Trans, usize>, usize) {
         let Ok(bytes) = std::fs::read(path) else {
             continue;
         };
-        let (ast, _) = parse(&bytes);
+        let (ast, _) = RtfDoc::parse(&bytes);
         if ast.blocks.is_empty() {
             continue; // skip files our parser extracted nothing from
         }

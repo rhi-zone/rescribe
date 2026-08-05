@@ -17,14 +17,20 @@
 
 use typst_syntax::ast::{AstNode, Expr, Markup};
 
-use crate::ast::{Block, Diagnostic, Inline, Span, TypstDoc};
+use crate::ast::{Block, Diagnostic, Inline, Severity, Span, TypstDoc};
 
-/// Parse Typst source into this crate's [`TypstDoc`].
+/// Parse Typst source (`&str`) into this crate's [`TypstDoc`].
 ///
 /// Infallible: syntax errors from `typst-syntax` are reported as
 /// [`Diagnostic`]s, never a panic, and the walk still produces whatever
 /// structure it can from the (possibly error-recovered) tree.
-pub fn parse(input: &str) -> (TypstDoc, Vec<Diagnostic>) {
+///
+/// Kept as a public, non-trait entry point alongside
+/// [`rescribe_format_api::Parse::parse`](crate::TypstDoc) (see `lib.rs`'s
+/// trait impl block): it takes `&str` rather than `&[u8]`, a materially
+/// different contract (no UTF-8 validation step) — not a redundant
+/// duplicate of the trait method, which the trait impl calls into.
+pub fn parse_str(input: &str) -> (TypstDoc, Vec<Diagnostic>) {
     let root = typst_syntax::parse(input);
 
     let mut diags = Vec::new();
@@ -32,10 +38,9 @@ pub fn parse(input: &str) -> (TypstDoc, Vec<Diagnostic>) {
         let range = err.span.range().unwrap_or_default();
         diags.push(Diagnostic {
             message: err.message.to_string(),
-            span: Span {
-                start: range.start,
-                end: range.end,
-            },
+            span: Span::new(range.start, range.end),
+            severity: Severity::Warning,
+            code: "",
         });
     }
 
@@ -45,6 +50,8 @@ pub fn parse(input: &str) -> (TypstDoc, Vec<Diagnostic>) {
             diags.push(Diagnostic {
                 message: "failed to cast parse root to Markup".to_owned(),
                 span: Span::NONE,
+                severity: Severity::Warning,
+                code: "",
             });
             Vec::new()
         }

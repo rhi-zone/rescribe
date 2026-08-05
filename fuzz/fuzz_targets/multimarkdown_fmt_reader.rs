@@ -9,9 +9,11 @@
 //! docs for the sanctioned, inherited exemption this reflects).
 
 use libfuzzer_sys::fuzz_target;
+use multimarkdown_fmt::MmdDoc;
+use rescribe_format_api::Parse as _;
 
 fuzz_target!(|data: &[u8]| {
-    let _ = multimarkdown_fmt::parse(data);
+    let _ = MmdDoc::parse(data);
 
     if let Some(iter) = multimarkdown_fmt::events(data) {
         let _ = iter.count();

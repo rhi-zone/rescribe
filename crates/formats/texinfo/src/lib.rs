@@ -19,7 +19,79 @@ pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
+
+// ── rescribe-format-api trait implementations ───────────────────────────────
+//
+// `TexinfoDoc` is not lifetime-generic (unlike `RstDoc<'a>`), so it doesn't
+// hit rst-fmt's structural wall — but `crate::parse::parse`/`crate::events::events`
+// take `&str`, not the `&[u8]` the shared `Parse`/`Events` traits require.
+// Texinfo source is plain text, and `BatchParser::finish`/`StreamingParser::feed`
+// already bridge `&[u8]` -> text via `String::from_utf8_lossy` internally (see
+// `batch.rs`) — this is an established, always-valid conversion for this
+// format, not a structural mismatch, so `Parse`/`Events` are implemented by
+// applying the same bridge, matching precedent.
+//
+// `crate::events::events` eagerly parses into a pre-computed `Vec<OwnedEvent>`
+// regardless of input lifetime (see `events.rs`'s `EventIter`), so `Events`'s
+// associated `Event<'a>` is `OwnedEvent` unconditionally here — the same
+// "owned regardless of `'a`" case `rescribe_format_api::Events`'s docs
+// anticipate for crates like `zip-fmt`.
+
+impl Parse for TexinfoDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
+    }
+}
+
+impl Emit for TexinfoDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+/// Owned-event iterator backing [`TexinfoDoc`]'s [`Events`] impl. A thin
+/// wrapper over `Vec<OwnedEvent>::into_iter` — see the module-level note on
+/// why `Event<'a>` is `OwnedEvent` here regardless of `'a`.
+pub struct EventIterOwned(std::vec::IntoIter<OwnedEvent>);
+
+impl Iterator for EventIterOwned {
+    type Item = OwnedEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+impl Events for TexinfoDoc {
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = EventIterOwned;
+
+    fn events(input: &[u8]) -> Self::EventIter<'_> {
+        let s = String::from_utf8_lossy(input);
+        let owned: Vec<OwnedEvent> = events::events(&s).map(|e| e.into_owned()).collect();
+        EventIterOwned(owned.into_iter())
+    }
+}
+
+impl StreamingParse for TexinfoDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for TexinfoDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

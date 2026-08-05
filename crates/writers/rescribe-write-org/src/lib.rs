@@ -3,7 +3,7 @@
 //! Emits documents in Emacs Org-mode format.
 //!
 //! Maps rescribe `Document`/`Node` to the `org-fmt` AST, then calls
-//! `org_fmt::build()` to produce the final string.
+//! `OrgDoc`'s `rescribe_format_api::Emit::emit()` to produce the final bytes.
 
 pub mod builder;
 
@@ -12,6 +12,7 @@ use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as Org-mode.
@@ -47,12 +48,9 @@ pub fn emit_with_options(
     let blocks = convert_nodes(&doc.content.children, &mut warnings);
 
     let org_doc = OrgDoc { blocks, metadata };
-    let output = org_fmt::build(&org_doc);
+    let output = org_doc.emit();
 
-    Ok(ConversionResult::with_warnings(
-        output.into_bytes(),
-        warnings,
-    ))
+    Ok(ConversionResult::with_warnings(output, warnings))
 }
 
 fn convert_nodes(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Block> {

@@ -1,42 +1,13 @@
 //! txt2tags AST types, Span, and Diagnostic.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
+//
+// Shared with every other `-fmt` crate via `rescribe-format-api`. See that
+// crate's docs for the rationale (one `Span`/`Diagnostic`/`Severity` shape
+// instead of ~37 divergent per-crate definitions).
 
-/// Byte range in the original source input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    /// A zero-width span at the origin. Used for programmatically constructed
-    /// nodes that have no source position.
-    pub const NONE: Self = Self { start: 0, end: 0 };
-
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
-
-/// A diagnostic message produced during parsing.
-///
-/// txt2tags parsing is always infallible — malformed constructs are silently
-/// tolerated and produce diagnostics instead of hard errors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
+pub use rescribe_format_api::Span;
+pub use rescribe_format_api::{Diagnostic, Severity};
 
 // ── Document ──────────────────────────────────────────────────────────────────
 

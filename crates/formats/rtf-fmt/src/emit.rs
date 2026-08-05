@@ -14,7 +14,10 @@ use crate::tables::{build_color_map, build_font_map};
 /// bold → superscript|subscript → font_size → color (outermost last).
 /// Non-canonical nesting is not a valid parser output and does not carry a
 /// roundtrip guarantee.
-pub fn emit(doc: &RtfDoc) -> String {
+///
+/// This is the implementation behind [`rescribe_format_api::Emit::emit`] for
+/// [`RtfDoc`]; use that trait method from outside the crate.
+pub(crate) fn emit(doc: &RtfDoc) -> String {
     // font_map: index 0 = default ("Times New Roman"), then extra fonts.
     // Shared with sem_events::events()'s Event::StartDocument payload via
     // crate::tables, so the two independent emission paths (this builder and

@@ -12,8 +12,9 @@
 //! - `eval`: full compiler path via the `typst` crate; adds `parse_evaluated()`
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
-use typst_fmt::{Block, Inline};
+use typst_fmt::{Block, Inline, TypstDoc};
 
 /// Parse Typst source into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -25,7 +26,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diags) = typst_fmt::parse(input);
+    let (doc, _diags) = TypstDoc::parse(input.as_bytes());
     let children: Vec<Node> = doc.blocks.iter().map(convert_block).collect();
     let doc_node = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(doc_node);
