@@ -8,7 +8,7 @@ use crate::ast::{
 ///
 /// Always succeeds — malformed or unrecognised sequences produce diagnostics
 /// instead of hard errors.
-pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
     let mut nodes = Vec::new();
     let mut diagnostics = Vec::new();
     let mut style = Style::default();

@@ -9,4 +9,5 @@ description = "ANSI terminal text reader for rescribe"
 [dependencies]
 ansi-fmt = { workspace = true }
 rescribe-core = { workspace = true }
+rescribe-format-api = { workspace = true }
 rescribe-std = { workspace = true }

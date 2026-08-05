@@ -3,7 +3,11 @@
 use crate::ast::{AnsiDoc, AnsiNode, Color, CursorDirection, EraseMode, Style};
 
 /// Emit an [`AnsiDoc`] as an ANSI-formatted string.
-pub fn emit(doc: &AnsiDoc) -> String {
+///
+/// Reached externally only via [`crate::Emit::emit`] (`rescribe_format_api`'s
+/// trait, which wraps this and returns `Vec<u8>`) — this `String`-returning
+/// helper is `pub(crate)` internal plumbing, not a parallel public API.
+pub(crate) fn emit(doc: &AnsiDoc) -> String {
     let mut out = String::new();
     let mut current_style = Style::default();
 
@@ -17,12 +21,6 @@ pub fn emit(doc: &AnsiDoc) -> String {
     }
 
     out
-}
-
-/// Alias for [`emit`].
-#[inline]
-pub fn build(doc: &AnsiDoc) -> String {
-    emit(doc)
 }
 
 fn emit_node(node: &AnsiNode, out: &mut String, current_style: &mut Style) {

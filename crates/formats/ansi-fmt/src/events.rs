@@ -521,7 +521,7 @@ fn parse_u32(s: &str, default: u32) -> u32 {
 }
 
 /// Parse `input` and return a streaming iterator of events.
-pub fn events(input: &[u8]) -> EventIter<'_> {
+pub(crate) fn events(input: &[u8]) -> EventIter<'_> {
     EventIter::new(input)
 }
 

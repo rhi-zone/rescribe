@@ -9,6 +9,7 @@
 
 use ansi_fmt::{AnsiDoc, AnsiNode, Color, Style};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse ANSI-formatted text into a document.
@@ -21,7 +22,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (ansi_doc, _diagnostics) = ansi_fmt::parse(input.as_bytes());
+    let (ansi_doc, _diagnostics) = AnsiDoc::parse(input.as_bytes());
 
     let blocks = build_document_nodes(&ansi_doc);
 

@@ -57,23 +57,12 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming ANSI events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming ANSI parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest escape sequence) for well-formed input.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     buf: Vec<u8>,
     /// Running SGR style, persisted across `drain_complete()`/`finish()`
@@ -98,7 +87,7 @@ pub struct StreamingParser<H: Handler> {
     pending_text: Option<(String, Style)>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

@@ -3,6 +3,9 @@
 //! **Pandoc cannot read ANSI**, so there is no oracle comparison here.
 //! This file provides a `parse_sample_no_panic` integration test only.
 
+use ansi_fmt::AnsiDoc;
+use rescribe_format_api::{Emit, Events, Parse};
+
 #[test]
 fn parse_sample_no_panic() {
     let sample = b"\x1b[1mbold\x1b[0m \x1b[3mitalic\x1b[0m \x1b[4munderline\x1b[0m \
@@ -17,7 +20,7 @@ fn parse_sample_no_panic() {
         \x1b[2J\x1b[K \
         \x1b]8;;https://example.com\x07Click\x1b]8;;\x07 \
         Hello\nWorld";
-    let (doc, _) = ansi_fmt::parse(sample);
+    let (doc, _) = AnsiDoc::parse(sample);
     assert!(!doc.nodes.is_empty());
 }
 
@@ -41,7 +44,7 @@ fn parse_adversarial_no_panic() {
         b"\x1b[48;2;999;999;999m",
     ];
     for input in inputs {
-        let _ = ansi_fmt::parse(input);
+        let _ = AnsiDoc::parse(input);
     }
 }
 
@@ -58,16 +61,16 @@ fn events_no_panic() {
         b"\x1b[?99z",
     ];
     for input in inputs {
-        let _: Vec<_> = ansi_fmt::events(input).collect();
+        let _: Vec<_> = AnsiDoc::events(input).collect();
     }
 }
 
 #[test]
 fn roundtrip_sample() {
     let sample = b"\x1b[1mBold\x1b[0m \x1b[31mRed\x1b[0m \x1b[38;5;196mPalette\x1b[0m plain";
-    let (doc, _) = ansi_fmt::parse(sample);
-    let emitted = ansi_fmt::emit(&doc);
-    let (doc2, _) = ansi_fmt::parse(emitted.as_bytes());
+    let (doc, _) = AnsiDoc::parse(sample);
+    let emitted = doc.emit();
+    let (doc2, _) = AnsiDoc::parse(&emitted);
     assert_eq!(ansi_fmt::collect_text(&doc), ansi_fmt::collect_text(&doc2));
 }
 

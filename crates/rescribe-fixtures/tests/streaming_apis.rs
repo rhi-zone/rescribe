@@ -5250,8 +5250,9 @@ fn ansi_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<ansi_fmt::OwnedEvent> =
-            ansi_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let bulk: Vec<ansi_fmt::OwnedEvent> = ansi_fmt::AnsiDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -5292,11 +5293,12 @@ fn ansi_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = ansi_fmt::parse(&input);
-        let built = ansi_fmt::emit(&doc);
+        let (doc, _diags) = ansi_fmt::AnsiDoc::parse(&input);
+        let built_bytes = doc.emit();
+        let built = String::from_utf8_lossy(&built_bytes).into_owned();
 
         let mut w = ansi_fmt::Writer::new(Vec::<u8>::new());
-        for e in ansi_fmt::events(&input) {
+        for e in ansi_fmt::AnsiDoc::events(&input) {
             w.write_event(e.into_owned());
         }
         let streamed_bytes = w.finish();
