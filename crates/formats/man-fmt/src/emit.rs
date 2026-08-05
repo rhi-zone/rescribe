@@ -5,7 +5,7 @@ use crate::ast::{Block, Inline, ManDoc};
 // ── Public entry point ────────────────────────────────────────────────────────
 
 /// Build a man page string from a [`ManDoc`].
-pub fn build(doc: &ManDoc) -> String {
+pub(crate) fn build(doc: &ManDoc) -> String {
     let mut ctx = BuildContext::new();
 
     // Write title header

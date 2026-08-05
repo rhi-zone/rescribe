@@ -1,42 +1,13 @@
 //! Man page AST types.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
+//
+// `Span`/`Diagnostic`/`Severity` are the shared `rescribe-format-api` shapes —
+// man-fmt's local definitions matched them field-for-field already (same
+// `span`/`severity`/`message`/`code` shape, same `Span::NONE`/`Span::new`), so
+// this is a pure re-export, not a behavioral change.
 
-/// Byte range in the original source input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    /// A zero-width span at the origin.  Used for programmatically constructed
-    /// nodes (e.g. from the rescribe writer) that have no source position.
-    pub const NONE: Self = Self { start: 0, end: 0 };
-
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
-
-/// A diagnostic message produced during parsing.
-///
-/// Man page parsing is always infallible — malformed constructs produce
-/// diagnostics instead of hard errors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── Document ──────────────────────────────────────────────────────────────────
 

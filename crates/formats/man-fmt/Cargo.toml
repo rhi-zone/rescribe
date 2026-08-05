@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "man page parser, AST, and builder — no rescribe dependency"
 
+[dependencies]
+rescribe-format-api = { workspace = true }
+
 [features]
 default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
 reader-ast = []

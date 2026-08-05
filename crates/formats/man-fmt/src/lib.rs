@@ -7,6 +7,45 @@
 //! `Box::leak` to manufacture a `'static` reference to the parsed `ManDoc`,
 //! leaking it on every call. See `src/events.rs` for the sound, non-leaking
 //! replacement and TODO.md for the tracked architecture gap.
+//!
+//! # API layers
+//!
+//! `ManDoc` implements the five shared `rescribe-format-api` traits:
+//!
+//! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
+//! // AST reader
+//! let (doc, diags): (ManDoc, Vec<Diagnostic>) = ManDoc::parse(input);
+//!
+//! // Streaming reader — owned events, collected via the AST-projection walk
+//! let it = ManDoc::events(input);
+//!
+//! // Batch reader — chunk-driven, genuinely incremental (see `batch.rs`)
+//! let mut p = ManDoc::streaming_parser(|ev| ...);
+//! p.feed(chunk); // repeat
+//! p.finish();
+//!
+//! // Builder writer — emit from AST
+//! let bytes: Vec<u8> = doc.emit();
+//!
+//! // Streaming writer — emit from events, genuinely incremental (see `writer.rs`)
+//! let mut w = ManDoc::writer(sink);
+//! w.write_event(event); // repeat
+//! w.finish(); // flushes to sink
+//! ```
+//!
+//! `parse()` (`parse::parse`, `&str` input) and `man_events()` (`&str` input)
+//! remain as separate, non-trait entry points, the same reasoning
+//! `commonmark-fmt` documents for `parse_str`/`events_str`: man-fmt's native
+//! representation is `&str`, not bytes — `ManDoc::parse`/`ManDoc::events`
+//! (the trait methods, bound to `&[u8]` by `rescribe-format-api`) bridge via
+//! `String::from_utf8_lossy`, matching the lossy bytes→`&str` convention this
+//! crate's own `BatchParser`/`BatchSink` already use elsewhere in this file.
+//! Callers that already hold a valid `&str` (e.g. `rescribe-read-man`, which
+//! receives one from its own caller) use `parse()`/`man_events()` directly
+//! and skip both the lossy re-decode and the allocation it would otherwise
+//! force on every call.
 
 #![deny(unsafe_code)]
 
@@ -22,14 +61,72 @@ pub mod writer;
 // Re-export key types for convenience.
 pub use ast::{Block, Diagnostic, Inline, ManDoc, Severity, Span};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::build;
+#[cfg(test)]
+pub(crate) use emit::build;
 pub use events::{EventIter, ManEvent, OwnedManEvent};
 pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of [`OwnedManEvent`] items.
+///
+/// Kept as a documented, non-trait entry point — see this module's doc
+/// comment ("API layers") for why.
 pub fn man_events(input: &str) -> impl Iterator<Item = OwnedManEvent> + '_ {
     events::events(input)
+}
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `ManDoc` implements all five shared API-mode traits directly. Unlike
+// rst-fmt, nothing here is structurally blocked: `ManDoc` is a plain owned
+// type (no lifetime parameter), and `parse::parse`/`events::events` already
+// return the exact `(Self, Vec<Diagnostic>)` / owned-event shapes the traits
+// expect — the only bridging needed is `&[u8]` → `&str` (`from_utf8_lossy`,
+// see the module doc above), not a fundamental signature mismatch.
+
+impl Parse for ManDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
+    }
+}
+
+impl Emit for ManDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl Events for ManDoc {
+    // `events::events` eagerly collects into an owned `Vec` (see its own doc
+    // comment on the architecture gap this reflects) — `Self::EventIter<'a>`
+    // is therefore `std::vec::IntoIter`, a concrete type that, like
+    // `zip-fmt`'s `OwnedEvent`, simply doesn't use the GAT's lifetime.
+    type Event<'a> = OwnedManEvent;
+    type EventIter<'a> = std::vec::IntoIter<OwnedManEvent>;
+
+    fn events(input: &[u8]) -> Self::EventIter<'_> {
+        let s = String::from_utf8_lossy(input);
+        events::events(&s).collect::<Vec<_>>().into_iter()
+    }
+}
+
+impl StreamingParse for ManDoc {
+    type Event = OwnedManEvent;
+    type Parser<H: Handler<OwnedManEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedManEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for ManDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

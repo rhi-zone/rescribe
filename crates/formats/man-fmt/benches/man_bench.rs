@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use man_fmt::{build, parse};
+use man_fmt::Emit;
+use man_fmt::parse;
 
 const SMALL: &str = r#".TH TEST 1 "2024-01-01" "Test Suite" "User Commands"
 .SH NAME
@@ -88,7 +89,7 @@ fn bench_man_emit_medium(c: &mut Criterion) {
     c.bench_function("man_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }
@@ -97,7 +98,8 @@ fn bench_man_roundtrip_small(c: &mut Criterion) {
     c.bench_function("man_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = std::hint::black_box(&doc).emit();
+            let out = String::from_utf8(out).expect("emit output is UTF-8");
             let _ = parse(std::hint::black_box(&out));
         });
     });
@@ -107,7 +109,8 @@ fn bench_man_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("man_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = std::hint::black_box(&doc).emit();
+            let out = String::from_utf8(out).expect("emit output is UTF-8");
             let _ = parse(std::hint::black_box(&out));
         });
     });

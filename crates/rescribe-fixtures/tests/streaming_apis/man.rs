@@ -179,7 +179,7 @@ fn man_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = man_fmt::parse(&input);
+        let (doc, _diags) = man_fmt::parse::parse(&input);
         let expected = man_ast_to_events(&doc);
         let actual: Vec<_> = man_fmt::man_events(&input)
             .map(|e| e.into_owned())
@@ -282,8 +282,8 @@ fn man_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = man_fmt::parse(&input);
-        let built = man_fmt::build(&doc);
+        let (doc, _diags) = man_fmt::parse::parse(&input);
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = man_fmt::Writer::new(Vec::<u8>::new());
         for e in man_fmt::man_events(&input) {

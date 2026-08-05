@@ -3,7 +3,7 @@
 //! Thin adapter layer around the `man-fmt` crate.
 //! Emits documents as Unix man page format using common macros.
 
-use man_fmt::{Block, Inline, ManDoc, Span};
+use man_fmt::{Block, Emit, Inline, ManDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -18,9 +18,9 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let man_doc = convert_from_document(doc);
-    let output = man_fmt::build(&man_doc);
+    let output = man_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_from_document(doc: &Document) -> ManDoc {

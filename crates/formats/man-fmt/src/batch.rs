@@ -37,6 +37,7 @@
 
 use crate::ast::{Diagnostic, ManDoc};
 use crate::events::OwnedManEvent;
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven man page parser that returns the full AST on finish.
 #[derive(Default)]
@@ -61,19 +62,6 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming man page events.
-///
-/// Implemented automatically for any `FnMut(OwnedManEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedManEvent);
-}
-
-impl<F: FnMut(OwnedManEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedManEvent) {
-        self(event);
-    }
-}
-
 /// Block accumulation state for the streaming parser.
 enum BlockState {
     /// Between blocks — waiting for the first non-blank line.
@@ -87,7 +75,7 @@ enum BlockState {
 /// Chunked streaming man page parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block). See the [module-level docs](self) for details.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedManEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -102,7 +90,7 @@ pub struct StreamingParser<H: Handler> {
     metadata_emitted: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedManEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     ///
     /// Dispatches `StartDocument` immediately: bulk `events()` always wraps
