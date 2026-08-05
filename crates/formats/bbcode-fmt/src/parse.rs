@@ -2,10 +2,21 @@
 
 use crate::ast::{AlignKind, BbcodeDoc, Block, Diagnostic, Inline, Span, TableRow};
 
+/// Parse BBCode-formatted bytes into a [`BbcodeDoc`].
+///
+/// Reached externally only via [`crate::Parse::parse`] (`rescribe_format_api`'s
+/// trait) — this decodes `input` as UTF-8 (lossily) and hands off to
+/// [`parse_str`], the crate's own public, `&str`-input entry point (kept
+/// public per the documented "materially different contract" exception —
+/// same class as commonmark-fmt's `parse_str`/`events_str`).
+pub(crate) fn parse(input: &[u8]) -> (BbcodeDoc, Vec<Diagnostic>) {
+    parse_str(&String::from_utf8_lossy(input))
+}
+
 /// Parse a BBCode string into a [`BbcodeDoc`].
 ///
 /// Always succeeds — malformed markup is tolerated and may produce diagnostics.
-pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
     let diagnostics = Vec::new();
     let mut result = Vec::new();
     let lines: Vec<&str> = input.lines().collect();
@@ -470,7 +481,7 @@ fn parse_wrapped_block(lines: &[&str], start: usize, tag: &str) -> (Vec<Block>, 
 
     // Parse inner lines as block content
     let inner_text = inner_lines.join("\n");
-    let (inner_doc, _) = parse(&inner_text);
+    let (inner_doc, _) = parse_str(&inner_text);
     (inner_doc.blocks, i)
 }
 

@@ -1,5 +1,6 @@
-use creole::{build, parse};
+use creole::parse;
 use criterion::{Criterion, criterion_group, criterion_main};
+use rescribe_format_api::Emit as _;
 
 const SMALL: &str = r#"
 = Hello World
@@ -114,7 +115,7 @@ fn bench_creole_emit_medium(c: &mut Criterion) {
     c.bench_function("creole_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }

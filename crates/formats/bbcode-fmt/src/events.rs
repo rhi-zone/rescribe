@@ -186,7 +186,8 @@ impl<'a> Event<'a> {
 
 /// An iterator that yields [`Event`]s from a BBCode document.
 ///
-/// Constructed by [`events()`].
+/// Constructed by [`events_str()`], or indirectly via
+/// [`crate::Events::events`] (`rescribe_format_api`'s trait).
 pub struct EventIter<'a> {
     /// Pre-computed list of events.  We parse once and then iterate.
     events: Vec<Event<'a>>,
@@ -216,8 +217,8 @@ impl<'a> Iterator for EventIter<'a> {
 }
 
 /// Parse BBCode input and return a streaming iterator of events.
-pub fn events(input: &str) -> EventIter<'_> {
-    let (doc, _) = crate::parse::parse(input);
+pub fn events_str(input: &str) -> EventIter<'_> {
+    let (doc, _) = crate::parse::parse_str(input);
     let mut evts = Vec::new();
     for block in &doc.blocks {
         emit_block_events(block, &mut evts);
@@ -480,7 +481,7 @@ mod tests {
                      [img]https://example.com/x.png[/img]";
 
         let borrowed: Vec<Event<'_>> = {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let mut evts = Vec::new();
             for block in &doc.blocks {
                 emit_block_events(block, &mut evts);
@@ -528,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_events_basic() {
-        let evs: Vec<_> = events("[b]hi[/b]").collect();
+        let evs: Vec<_> = events_str("[b]hi[/b]").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartBold)));
         assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "hi")));
         assert!(evs.iter().any(|e| matches!(e, Event::EndBold)));

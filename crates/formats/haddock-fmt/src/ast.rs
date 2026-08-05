@@ -1,43 +1,15 @@
-/// Source span (byte offsets into the original input).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
+/// Source span (byte offsets into the original input) — the shared
+/// [`rescribe_format_api::Span`], not a locally declared type.
+pub use rescribe_format_api::Span;
 
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+/// Severity and diagnostic message types — the shared
+/// [`rescribe_format_api::Severity`] / [`rescribe_format_api::Diagnostic`],
+/// not locally declared types. Construction sites that used the removed
+/// `Diagnostic::warning`/`Diagnostic::error` helpers now use
+/// `Diagnostic::new(Severity::Warning, ...)` / `Diagnostic::new(Severity::Error, ...)`
+/// (there are none in this crate — `parse.rs` never actually constructs a
+/// `Diagnostic`, its returned `Vec<Diagnostic>` stays empty).
+pub use rescribe_format_api::{Diagnostic, Severity};
 
 /// A parsed Haddock document.
 #[derive(Debug, Clone, PartialEq, Default)]

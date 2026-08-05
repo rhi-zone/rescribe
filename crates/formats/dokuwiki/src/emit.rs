@@ -1,7 +1,7 @@
 use crate::ast::*;
 
 /// Build a DokuWiki string from a [`DokuwikiDoc`].
-pub fn build(doc: &DokuwikiDoc) -> String {
+pub(crate) fn build(doc: &DokuwikiDoc) -> String {
     let mut ctx = BuildContext::new();
     for block in &doc.blocks {
         build_block(block, &mut ctx);

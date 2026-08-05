@@ -8,18 +8,20 @@
 //! ## AST (direct parse)
 //!
 //! ```rust
-//! use ansi_fmt::{parse, emit};
+//! use ansi_fmt::AnsiDoc;
+//! use rescribe_format_api::{Emit, Parse};
 //!
-//! let (doc, diagnostics) = parse(b"\x1b[1mHello\x1b[0m world");
-//! let output = emit(&doc);
+//! let (doc, diagnostics) = AnsiDoc::parse(b"\x1b[1mHello\x1b[0m world");
+//! let output = doc.emit();
 //! ```
 //!
 //! ## Streaming (pull iterator)
 //!
 //! ```rust
-//! use ansi_fmt::events;
+//! use ansi_fmt::AnsiDoc;
+//! use rescribe_format_api::Events;
 //!
-//! for event in events(b"\x1b[1mHello\x1b[0m") {
+//! for event in AnsiDoc::events(b"\x1b[1mHello\x1b[0m") {
 //!     // process event
 //! }
 //! ```
@@ -64,14 +66,58 @@ pub use ast::{
     AnsiDoc, AnsiNode, Color, CursorDirection, Diagnostic, EraseMode, Severity, Span, Style,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_text, emit};
+pub use emit::collect_text;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::{parse, parse_str, strip_ansi};
+pub use parse::{parse_str, strip_ansi};
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of events.
-pub fn events(input: &[u8]) -> events::EventIter<'_> {
-    events::events(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `AnsiDoc`'s original `parse`/`emit`/`events` free functions all already
+// took `&[u8]`/produced the exact shapes the shared traits require, so
+// there is no materially-different-contract case to preserve for them (per
+// commonmark-fmt's/rst-fmt's documented exception) — they're demoted to
+// `pub(crate)` and reached only through the trait impls below. `parse_str`
+// (`&str`-input convenience) and `strip_ansi` (a distinct utility, not an
+// alias) keep their own public, non-trait entry points.
+
+impl Parse for AnsiDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for AnsiDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+impl Events for AnsiDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        events::events(input)
+    }
+}
+
+impl StreamingParse for AnsiDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for AnsiDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -82,13 +128,13 @@ mod tests {
 
     #[test]
     fn test_parse_plain_text() {
-        let (doc, _) = parse(b"Hello world");
+        let (doc, _) = AnsiDoc::parse(b"Hello world");
         assert!(!doc.nodes.is_empty());
     }
 
     #[test]
     fn test_parse_bold() {
-        let (doc, _) = parse(b"\x1b[1mBold text\x1b[0m");
+        let (doc, _) = AnsiDoc::parse(b"\x1b[1mBold text\x1b[0m");
         let texts: Vec<_> = doc
             .nodes
             .iter()
@@ -102,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_parse_italic() {
-        let (doc, _) = parse(b"\x1b[3mItalic text\x1b[0m");
+        let (doc, _) = AnsiDoc::parse(b"\x1b[3mItalic text\x1b[0m");
         let texts: Vec<_> = doc
             .nodes
             .iter()
@@ -116,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_parse_underline() {
-        let (doc, _) = parse(b"\x1b[4mUnderlined\x1b[0m");
+        let (doc, _) = AnsiDoc::parse(b"\x1b[4mUnderlined\x1b[0m");
         let texts: Vec<_> = doc
             .nodes
             .iter()
@@ -137,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_combined_styles() {
-        let (doc, _) = parse(b"\x1b[1;3mBold and italic\x1b[0m");
+        let (doc, _) = AnsiDoc::parse(b"\x1b[1;3mBold and italic\x1b[0m");
         let texts: Vec<_> = doc
             .nodes
             .iter()
@@ -154,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_simple() {
+    fn test_emit_simple() {
         let doc = AnsiDoc {
             nodes: vec![AnsiNode::Text {
                 text: "Hello world".into(),
@@ -163,25 +209,25 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let output = build(&doc);
-        assert!(output.contains("Hello world"));
+        let output = doc.emit();
+        assert!(String::from_utf8(output).unwrap().contains("Hello world"));
     }
 
     #[test]
     fn test_roundtrip_plain() {
         let input = b"Hello world";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
-        let (doc2, _) = parse(emitted.as_bytes());
+        let (doc, _) = AnsiDoc::parse(input);
+        let emitted = doc.emit();
+        let (doc2, _) = AnsiDoc::parse(&emitted);
         assert_eq!(collect_text(&doc), collect_text(&doc2));
     }
 
     #[test]
     fn test_roundtrip_bold() {
         let input = b"\x1b[1mHello\x1b[0m";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
-        let (doc2, _) = parse(emitted.as_bytes());
+        let (doc, _) = AnsiDoc::parse(input);
+        let emitted = doc.emit();
+        let (doc2, _) = AnsiDoc::parse(&emitted);
         assert_eq!(collect_text(&doc), collect_text(&doc2));
     }
 
@@ -189,9 +235,9 @@ mod tests {
     fn test_roundtrip_colors() {
         let input =
             b"\x1b[31mRed\x1b[0m \x1b[38;5;196mPalette\x1b[0m \x1b[38;2;255;128;0mTruecolor\x1b[0m";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
-        let (doc2, _) = parse(emitted.as_bytes());
+        let (doc, _) = AnsiDoc::parse(input);
+        let emitted = doc.emit();
+        let (doc2, _) = AnsiDoc::parse(&emitted);
         assert_eq!(collect_text(&doc), collect_text(&doc2));
     }
 
@@ -202,7 +248,7 @@ mod tests {
             \x1b[31mred\x1b[0m \x1b[38;5;196m256-color\x1b[0m \
             \x1b[38;2;255;128;0mtruecolor\x1b[0m \x1b[2mdim\x1b[0m \
             \x1b[5mblink\x1b[0m \x1b[7mreverse\x1b[0m \x1b[9mstrike\x1b[0m";
-        let (doc, _) = parse(sample);
+        let (doc, _) = AnsiDoc::parse(sample);
         assert!(!doc.nodes.is_empty());
     }
 
@@ -224,7 +270,7 @@ mod tests {
             b"\x1b[?99z",
         ];
         for input in inputs {
-            let _ = parse(input); // Must not panic.
+            let _ = AnsiDoc::parse(input); // Must not panic.
         }
     }
 }

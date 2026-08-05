@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use dokuwiki::{build, parse};
+use dokuwiki::parse;
+use rescribe_format_api::Emit as _;
 
 const SMALL: &str = r#"
 ====== Hello World ======
@@ -109,7 +110,8 @@ fn bench_dokuwiki_roundtrip_small(c: &mut Criterion) {
     c.bench_function("dokuwiki_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = std::hint::black_box(&doc).emit();
+            let out = String::from_utf8(out).unwrap();
             let _ = parse(std::hint::black_box(&out));
         });
     });
@@ -119,7 +121,8 @@ fn bench_dokuwiki_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("dokuwiki_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = std::hint::black_box(&doc).emit();
+            let out = String::from_utf8(out).unwrap();
             let _ = parse(std::hint::black_box(&out));
         });
     });
@@ -129,7 +132,7 @@ fn bench_dokuwiki_emit_medium(c: &mut Criterion) {
     c.bench_function("dokuwiki_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }

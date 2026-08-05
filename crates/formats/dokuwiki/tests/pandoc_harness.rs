@@ -56,7 +56,9 @@ file content
     assert!(!doc.blocks.is_empty());
 
     // Roundtrip: build back and re-parse
-    let emitted = dokuwiki::build(&doc);
+    use rescribe_format_api::Emit as _;
+    let emitted = doc.emit();
+    let emitted = String::from_utf8(emitted).unwrap();
     let (doc2, _) = dokuwiki::parse(&emitted);
     assert!(!doc2.blocks.is_empty());
 }

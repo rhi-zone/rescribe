@@ -1,4 +1,6 @@
+use ansi_fmt::AnsiDoc;
 use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use rescribe_format_api::{Emit, Events, Parse};
 
 fn build_sample() -> Vec<u8> {
     let mut buf = Vec::new();
@@ -19,7 +21,7 @@ fn bench_parse(c: &mut Criterion) {
     let sample = build_sample();
     c.bench_function("ansi_parse", |b| {
         b.iter(|| {
-            let (doc, _) = ansi_fmt::parse(black_box(&sample));
+            let (doc, _) = AnsiDoc::parse(black_box(&sample));
             black_box(doc);
         });
     });
@@ -27,10 +29,10 @@ fn bench_parse(c: &mut Criterion) {
 
 fn bench_emit(c: &mut Criterion) {
     let sample = build_sample();
-    let (doc, _) = ansi_fmt::parse(&sample);
+    let (doc, _) = AnsiDoc::parse(&sample);
     c.bench_function("ansi_emit", |b| {
         b.iter(|| {
-            let out = ansi_fmt::emit(black_box(&doc));
+            let out = black_box(&doc).emit();
             black_box(out);
         });
     });
@@ -40,7 +42,7 @@ fn bench_events(c: &mut Criterion) {
     let sample = build_sample();
     c.bench_function("ansi_events", |b| {
         b.iter(|| {
-            let evs: Vec<_> = ansi_fmt::events(black_box(&sample)).collect();
+            let evs: Vec<_> = AnsiDoc::events(black_box(&sample)).collect();
             black_box(evs);
         });
     });
@@ -74,7 +76,7 @@ fn bench_streaming_parser(c: &mut Criterion) {
 
 fn bench_writer(c: &mut Criterion) {
     let sample = build_sample();
-    let evs: Vec<_> = ansi_fmt::events(&sample).map(|e| e.into_owned()).collect();
+    let evs: Vec<_> = AnsiDoc::events(&sample).map(|e| e.into_owned()).collect();
     c.bench_function("ansi_writer", |b| {
         // `write_event` takes `OwnedEvent` by value (`Cow<'static, str>` payloads on
         // several variants, e.g. `Hyperlink`), so replaying the same pre-parsed event

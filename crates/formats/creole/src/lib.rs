@@ -19,15 +19,22 @@ pub mod writer;
 pub use ast::{
     Block, CreoleDoc, DefinitionItem, Diagnostic, Inline, Severity, Span, TableCell, TableRow,
 };
-pub use emit::{build, collect_inline_text};
+pub use emit::collect_inline_text;
 pub use parse::parse;
+pub use rescribe_format_api::{Emit, Parse};
 
 #[cfg(feature = "reader-streaming")]
 pub use events::{Event, EventIter, OwnedEvent};
+#[cfg(feature = "reader-streaming")]
+pub use rescribe_format_api::Events;
 
 #[cfg(feature = "reader-batch")]
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+#[cfg(feature = "reader-batch")]
+pub use rescribe_format_api::StreamingParse;
 
+#[cfg(feature = "writer-streaming")]
+pub use rescribe_format_api::StreamingWrite;
 #[cfg(feature = "writer-streaming")]
 pub use writer::Writer;
 
@@ -37,11 +44,77 @@ pub fn events(input: &str) -> events::EventIter {
     events::events(input)
 }
 
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `parse::parse`/`events()` (both `&str`-input) stay as public, documented
+// non-trait entry points — materially different contract from the shared
+// `&[u8]`-input trait methods (they skip the UTF-8 validity check), mirroring
+// commonmark-fmt's `parse_str`/`events_str`. `CreoleDoc::parse`/
+// `CreoleDoc::events` bridge from `&[u8]` via `std::str::from_utf8`: invalid
+// UTF-8 produces a `Warning` diagnostic for `Parse::parse` (which has a
+// diagnostic channel) and an empty-document iterator for `Events::events`
+// (which, being infallible-by-contract, does not) — the same split
+// commonmark-fmt's `Events` impl documents.
+
+impl Parse for CreoleDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse(s),
+            Err(_) => (
+                CreoleDoc::default(),
+                vec![
+                    Diagnostic::new(Severity::Warning, "input is not valid UTF-8")
+                        .with_code("creole::invalid-utf8"),
+                ],
+            ),
+        }
+    }
+}
+
+impl Emit for CreoleDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+#[cfg(feature = "reader-streaming")]
+impl Events for CreoleDoc {
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = EventIter;
+
+    fn events(input: &[u8]) -> EventIter {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::EventIter::new(s),
+            Err(_) => events::EventIter::new(""),
+        }
+    }
+}
+
+#[cfg(feature = "reader-batch")]
+impl StreamingParse for CreoleDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+#[cfg(feature = "writer-streaming")]
+impl StreamingWrite for CreoleDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use emit::build;
 
     #[test]
     fn test_parse_heading() {

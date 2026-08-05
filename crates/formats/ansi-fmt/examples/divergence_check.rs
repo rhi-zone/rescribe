@@ -11,6 +11,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ansi_fmt::AnsiDoc;
+use rescribe_format_api::{Emit, Events, Parse};
+
 fn find_input(dir: &Path) -> Option<PathBuf> {
     std::fs::read_dir(dir)
         .ok()?
@@ -40,11 +43,12 @@ fn main() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = ansi_fmt::parse(&input);
-        let built = ansi_fmt::emit(&doc);
+        let (doc, _diags) = AnsiDoc::parse(&input);
+        let built_bytes = doc.emit();
+        let built = String::from_utf8_lossy(&built_bytes).into_owned();
 
         let mut w = ansi_fmt::Writer::new(Vec::<u8>::new());
-        for e in ansi_fmt::events(&input) {
+        for e in AnsiDoc::events(&input) {
             w.write_event(e.into_owned());
         }
         let streamed_bytes = w.finish();

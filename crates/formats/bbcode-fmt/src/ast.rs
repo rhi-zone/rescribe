@@ -1,42 +1,11 @@
 //! BBCode AST types: nodes, spans, diagnostics.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
+//
+// Re-exported from the shared `rescribe-format-api` crate rather than
+// declared locally — see that crate's docs for the full contract.
 
-/// Byte range in the original source input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    /// A zero-width span at the origin.  Used for programmatically constructed
-    /// nodes (e.g. from the rescribe writer) that have no source position.
-    pub const NONE: Self = Self { start: 0, end: 0 };
-
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
-
-/// A diagnostic message produced during parsing.
-///
-/// BBCode parsing is always infallible — malformed constructs are silently
-/// tolerated and produce diagnostics instead of hard errors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── Document ──────────────────────────────────────────────────────────────────
 

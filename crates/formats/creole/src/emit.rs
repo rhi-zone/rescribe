@@ -1,7 +1,7 @@
 use crate::ast::*;
 
 /// Build a Creole string from a [`CreoleDoc`].
-pub fn build(doc: &CreoleDoc) -> String {
+pub(crate) fn build(doc: &CreoleDoc) -> String {
     let mut ctx = BuildContext::new();
     for block in &doc.blocks {
         build_block(block, &mut ctx);
