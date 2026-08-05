@@ -193,6 +193,57 @@ fn raw_entry_type_if_unknown(ty: &EntryType, name: &str) -> Option<String> {
     matches!(ty, EntryType::Unknown(_)).then(|| name.to_string())
 }
 
+/// Compute the `EntryType`, raw-preservation splice, and (if applicable) the
+/// fidelity warning for a source-provided entry type name — the single
+/// decision point every `build_*_entry` function goes through.
+///
+/// Two distinct kinds of "becomes `@misc` on the BibTeX path" exist here,
+/// handled differently:
+///
+/// - `EntryType::Unknown(_)` (name isn't in `biblatex`'s vocabulary at all):
+///   spliced back verbatim (`raw_entry_type_if_unknown`), no warning. The
+///   name was never going to be understood by *any* BibTeX-family tool, so
+///   splicing loses nothing a downgrade-to-misc would have saved.
+///
+/// - A genuine BibLaTeX `EntryType` (e.g. `Software`, `Online`, `Dataset`,
+///   `Patent`, `Reference`, `MvReference`, `Periodical`, `Set`, `XData`) that
+///   `EntryType::to_bibtex` deliberately downgrades to `Misc` because classic
+///   BibTeX has no such type: warned, *not* spliced. Splicing would produce
+///   `@software{...}` etc. in a file the caller asked for as classic BibTeX —
+///   most `.bst` style files only define handling for the classic type set
+///   and silently drop entries whose `@type` they don't recognize, while
+///   `@misc` is defined by essentially every style. `EntryType::to_bibtex`'s
+///   downgrade is the right dialect-appropriate behavior; only the silent
+///   part is the bug, hence the warning rather than a splice.
+fn entry_type_and_diagnostics(name: &str) -> (EntryType, EntrySplice, Option<FidelityWarning>) {
+    let ty = entry_type_for(name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, name),
+        date_marker: None,
+    };
+    let warning = biblatex_only_misc_downgrade_warning(&ty, name);
+    (ty, splice, warning)
+}
+
+/// A `FidelityWarning` when, and only when, `ty` is a real (non-`Unknown`,
+/// non-`Misc`) `biblatex::EntryType` that `to_bibtex()` maps to `Misc` —
+/// i.e. a BibLaTeX-only entry type with no classic-BibTeX equivalent. See
+/// `entry_type_and_diagnostics` for why this warns instead of splicing.
+fn biblatex_only_misc_downgrade_warning(ty: &EntryType, name: &str) -> Option<FidelityWarning> {
+    if matches!(ty, EntryType::Misc | EntryType::Unknown(_)) || ty.to_bibtex() != EntryType::Misc {
+        return None;
+    }
+    Some(FidelityWarning::new(
+        Severity::Minor,
+        WarningKind::FeatureLost(format!("bibtex:entry-type:{name}")),
+        format!(
+            "BibLaTeX entry type '{name}' has no classic BibTeX equivalent; \
+             downgraded to '@misc' for BibTeX output (BibLaTeX-only fields \
+             specific to '{name}' may also not be representable in classic BibTeX)"
+        ),
+    ))
+}
+
 /// Set a field to a single plain (non-verbatim) chunk if `value` is
 /// non-empty. Using `Chunk::Normal` (rather than `Entry::set_as::<String>`,
 /// which produces `Chunk::Verbatim` and gets double-braced by `biblatex`'s
@@ -284,24 +335,28 @@ fn collect_node(node: &Node, ctx: &mut EmitContext) {
         "document" | node::BIBLIOGRAPHY => collect_nodes(&node.children, ctx),
 
         node::BIBLIOGRAPHY_ENTRY => {
-            let (entry, splice) = build_bibliography_entry(node);
+            let (entry, splice, warning) = build_bibliography_entry(node);
+            ctx.warnings.extend(warning);
             ctx.insert(entry, splice);
         }
 
         // Legacy shape, kept for backwards compatibility (see `BIBTEX_ENTRY`
         // doc comment above).
         BIBTEX_ENTRY => {
-            let (entry, splice) = build_legacy_entry(node);
+            let (entry, splice, warning) = build_legacy_entry(node);
+            ctx.warnings.extend(warning);
             ctx.insert(entry, splice);
         }
         "citation_entry" => {
-            let (entry, splice) = build_citation_entry(node);
+            let (entry, splice, warning) = build_citation_entry(node);
+            ctx.warnings.extend(warning);
             ctx.insert(entry, splice);
         }
 
         _ => {
             if is_bibtex_type(node.kind.as_str()) {
-                let (entry, splice) = build_typed_entry(node);
+                let (entry, splice, warning) = build_typed_entry(node);
+                ctx.warnings.extend(warning);
                 ctx.insert(entry, splice);
             } else {
                 ctx.warnings.push(FidelityWarning::new(
@@ -347,15 +402,11 @@ fn is_bibtex_type(s: &str) -> bool {
 /// BibTeX). Repeated `author`/`editor` fields are rejoined with ` and `; a
 /// `page_first`/`page_last` pair recombines into one `pages` field;
 /// `prop::DATE` is handled by `set_date` above.
-fn build_bibliography_entry(node: &Node) -> (Entry, EntrySplice) {
+fn build_bibliography_entry(node: &Node) -> (Entry, EntrySplice, Option<FidelityWarning>) {
     let entry_type_name = node.props.get_str("bibtex:entry-type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    let ty = entry_type_for(entry_type_name);
-    let mut splice = EntrySplice {
-        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
-        date_marker: None,
-    };
+    let (ty, mut splice, warning) = entry_type_and_diagnostics(entry_type_name);
     let mut entry = Entry::new(cite_key.to_string(), ty);
 
     if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
@@ -407,7 +458,7 @@ fn build_bibliography_entry(node: &Node) -> (Entry, EntrySplice) {
         set_field(&mut entry, "editor", &editors.join(" and "));
     }
 
-    (entry, splice)
+    (entry, splice, warning)
 }
 
 /// Join an `author`/`editor` field's direct `TEXT` children (given name,
@@ -451,15 +502,11 @@ fn flatten_field_text_into(node: &Node, out: &mut String) {
 
 /// Build a `biblatex::Entry` from a legacy flat `bibtex:entry` node (see
 /// `BIBTEX_ENTRY` doc comment).
-fn build_legacy_entry(node: &Node) -> (Entry, EntrySplice) {
+fn build_legacy_entry(node: &Node) -> (Entry, EntrySplice, Option<FidelityWarning>) {
     let entry_type_name = node.props.get_str("bibtex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    let ty = entry_type_for(entry_type_name);
-    let splice = EntrySplice {
-        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
-        date_marker: None,
-    };
+    let (ty, splice, warning) = entry_type_and_diagnostics(entry_type_name);
     let mut entry = Entry::new(cite_key.to_string(), ty);
 
     let mut fields: Vec<(&str, String)> = Vec::new();
@@ -477,12 +524,12 @@ fn build_legacy_entry(node: &Node) -> (Entry, EntrySplice) {
         set_field(&mut entry, name, &value);
     }
 
-    (entry, splice)
+    (entry, splice, warning)
 }
 
 /// Build a `biblatex::Entry` from a typed entry (where the node kind is the
 /// entry type).
-fn build_typed_entry(node: &Node) -> (Entry, EntrySplice) {
+fn build_typed_entry(node: &Node) -> (Entry, EntrySplice, Option<FidelityWarning>) {
     let entry_type_name = node.kind.as_str();
     let cite_key = node
         .props
@@ -490,11 +537,7 @@ fn build_typed_entry(node: &Node) -> (Entry, EntrySplice) {
         .or(node.props.get_str(prop::ID))
         .unwrap_or("unknown");
 
-    let ty = entry_type_for(entry_type_name);
-    let splice = EntrySplice {
-        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
-        date_marker: None,
-    };
+    let (ty, splice, warning) = entry_type_and_diagnostics(entry_type_name);
     let mut entry = Entry::new(cite_key.to_string(), ty);
 
     let field_mappings = [
@@ -531,20 +574,16 @@ fn build_typed_entry(node: &Node) -> (Entry, EntrySplice) {
         }
     }
 
-    (entry, splice)
+    (entry, splice, warning)
 }
 
 /// Build a `biblatex::Entry` from a citation entry with CSL-like properties.
-fn build_citation_entry(node: &Node) -> (Entry, EntrySplice) {
+fn build_citation_entry(node: &Node) -> (Entry, EntrySplice, Option<FidelityWarning>) {
     let csl_type = node.props.get_str("type").unwrap_or("misc");
     let entry_type_name = csl_to_bibtex_type(csl_type);
     let cite_key = node.props.get_str(prop::ID).unwrap_or("unknown");
 
-    let ty = entry_type_for(entry_type_name);
-    let splice = EntrySplice {
-        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
-        date_marker: None,
-    };
+    let (ty, splice, warning) = entry_type_and_diagnostics(entry_type_name);
     let mut entry = Entry::new(cite_key.to_string(), ty);
 
     if let Some(title) = node.props.get_str("title") {
@@ -584,7 +623,7 @@ fn build_citation_entry(node: &Node) -> (Entry, EntrySplice) {
         }
     }
 
-    (entry, splice)
+    (entry, splice, warning)
 }
 
 /// Map CSL types to BibTeX types.
@@ -891,6 +930,78 @@ mod tests {
         assert!(
             output.contains("@misc{real_misc_two,"),
             "output was:\n{output}"
+        );
+    }
+
+    /// `software` is a real `biblatex::EntryType` (not `Unknown`), but
+    /// `EntryType::to_bibtex` deliberately downgrades it to `Misc` because
+    /// classic BibTeX has no `@software` type. Unlike the `Unknown` case,
+    /// this must NOT be spliced back as `@software{...}` — most `.bst`
+    /// styles don't define handling for it and would silently drop the
+    /// entry — so the output stays `@misc{...}` and a `FidelityWarning`
+    /// records the loss instead.
+    #[test]
+    fn test_biblatex_only_type_downgrades_to_misc_with_warning() {
+        let entry = make_entry(
+            "software",
+            "sw2024",
+            vec![make_field("title", "title", "T")],
+        );
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        assert!(output.contains("@misc{sw2024,"), "output was:\n{output}");
+        assert!(!output.contains("@software{"), "output was:\n{output}");
+        assert_eq!(result.warnings.len(), 1, "warnings: {:?}", result.warnings);
+        assert!(
+            matches!(&result.warnings[0].kind, WarningKind::FeatureLost(s) if s.contains("software")),
+            "warnings: {:?}",
+            result.warnings
+        );
+    }
+
+    /// Same check for `online` and `dataset`, the other two BibLaTeX-only
+    /// types already accepted by `is_bibtex_type` — proves the warning isn't
+    /// special-cased to just `software`.
+    #[test]
+    fn test_other_biblatex_only_types_warn_on_downgrade() {
+        for ty in ["online", "dataset"] {
+            let entry = make_entry(ty, "k", vec![]);
+            let doc = Document::new()
+                .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+            let result = emit(&doc).unwrap();
+            let output = String::from_utf8(result.value).unwrap();
+            assert!(
+                output.contains("@misc{k,"),
+                "type {ty}, output was:\n{output}"
+            );
+            assert_eq!(
+                result.warnings.len(),
+                1,
+                "type {ty}, warnings: {:?}",
+                result.warnings
+            );
+        }
+    }
+
+    /// A BibLaTeX type whose `to_bibtex()` maps to something *other* than
+    /// `Misc` (e.g. `report` -> `techreport`) is a full, lossless
+    /// cross-dialect rename, not a downgrade — it must not warn.
+    #[test]
+    fn test_biblatex_type_with_bibtex_equivalent_does_not_warn() {
+        let entry = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "report")
+            .prop("bibtex:key", "r1");
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        assert!(output.contains("@techreport{r1,"), "output was:\n{output}");
+        assert!(
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
         );
     }
 }

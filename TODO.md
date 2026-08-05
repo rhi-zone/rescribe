@@ -9,6 +9,50 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-05: the `rescribe-read-fb2`/`rescribe-write-fb2` adapter-layer `Section.annotation`
+gap closed — the last open piece named in the 2026-08-04 `fb2-fmt` section-level annotation
+entry below.** Confirmed from `fb2-fmt`'s actual source (not assumption) that this was purely
+an adapter gap: `Section.annotation` was already fully modeled in `fb2-fmt`'s AST (`ast.rs`),
+`parse()` (`parse.rs`'s `StackItem::Annotation` finalize arm), `events()`/`StreamingParser`
+(`events.rs`'s `StartAnnotation`/`EndAnnotation`, closed 2026-08-04 below), and the emitter
+(`emit.rs`/`writer.rs`'s `write_annotation`/`StartAnnotation` arms) — `rescribe-read-fb2`'s
+`convert_section` was the only place with no code path reading it at all.
+
+Fixed per the shape the 2026-08-04 entry already scoped out: `convert_section` now maps
+`section.annotation` (when present) to a `blockquote` node tagged `fb2:type = "annotation"`,
+placed after epigraphs and before the section's own content — mirroring `convert_epigraph`'s
+existing `Section.epigraph` → `blockquote fb2:type=epigraph` treatment exactly, including
+reusing `convert_cite`/`convert_poem`/`convert_table` for the nested `AnnotationContent`
+variants. This is deliberately *not* the same shape as the book-level `TitleInfo.annotation`
+fix (flattened to a `meta:annotation` string in document metadata) — a section-level
+annotation has no natural document-wide metadata slot since a document can have arbitrarily
+many sections, so it's modeled structurally as inline content instead, the same way epigraphs
+are. `rescribe-write-fb2`'s `nodes_to_section` gained matching write-back: a `blockquote`
+tagged `fb2:type = "annotation"` now routes to a new `blockquote_to_annotation` (mirroring
+`blockquote_to_cite`, plus a `HEADING` arm for `AnnotationContent::Subtitle` since annotation
+content, unlike cite content, can contain one) instead of falling through to the default
+`blockquote` → `Cite` path; `Section.annotation` propagates through the existing div-flattening
+recursion the same way `section_title` already does.
+
+The five existing `fixtures/fb2/section-annotation{,-poem,-cite,-table,-subtitle}` fixtures
+(added 2026-08-04 alongside the `fb2-fmt`-internal `events()`/`StreamingParser` fix, but at the
+time only asserting the annotation content didn't leak into the section's own paragraphs — the
+adapter dropped it silently either way) were updated to assert the new `blockquote
+fb2:type=annotation` node and its full content shape, with the main-content assertion path
+shifted from `/0/0/0` to `/0/0/1` now that the annotation blockquote is the section's first
+child. `crates/writers/rescribe-write-fb2/src/lib.rs` gained a new
+`test_emit_section_annotation` unit test confirming the write-back doesn't fall through to
+`<cite>` and orders the annotation before the section's own content.
+`fixtures/fb2/COVERAGE.md`'s section-level-annotation line and `docs/format-audit.md`'s fb2
+`events()` row both updated to reflect the close.
+
+Verified: `cargo test -q -p fb2-fmt -p rescribe-read-fb2 -p rescribe-write-fb2` all green (18
++ 8 + 11 tests), `cargo test -q -p rescribe-fixtures --test streaming_apis fb2` (3 tests, still
+green — unaffected, since `fb2-fmt` itself wasn't touched, only its two IR-adapter consumers).
+`cargo clippy -p fb2-fmt -p rescribe-read-fb2 -p rescribe-write-fb2 --all-targets
+--all-features -- -D warnings` clean. `cargo fmt --check` clean on both touched crates (after
+`cargo fmt` normalized a few import-list line wraps and one match-arm reflow).
+
 **2026-08-05: both `biblatex`-crate write-API limitations from the 2026-08-04 entry below
 closed via raw preservation — a fidelity warning is not the end state when the loss is
 avoidable, per CLAUDE.md's raw-preservation convention.** Investigated both gaps concretely
@@ -96,6 +140,49 @@ avoidable, per CLAUDE.md's raw-preservation convention.** Investigated both gaps
    on the same four crates with `-D warnings`, and `cargo fmt --check` on the same four crates
    all pass clean.
 
+**2026-08-05 (later): the "found but explicitly not fixed" BibLaTeX-only-type gap from the
+entry above is now resolved — warn, don't splice.** `biblatex` 0.11's `EntryType` enum (read
+directly from `mechanics.rs`, not guessed) has 13 classic-BibTeX variants plus 19 BibLaTeX-only
+ones (`MvBook`, `BookInBook`, `SuppBook`, `Periodical`, `SuppPeriodical`, `Collection`,
+`MvCollection`, `SuppCollection`, `Reference`, `MvReference`, `InReference`, `MvProceedings`,
+`Report`, `Patent`, `Thesis`, `Online`, `Software`, `Dataset`, `Set`, `XData`) plus `Unknown`.
+`EntryType::to_bibtex()`'s match arm confirms exactly which BibLaTeX-only variants collapse to
+`Misc` specifically (as opposed to a lossless rename, e.g. `Report -> TechReport`,
+`MvBook -> Book`): `Periodical`, `Reference`, `MvReference`, `Patent`, `Online`, `Software`,
+`Dataset`, `Set`, `XData` (plus `Unknown`, already handled by the splice from the entry above).
+
+Concrete reasoning on splice-vs-warn before implementing (this is a different case from
+`Unknown`, not the same fix applied twice): `Unknown` means the name isn't in *any* BibTeX-family
+vocabulary, so splicing it back loses nothing a downgrade-to-`misc` would have saved — no tool
+was ever going to understand it either way. `Software`/`Online`/etc. are different: they're
+real, well-defined BibLaTeX types with their own required/optional fields, and `to_bibtex()`'s
+downgrade is `biblatex` accurately reporting that classic BibTeX has no equivalent. Splicing
+`@software{...}` into output the caller asked for as *classic BibTeX* would produce syntax most
+`.bst` style files don't define a handler for — real BibTeX (`.bst`-driven) processing silently
+drops entries whose `@type` a style doesn't recognize, whereas `@misc` is defined by essentially
+every style and renders generically instead of vanishing. So `EntryType::to_bibtex()`'s downgrade
+to `@misc` is the dialect-correct behavior, not a bug to route around; the bug was only the
+missing warning. Implemented: `rescribe-write-bibtex` gained `entry_type_and_diagnostics`, the
+single decision point all four `build_*_entry` functions now go through — computes the
+`EntryType`, the existing `Unknown`-splice, and (new) a `FidelityWarning` (`WarningKind::FeatureLost`,
+`Severity::Minor`) exactly when the type is a real (non-`Unknown`, non-`Misc`) `EntryType` whose
+`to_bibtex()` maps to `Misc`. `rescribe-write-biblatex` needed no change — `to_biblatex()` only
+downgrades `MastersThesis`/`PhdThesis`/`TechReport`/`Unknown`, none of which are BibLaTeX-only
+types losing information on the BibLaTeX write path.
+
+Three new tests in `rescribe-write-bibtex`: `test_biblatex_only_type_downgrades_to_misc_with_warning`
+(`software` -> `@misc` + one `FeatureLost` warning, no `@software{` in output),
+`test_other_biblatex_only_types_warn_on_downgrade` (same for `online`/`dataset`),
+`test_biblatex_type_with_bibtex_equivalent_does_not_warn` (`report` -> `@techreport`, a lossless
+rename, must not warn — proves the check isn't over-broad). `cargo test -q -p rescribe-write-bibtex
+-p rescribe-read-bibtex` (16 + 6 + 1 tests, all pass), `cargo clippy --all-targets --all-features
+-p rescribe-write-bibtex -- -D warnings` clean, `cargo fmt --check` clean (after `cargo fmt`
+reflowed the new test bodies). `is_bibtex_type`'s allow-list still accepts `online`/`software`/
+`dataset` as before (they're still legitimate to route into this writer as BibTeX input types —
+they just now warn correctly on the downgrade instead of doing so silently); not widened to
+`patent`/`reference`/etc. since nothing feeds those node kinds into `build_typed_entry` today —
+untouched, out of scope for this fix.
+
 **2026-08-04: fb2-fmt's section-level `<section><annotation>` gap closed — the last remaining
 piece flagged (but deliberately deferred) in the `<title-info><annotation>` fix earlier this
 day.** `Section.annotation` (`Option<Annotation>`, distinct from `TitleInfo.annotation`) was
@@ -143,7 +230,7 @@ this task scoped (the events()/StreamingParser gap named in the prior entries) a
 a separate, still-open gap — closing it would mean modeling `Section.annotation` into the IR
 (e.g. as a `blockquote` with an `fb2:type = "annotation"` prop, analogous to how
 `convert_epigraph` already models `Section.epigraph`) plus a `rescribe-write-fb2` writer-side
-counterpart.
+counterpart. **Closed 2026-08-05, exactly along these lines — see that entry above.**
 
 Verified: `cargo clippy --all-targets --all-features -- -D warnings` clean (workspace-wide, run
 before an unrelated concurrent process began adding an incomplete `crates/formats/opml-fmt`
