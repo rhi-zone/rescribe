@@ -1502,8 +1502,9 @@ mod tests {
         // identically-shaped benchmark for why (attributing a non-Writer
         // API's own materialization cost to the Writer would misrepresent
         // it, same as feeding events() lazily-but-not-really would).
-        let events: Vec<Event<'static>> = crate::events(&input).map(Event::into_owned).collect();
-        let (doc, _diags) = crate::parse::parse(&input);
+        let events: Vec<Event<'static>> =
+            crate::events_str(&input).map(Event::into_owned).collect();
+        let (doc, _diags) = crate::parse::parse_str(&input);
 
         let baseline = CURRENT.with(|c| c.get());
         PEAK.with(|p| p.set(baseline));
@@ -1578,15 +1579,15 @@ mod tests {
     #[test]
     fn test_writer_roundtrip_via_events() {
         let input = "# Hello\n\nA paragraph with *strong* text.\n\n- item one\n- item two\n";
-        let (doc, _) = crate::parse::parse(input);
-        let evts: Vec<_> = crate::events(input).collect();
+        let (doc, _) = crate::parse::parse_str(input);
+        let evts: Vec<_> = crate::events_str(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc.strip_spans(),
             doc2.strip_spans(),
@@ -1597,7 +1598,7 @@ mod tests {
     #[test]
     fn test_writer_table_caption_roundtrip() {
         let input = "^ Caption text\n| A | B |\n|---|---|\n| x | y |\n";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
 
         match &doc.blocks[0] {
             crate::ast::Block::Table {
@@ -1609,14 +1610,14 @@ mod tests {
             ),
         }
 
-        let evts: Vec<_> = crate::events(input).collect();
+        let evts: Vec<_> = crate::events_str(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
 
         assert_eq!(
             doc.strip_spans(),
@@ -1648,11 +1649,11 @@ mod tests {
             "$x^2$ and $$y = mx + b$$\n",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::emit(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());
-            for e in crate::events(input) {
+            for e in crate::events_str(input) {
                 w.write_event(e);
             }
             let streamed = String::from_utf8(w.finish()).unwrap();

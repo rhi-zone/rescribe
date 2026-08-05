@@ -3,7 +3,11 @@
 use crate::ast::*;
 
 /// Emit a `DjotDoc` as a Djot string.
-pub fn emit(doc: &DjotDoc) -> String {
+///
+/// `pub(crate)`: the public entry point is [`rescribe_format_api::Emit::emit`]
+/// on [`DjotDoc`], which wraps this and returns `Vec<u8>` per the trait
+/// contract.
+pub(crate) fn emit(doc: &DjotDoc) -> String {
     let mut out = Emitter::new();
     out.emit_blocks(&doc.blocks);
 
@@ -639,7 +643,7 @@ fn format_attr_inline(attr: &Attr) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse::parse;
+    use crate::parse::parse_str as parse;
 
     #[test]
     fn test_emit_heading() {

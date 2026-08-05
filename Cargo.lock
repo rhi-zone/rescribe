@@ -833,6 +833,9 @@ dependencies = [
 [[package]]
 name = "djot-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "docbook-fmt"
@@ -1044,6 +1047,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "quick-xml 0.39.4",
+ "rescribe-format-api",
 ]
 
 [[package]]

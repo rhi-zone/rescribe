@@ -21,7 +21,7 @@ use std::borrow::Cow;
 /// Direct recursive descent — builds AST nodes without going through event
 /// dispatch. Creates an `EventIter` to reuse `pre_scan` (link defs, footnote
 /// defs), then calls the block-parsing helpers directly in a loop.
-pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     let mut iter = EventIter::new(input);
     let blocks = parse_blocks_direct(&mut iter);
     let footnotes = std::mem::take(&mut iter.footnote_defs);
@@ -35,6 +35,29 @@ pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
         },
         diagnostics,
     )
+}
+
+/// Parse Djot from bytes (the [`rescribe_format_api::Parse`] trait's
+/// contract). Always succeeds; non-UTF-8 input produces a single `Warning`
+/// diagnostic and an empty document, mirroring `commonmark-fmt::parse`'s
+/// handling of the same case.
+pub(crate) fn parse(input: &[u8]) -> (DjotDoc, Vec<Diagnostic>) {
+    match std::str::from_utf8(input) {
+        Ok(s) => parse_str(s),
+        Err(_) => (
+            DjotDoc {
+                blocks: vec![],
+                footnotes: vec![],
+                link_defs: vec![],
+            },
+            vec![Diagnostic {
+                span: Span::NONE,
+                severity: Severity::Warning,
+                message: "input is not valid UTF-8".to_string(),
+                code: "djot::invalid-utf8",
+            }],
+        ),
+    }
 }
 
 /// Parse all top-level blocks from an `EventIter`, returning them as a `Vec<Block>`.
@@ -1125,7 +1148,7 @@ impl<'a> EventIter<'a> {
                         }
                     }
                     let combined = content_lines.join("\n");
-                    let (inner_doc, _) = parse(&combined);
+                    let (inner_doc, _) = parse_str(&combined);
                     self.footnote_defs.push(FootnoteDef {
                         label: label.to_string(),
                         blocks: inner_doc.blocks,
@@ -3821,7 +3844,7 @@ mod tests {
 
     #[test]
     fn test_parse_heading() {
-        let (doc, diags) = parse("# Hello");
+        let (doc, diags) = parse_str("# Hello");
         assert!(diags.is_empty());
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -3835,7 +3858,7 @@ mod tests {
 
     #[test]
     fn test_parse_paragraph() {
-        let (doc, diags) = parse("Hello world");
+        let (doc, diags) = parse_str("Hello world");
         assert!(diags.is_empty());
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -3849,7 +3872,7 @@ mod tests {
     #[test]
     fn test_parse_code_block() {
         let input = "```rust\nfn main() {}\n```";
-        let (doc, _) = parse(input);
+        let (doc, _) = parse_str(input);
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
             Block::CodeBlock {
@@ -3865,7 +3888,7 @@ mod tests {
     #[test]
     fn test_parse_bullet_list() {
         let input = "- one\n- two\n- three";
-        let (doc, _) = parse(input);
+        let (doc, _) = parse_str(input);
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
             Block::List { items, .. } => {
@@ -3877,13 +3900,13 @@ mod tests {
 
     #[test]
     fn test_parse_thematic_break() {
-        let (doc, _) = parse("---");
+        let (doc, _) = parse_str("---");
         assert!(matches!(doc.blocks[0], Block::ThematicBreak { .. }));
     }
 
     #[test]
     fn test_smart_punctuation() {
-        let (doc, _) = parse("hello---world");
+        let (doc, _) = parse_str("hello---world");
         match &doc.blocks[0] {
             Block::Paragraph { inlines, .. } => {
                 let text: String = inlines
@@ -3957,7 +3980,7 @@ mod tests {
 
     #[test]
     fn test_strip_spans() {
-        let (doc, _) = parse("# Heading\n\nParagraph text.");
+        let (doc, _) = parse_str("# Heading\n\nParagraph text.");
         let stripped = doc.strip_spans();
         for block in &stripped.blocks {
             match block {
