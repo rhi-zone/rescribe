@@ -8,7 +8,12 @@
 use crate::ast::{Block, Inline, TypstDoc};
 
 /// Emit a [`TypstDoc`] as Typst markup.
-pub fn emit(doc: &TypstDoc) -> Vec<u8> {
+///
+/// This is the implementation behind
+/// [`rescribe_format_api::Emit::emit`](crate::TypstDoc)'s trait method (see
+/// `lib.rs`'s trait impl block); kept `pub(crate)` — no separate public
+/// free function duplicating the trait method.
+pub(crate) fn emit(doc: &TypstDoc) -> Vec<u8> {
     let mut ctx = EmitContext::default();
     emit_blocks(&doc.blocks, &mut ctx);
     ctx.output.into_bytes()

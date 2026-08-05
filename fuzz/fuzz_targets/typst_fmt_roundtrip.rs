@@ -22,6 +22,7 @@
 //! fuzz` itself is not available in this development environment).
 
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit, Parse};
 use typst_fmt::{Block, Inline, Span, TypstDoc};
 
 struct Gen<'a> {
@@ -229,14 +230,14 @@ fuzz_target!(|data: &[u8]| {
     let doc = g.doc();
 
     // Emit — must not panic.
-    let emitted = typst_fmt::emit(&doc);
+    let emitted = doc.emit();
     let emitted_str = match std::str::from_utf8(&emitted) {
         Ok(s) => s,
         Err(_) => return,
     };
 
     // Parse back — must not panic.
-    let (doc2, diags) = typst_fmt::parse(emitted_str);
+    let (doc2, diags) = TypstDoc::parse(emitted_str.as_bytes());
     assert!(
         diags.is_empty(),
         "unexpected diagnostics reparsing generated document: {diags:?}\nemitted: {emitted_str}"

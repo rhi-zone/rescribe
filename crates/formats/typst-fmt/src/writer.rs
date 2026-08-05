@@ -484,7 +484,7 @@ impl<W: Write> Writer<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::events;
+    use crate::events::events_str as events;
 
     fn write_all(input: &str) -> String {
         let mut w = Writer::new(Vec::<u8>::new());
@@ -512,7 +512,7 @@ mod tests {
             "Visit #link(\"https://example.com\")[here].\n",
         ];
         for input in cases {
-            let (doc, diags) = crate::parse::parse(input);
+            let (doc, diags) = crate::parse::parse_str(input);
             assert!(diags.is_empty(), "{input:?}: {diags:?}");
             let built = String::from_utf8(crate::emit::emit(&doc)).unwrap();
             let streamed = write_all(input);

@@ -13,6 +13,7 @@ eval = ["dep:typst", "dep:typst-kit", "dep:typst-html", "dep:typst-syntax"]
 
 [dependencies]
 rescribe-core.workspace = true
+rescribe-format-api.workspace = true
 rescribe-std.workspace = true
 typst-fmt.workspace = true
 typst = { workspace = true, optional = true }

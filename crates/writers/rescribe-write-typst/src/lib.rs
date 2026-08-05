@@ -5,7 +5,8 @@
 //! (see its module docs), not here. This adapter's only job is mapping
 //! rescribe `Node`s onto `typst-fmt`'s domain-typed AST and collecting
 //! fidelity warnings for anything it can't represent; the actual byte
-//! output for a given `TypstDoc` is produced by `typst_fmt::emit`.
+//! output for a given `TypstDoc` is produced by `typst_fmt`'s
+//! `rescribe_format_api::Emit::emit` impl.
 //!
 //! The construct mapping (which rescribe node kind becomes which
 //! `Block`/`Inline` variant, and the exact fidelity-warning behavior for
@@ -16,6 +17,7 @@ use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use typst_fmt::{Block, Inline};
 
@@ -35,7 +37,7 @@ pub fn emit_with_options(
         blocks,
         span: typst_fmt::Span::NONE,
     };
-    let bytes = typst_fmt::emit(&ast);
+    let bytes = ast.emit();
     Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
