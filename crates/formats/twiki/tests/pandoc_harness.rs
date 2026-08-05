@@ -1,5 +1,8 @@
 //! Pandoc oracle harness and no-panic smoke test for TWiki.
 
+use rescribe_format_api::{Emit, Parse};
+use twiki::TwikiDoc;
+
 const SAMPLE: &str = r#"---+ Main Title
 
 This is a paragraph with *bold* and _italic_ text.
@@ -26,11 +29,11 @@ Visit [[https://example.com][Example Site]].
 /// Ensure parsing arbitrary-ish content does not panic.
 #[test]
 fn parse_sample_no_panic() {
-    let (doc, _diags) = twiki::parse(SAMPLE);
+    let (doc, _diags) = TwikiDoc::parse(SAMPLE.as_bytes());
     assert!(!doc.blocks.is_empty(), "parsed doc should have blocks");
     // Roundtrip
-    let emitted = twiki::build(&doc);
-    let (doc2, _) = twiki::parse(&emitted);
+    let emitted = String::from_utf8(doc.emit()).expect("twiki emit output is UTF-8");
+    let (doc2, _) = TwikiDoc::parse(emitted.as_bytes());
     assert_eq!(
         doc.blocks.len(),
         doc2.blocks.len(),

@@ -7632,6 +7632,7 @@ fn tikiwiki_streaming_writer_matches_builder_over_all_fixtures() {
 // as mediawiki-fmt/tikiwiki above).
 mod twiki_events_check {
     use super::{assert_or_known_failure, find_input, fixtures_root};
+    use rescribe_format_api::Parse;
     use std::borrow::Cow;
     use twiki::ast::{Block, Inline, TwikiDoc};
     use twiki::events::OwnedEvent;
@@ -7795,7 +7796,7 @@ mod twiki_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = twiki::parse::parse(&input);
+            let (doc, _diags) = TwikiDoc::parse(input.as_bytes());
             let expected = tw_ast_to_events(&doc);
             let actual: Vec<OwnedEvent> = twiki::events::events(&doc)
                 .map(|e| e.into_owned())
@@ -7839,7 +7840,7 @@ fn twiki_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let (bulk_doc, _) = twiki::parse::parse(input_str);
+        let (bulk_doc, _) = twiki::TwikiDoc::parse(input_str.as_bytes());
         let bulk: Vec<twiki::OwnedEvent> = twiki::events::events(&bulk_doc)
             .map(|e| e.into_owned())
             .collect();
@@ -7887,8 +7888,8 @@ fn twiki_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = twiki::parse(&input);
-        let built = twiki::build(&doc);
+        let (doc, _) = twiki::TwikiDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("twiki emit output is UTF-8");
 
         let mut w = twiki::Writer::new(Vec::<u8>::new());
         for e in twiki::events::events(&doc) {

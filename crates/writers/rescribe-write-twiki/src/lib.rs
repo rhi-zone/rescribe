@@ -3,6 +3,7 @@
 //! Thin adapter layer that serializes rescribe's document IR to TWiki markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use twiki::{self, Block, Inline, ListItem, Span, TableCell, TableRow, TwikiDoc};
 
@@ -27,8 +28,8 @@ pub fn emit_with_options(
         blocks,
         span: Span::NONE,
     };
-    let output = twiki::build(&twiki_doc);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = twiki_doc.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn node_to_block(node: &Node) -> Option<Block> {

@@ -3805,6 +3805,7 @@ name = "rescribe-read-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -4403,6 +4404,7 @@ name = "rescribe-write-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -5187,6 +5189,7 @@ name = "twiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
