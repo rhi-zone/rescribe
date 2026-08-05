@@ -1,49 +1,19 @@
 //! Textile AST types.
 
 // ── Span & Diagnostic ─────────────────────────────────────────────────────────
+//
+// `Span`, `Diagnostic`, and `Severity` are re-exported from the shared
+// `rescribe-format-api` crate rather than declared locally — see that
+// crate's docs for the canonical definitions. `Span::new`/`Span::NONE` (the
+// former local `Span::dummy()`, renamed at all call sites) both already
+// exist on the shared type. This crate's `p.diagnostics` is initialized
+// empty and never pushed to — `parse()` never actually produces
+// diagnostics — so the former local `Diagnostic::warning` convenience
+// constructor had no call sites and is dropped rather than ported (it
+// can't be an inherent method on a foreign re-exported type anyway — that
+// would violate the orphan rule).
 
-/// Byte-offset span into the source text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-
-    /// A zero-width span at position 0 — used when no source position is tracked.
-    pub fn dummy() -> Self {
-        Self { start: 0, end: 0 }
-    }
-}
-
-/// Diagnostic severity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-/// A parse diagnostic (non-fatal).
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── AST ───────────────────────────────────────────────────────────────────────
 
@@ -58,7 +28,7 @@ impl TextileDoc {
     pub fn strip_spans(self) -> Self {
         Self {
             blocks: self.blocks.into_iter().map(Block::strip_spans).collect(),
-            span: Span::dummy(),
+            span: Span::NONE,
         }
     }
 }
@@ -172,7 +142,7 @@ impl Block {
     }
 
     pub fn strip_spans(self) -> Self {
-        let dummy = Span::dummy();
+        let dummy = Span::NONE;
         match self {
             Block::Paragraph {
                 inlines,
@@ -260,7 +230,7 @@ impl TableRow {
         Self {
             attrs: self.attrs,
             cells: self.cells.into_iter().map(TableCell::strip_spans).collect(),
-            span: Span::dummy(),
+            span: Span::NONE,
         }
     }
 }
@@ -281,7 +251,7 @@ impl TableCell {
             is_header: self.is_header,
             align: self.align,
             inlines: self.inlines.into_iter().map(Inline::strip_spans).collect(),
-            span: Span::dummy(),
+            span: Span::NONE,
         }
     }
 }
@@ -357,7 +327,7 @@ impl Inline {
     }
 
     pub fn strip_spans(self) -> Self {
-        let dummy = Span::dummy();
+        let dummy = Span::NONE;
         match self {
             Inline::Text(s, _) => Inline::Text(s, dummy),
             Inline::Bold(children, _) => Inline::Bold(

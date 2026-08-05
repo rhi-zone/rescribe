@@ -2,46 +2,11 @@
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+/// Re-exported from `rescribe-format-api` — see that crate for why
+/// `Span`/`Diagnostic`/`Severity` are shared across every format crate
+/// rather than each declaring its own local copy.
+pub use rescribe_format_api::Span;
+pub use rescribe_format_api::{Diagnostic, Severity};
 
 // ── AST ───────────────────────────────────────────────────────────────────────
 

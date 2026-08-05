@@ -10,3 +10,4 @@ description = "XWiki writer for rescribe"
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
 xwiki = { workspace = true }
+rescribe-format-api = { workspace = true }

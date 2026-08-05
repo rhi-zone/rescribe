@@ -3,6 +3,7 @@
 //! Thin adapter converting rescribe's document IR to tikiwiki AST.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use tikiwiki::{
     Block as TwBlock, Inline as TwInline, ListItem as TwListItem, Span, TableCell as TwTableCell,
@@ -29,8 +30,8 @@ pub fn emit_with_options(
         blocks,
         span: Span::NONE,
     };
-    let output = tikiwiki::build(&tw_doc);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = tw_doc.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn node_to_block(node: &Node) -> Option<TwBlock> {

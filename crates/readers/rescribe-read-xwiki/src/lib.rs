@@ -3,8 +3,9 @@
 //! Thin adapter layer that converts XWiki AST to rescribe's document IR.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
-use xwiki::{self, Block, Inline};
+use xwiki::{self, Block, Inline, XwikiDoc};
 
 /// Parse XWiki markup into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -16,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diags) = xwiki::parse(input);
+    let (doc, _diags) = XwikiDoc::parse(input.as_bytes());
 
     let mut result = Vec::new();
     for block in &doc.blocks {

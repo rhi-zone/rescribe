@@ -59,18 +59,7 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming VimWiki events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Block accumulation state for the streaming parser.
 enum BlockState {
@@ -85,7 +74,7 @@ enum BlockState {
 /// Chunked streaming VimWiki parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -94,7 +83,7 @@ pub struct StreamingParser<H: Handler> {
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

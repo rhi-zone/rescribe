@@ -1,5 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use zimwiki::{build, parse};
+use rescribe_format_api::{Emit, Parse};
+use zimwiki::ZimwikiDoc;
+
+fn parse(input: &str) -> (ZimwikiDoc, Vec<rescribe_format_api::Diagnostic>) {
+    ZimwikiDoc::parse(input.as_bytes())
+}
+
+fn build(doc: &ZimwikiDoc) -> String {
+    String::from_utf8(doc.emit()).expect("zimwiki emit output is UTF-8")
+}
 
 const SMALL: &str = r#"
 ====== Hello World ======

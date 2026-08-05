@@ -3,7 +3,7 @@
 use crate::ast::*;
 
 /// Build a TWiki string from a [`TwikiDoc`].
-pub fn build(doc: &TwikiDoc) -> String {
+pub(crate) fn build(doc: &TwikiDoc) -> String {
     let mut output = String::new();
     for block in &doc.blocks {
         build_block(block, &mut output);

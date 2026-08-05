@@ -1,5 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use textile_fmt::{emit, parse};
+use rescribe_format_api::{Emit, Parse};
+use textile_fmt::TextileDoc;
+
+fn parse(input: &str) -> (TextileDoc, Vec<rescribe_format_api::Diagnostic>) {
+    TextileDoc::parse(input.as_bytes())
+}
+
+fn emit(doc: &TextileDoc) -> String {
+    String::from_utf8(doc.emit()).expect("textile emit output is UTF-8")
+}
 
 const SMALL: &str = r#"h1. Hello World
 

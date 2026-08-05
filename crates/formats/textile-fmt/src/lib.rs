@@ -2,6 +2,22 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-textile` and `rescribe-write-textile` as thin adapter layers.
+//!
+//! # API layers
+//!
+//! `TextileDoc` implements all five shared `rescribe-format-api` traits —
+//! `Parse`, `Emit`, `Events`, `StreamingParse`, `StreamingWrite`. This
+//! crate's native `parse::parse`/`events::events` take `&str`, not `&[u8]`;
+//! the `Parse`/`Events` impls bridge via `std::str::from_utf8` (mirroring
+//! `commonmark-fmt`'s `Parse`/`Events` impls), producing an empty
+//! document/iterator plus a `Warning` diagnostic on invalid UTF-8.
+//! `events::EventIter`/`events::TextileEvent` have no lifetime parameter (no
+//! `Cow`/borrowed fields anywhere in the event vocabulary), so the `Events`
+//! impl's `Event<'a>` associated type is `TextileEvent` regardless of `'a`.
+//! `parse::parse(&str)` and `events::events(&str)` remain public,
+//! module-qualified entry points for callers that already have a `&str` and
+//! want to skip the UTF-8 re-check — a materially different contract from
+//! the trait methods, same as `commonmark-fmt`'s kept `parse_str`.
 
 pub mod ast;
 pub mod batch;
@@ -16,9 +32,66 @@ pub use ast::{
     Block, BlockAttrs, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::emit;
-pub use events::{EventIter, TextileEvent, events};
-pub use parse::parse;
+pub use events::{EventIter, TextileEvent};
+
+// ── Trait implementations ───────────────────────────────────────────────────
+
+impl rescribe_format_api::Parse for TextileDoc {
+    /// Non-UTF-8 input yields an empty document and a single `Warning`
+    /// diagnostic (mirrors `commonmark-fmt`'s `Parse` impl) — this crate's
+    /// native `parse::parse` takes `&str`, not `&[u8]`.
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse(s),
+            Err(_) => (
+                TextileDoc::default(),
+                vec![Diagnostic {
+                    span: Span::NONE,
+                    severity: Severity::Warning,
+                    message: "input is not valid UTF-8".to_string(),
+                    code: "textile::invalid-utf8",
+                }],
+            ),
+        }
+    }
+}
+
+impl rescribe_format_api::Emit for TextileDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::Events for TextileDoc {
+    type Event<'a> = TextileEvent;
+    type EventIter<'a> = EventIter;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document
+    /// (mirrors `commonmark-fmt`'s `Events` impl).
+    fn events(input: &[u8]) -> EventIter {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::events(s),
+            Err(_) => events::events(""),
+        }
+    }
+}
+
+impl rescribe_format_api::StreamingParse for TextileDoc {
+    type Event = TextileEvent;
+    type Parser<H: Handler<TextileEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<TextileEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for TextileDoc {
+    type Writer<W: std::io::Write> = writer::Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> writer::Writer<W> {
+        writer::Writer::new(sink)
+    }
+}
 
 // ── Test-only shared allocation probe ────────────────────────────────────────
 
@@ -108,6 +181,8 @@ pub(crate) mod alloc_probe {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emit::emit;
+    use crate::parse::parse;
 
     fn parse_doc(input: &str) -> TextileDoc {
         let (doc, _diags) = parse(input);
@@ -201,11 +276,11 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::Heading {
                 level: 1,
-                inlines: vec![Inline::Text("Title".to_string(), Span::dummy())],
+                inlines: vec![Inline::Text("Title".to_string(), Span::NONE)],
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("h1. Title"));
@@ -215,12 +290,12 @@ mod tests {
     fn test_emit_paragraph() {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
-                inlines: vec![Inline::Text("Hello, world!".to_string(), Span::dummy())],
+                inlines: vec![Inline::Text("Hello, world!".to_string(), Span::NONE)],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("Hello, world!"));
@@ -231,14 +306,14 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Bold(
-                    vec![Inline::Text("bold".to_string(), Span::dummy())],
-                    Span::dummy(),
+                    vec![Inline::Text("bold".to_string(), Span::NONE)],
+                    Span::NONE,
                 )],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("*bold*"));
@@ -249,14 +324,14 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Italic(
-                    vec![Inline::Text("italic".to_string(), Span::dummy())],
-                    Span::dummy(),
+                    vec![Inline::Text("italic".to_string(), Span::NONE)],
+                    Span::NONE,
                 )],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("_italic_"));
@@ -266,12 +341,12 @@ mod tests {
     fn test_emit_code() {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
-                inlines: vec![Inline::Code("code".to_string(), Span::dummy())],
+                inlines: vec![Inline::Code("code".to_string(), Span::NONE)],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("@code@"));
@@ -284,14 +359,14 @@ mod tests {
                 inlines: vec![Inline::Link {
                     url: "https://example.com".to_string(),
                     title: None,
-                    children: vec![Inline::Text("click".to_string(), Span::dummy())],
-                    span: Span::dummy(),
+                    children: vec![Inline::Text("click".to_string(), Span::NONE)],
+                    span: Span::NONE,
                 }],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("\"click\":https://example.com"));
@@ -304,21 +379,21 @@ mod tests {
                 ordered: false,
                 items: vec![
                     vec![Block::Paragraph {
-                        inlines: vec![Inline::Text("one".to_string(), Span::dummy())],
+                        inlines: vec![Inline::Text("one".to_string(), Span::NONE)],
                         align: None,
                         attrs: BlockAttrs::default(),
-                        span: Span::dummy(),
+                        span: Span::NONE,
                     }],
                     vec![Block::Paragraph {
-                        inlines: vec![Inline::Text("two".to_string(), Span::dummy())],
+                        inlines: vec![Inline::Text("two".to_string(), Span::NONE)],
                         align: None,
                         attrs: BlockAttrs::default(),
-                        span: Span::dummy(),
+                        span: Span::NONE,
                     }],
                 ],
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("* one"));
@@ -332,21 +407,21 @@ mod tests {
                 ordered: true,
                 items: vec![
                     vec![Block::Paragraph {
-                        inlines: vec![Inline::Text("first".to_string(), Span::dummy())],
+                        inlines: vec![Inline::Text("first".to_string(), Span::NONE)],
                         align: None,
                         attrs: BlockAttrs::default(),
-                        span: Span::dummy(),
+                        span: Span::NONE,
                     }],
                     vec![Block::Paragraph {
-                        inlines: vec![Inline::Text("second".to_string(), Span::dummy())],
+                        inlines: vec![Inline::Text("second".to_string(), Span::NONE)],
                         align: None,
                         attrs: BlockAttrs::default(),
-                        span: Span::dummy(),
+                        span: Span::NONE,
                     }],
                 ],
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("# first"));
@@ -359,9 +434,9 @@ mod tests {
             blocks: vec![Block::CodeBlock {
                 content: "print('hi')".to_string(),
                 language: None,
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("bc. print('hi')"));
@@ -383,13 +458,13 @@ mod tests {
                 inlines: vec![Inline::Image {
                     url: "image.png".to_string(),
                     alt: None,
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 }],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("!image.png!"));
@@ -402,13 +477,13 @@ mod tests {
                 inlines: vec![Inline::Image {
                     url: "image.png".to_string(),
                     alt: Some("alt text".to_string()),
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 }],
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             }],
-            span: Span::dummy(),
+            span: Span::NONE,
         };
         let output = emit(&doc);
         assert!(output.contains("!image.png(alt text)!"));

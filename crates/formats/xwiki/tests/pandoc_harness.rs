@@ -3,7 +3,8 @@
 //! XWiki is not in pandoc's `--list-input-formats`, so there is no oracle test.
 //! We keep a basic no-panic test for CI.
 
-use xwiki::parse;
+use rescribe_format_api::Parse;
+use xwiki::XwikiDoc;
 
 #[test]
 fn parse_sample_no_panic() {
@@ -60,6 +61,6 @@ fn parse_sample_no_panic() {
         &"**a** ".repeat(100),
     ];
     for sample in &samples {
-        let _ = parse(sample);
+        let _ = XwikiDoc::parse(sample.as_bytes());
     }
 }

@@ -3,6 +3,7 @@
 //! Thin adapter layer that converts rescribe's document IR to XWiki format.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use xwiki::{self, Block, Inline, Span};
 
@@ -21,8 +22,8 @@ pub fn emit_with_options(
         blocks,
         span: Span::NONE,
     };
-    let output = xwiki::build(&xwiki_doc);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = xwiki_doc.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn node_to_block(node: &Node) -> Block {

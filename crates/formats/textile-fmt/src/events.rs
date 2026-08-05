@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use textile_fmt::events;
+//! use textile_fmt::events::events;
 //!
 //! for event in events("h1. Title\n\nHello *world*\n") {
 //!     println!("{event:?}");

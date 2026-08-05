@@ -70,18 +70,7 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming Textile events.
-///
-/// Implemented automatically for any `FnMut(TextileEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: TextileEvent);
-}
-
-impl<F: FnMut(TextileEvent)> Handler for F {
-    fn handle(&mut self, event: TextileEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven Textile parser that delivers events to a [`Handler`]
 /// incrementally, as soon as each top-level block is confirmed complete.
@@ -89,7 +78,7 @@ impl<F: FnMut(TextileEvent)> Handler for F {
 /// Memory: O(largest block), not O(full input) — see the module docs.
 /// Split tokens (partial lines, mid-UTF-8-character byte splits) at chunk
 /// boundaries are buffered internally, not the caller's concern.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<TextileEvent>> {
     handler: H,
     /// Bytes of the current in-progress line (no `\n` yet). Handles chunk
     /// boundaries landing mid-line or mid-UTF-8-character: `String::from_utf8_lossy`
@@ -99,7 +88,7 @@ pub struct StreamingParser<H: Handler> {
     pending_lines: Vec<String>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<TextileEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

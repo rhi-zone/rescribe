@@ -1,47 +1,17 @@
 //! VimWiki AST types with span information.
 
 // -- Span / Diagnostic -------------------------------------------------------
+//
+// `Span`, `Diagnostic`, and `Severity` are re-exported from the shared
+// `rescribe-format-api` crate rather than declared locally — see that
+// crate's docs for the canonical definitions. This crate's parser never
+// actually produces diagnostics (`parse()` always returns an empty
+// `Vec<Diagnostic>`), so the former local `Diagnostic::warning`/`::error`
+// convenience constructors had no call sites and are dropped rather than
+// ported (they can't be inherent methods on a foreign re-exported type
+// anyway — that would violate the orphan rule).
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // -- AST ----------------------------------------------------------------------
 

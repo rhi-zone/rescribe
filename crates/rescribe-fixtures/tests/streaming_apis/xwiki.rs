@@ -183,7 +183,7 @@ mod xwiki_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = xwiki::parse(&input);
+            let (doc, _diags) = xwiki::parse::parse(&input);
             let expected = xwiki_ast_to_events(&doc);
             let actual: Vec<_> = xwiki::events::events(&doc).collect();
             checked += 1;
@@ -245,7 +245,7 @@ fn xwiki_streaming_parser_matches_events_and_is_incremental() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let (doc, _diags) = xwiki::parse(input_str);
+        let (doc, _diags) = xwiki::parse::parse(input_str);
         let bulk: Vec<xwiki::OwnedEvent> = xwiki::events::events(&doc)
             .map(|e| e.into_owned())
             .collect();
@@ -318,8 +318,8 @@ fn xwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = xwiki::parse(&input);
-        let built = xwiki::build(&doc);
+        let (doc, _diags) = xwiki::parse::parse(&input);
+        let built = String::from_utf8(doc.emit()).expect("xwiki emit output is UTF-8");
 
         let mut w = xwiki::Writer::new(Vec::<u8>::new());
         for e in xwiki::events::events(&doc) {

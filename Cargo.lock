@@ -3778,6 +3778,7 @@ name = "rescribe-read-textile"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "textile-fmt",
 ]
@@ -3805,6 +3806,7 @@ name = "rescribe-read-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -3827,6 +3829,7 @@ name = "rescribe-read-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -3846,6 +3849,7 @@ name = "rescribe-read-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -3855,6 +3859,7 @@ name = "rescribe-read-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -4374,6 +4379,7 @@ name = "rescribe-write-textile"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "textile-fmt",
 ]
@@ -4383,6 +4389,7 @@ name = "rescribe-write-tikiwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "tikiwiki",
 ]
@@ -4401,6 +4408,7 @@ name = "rescribe-write-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -4419,6 +4427,7 @@ name = "rescribe-write-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -4437,6 +4446,7 @@ name = "rescribe-write-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -4446,6 +4456,7 @@ name = "rescribe-write-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -4970,6 +4981,7 @@ name = "textile-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -5003,6 +5015,7 @@ name = "tikiwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -5183,6 +5196,7 @@ name = "twiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -5749,6 +5763,7 @@ name = "vimwiki-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -6042,6 +6057,7 @@ name = "xwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -6244,6 +6260,7 @@ name = "zimwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]

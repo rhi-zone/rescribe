@@ -154,9 +154,9 @@ mod zimwiki_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = zimwiki::parse(&input);
+            let (doc, _diags) = zimwiki::parse::parse(&input);
             let expected = zimwiki_ast_to_events(&doc);
-            let actual: Vec<OwnedEvent> = zimwiki::events(&input).collect();
+            let actual: Vec<OwnedEvent> = zimwiki::events::events(&input).collect();
             checked += 1;
             if expected != actual {
                 let at = expected
@@ -214,7 +214,7 @@ fn zimwiki_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<zimwiki::OwnedEvent> = zimwiki::events(input_str).collect();
+        let bulk: Vec<zimwiki::OwnedEvent> = zimwiki::events::events(input_str).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -261,11 +261,11 @@ fn zimwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = zimwiki::parse(&input);
-        let built = zimwiki::build(&doc);
+        let (doc, _diags) = zimwiki::parse::parse(&input);
+        let built = String::from_utf8(doc.emit()).expect("zimwiki emit output is UTF-8");
 
         let mut w = zimwiki::Writer::new(Vec::<u8>::new());
-        for e in zimwiki::events(&input) {
+        for e in zimwiki::events::events(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

@@ -1,5 +1,14 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use twiki::{build, parse};
+use rescribe_format_api::{Emit, Parse};
+use twiki::TwikiDoc;
+
+fn parse(input: &str) -> (TwikiDoc, Vec<rescribe_format_api::Diagnostic>) {
+    TwikiDoc::parse(input.as_bytes())
+}
+
+fn build(doc: &TwikiDoc) -> String {
+    String::from_utf8(doc.emit()).expect("twiki emit output is UTF-8")
+}
 
 const SMALL: &str = r#"
 ---+ Hello World

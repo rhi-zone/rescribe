@@ -4,6 +4,7 @@
 //! Thin adapter over `vimwiki-fmt` crate.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 use vimwiki_fmt::*;
 
@@ -17,7 +18,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diags) = vimwiki_fmt::parse(input);
+    let (doc, _diags) = VimwikiDoc::parse(input.as_bytes());
 
     let nodes: Vec<Node> = doc.blocks.iter().map(block_to_node).collect();
     let root = Node::new(node::DOCUMENT).children(nodes);

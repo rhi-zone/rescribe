@@ -2,8 +2,13 @@
 
 use crate::ast::*;
 
-/// Build a TikiWiki string from a [`TikiwikiDoc`].
-pub fn build(doc: &TikiwikiDoc) -> String {
+/// Build a TikiWiki string from a [`TikiwikiDoc`]. Crate-internal now —
+/// external callers use the [`rescribe_format_api::Emit`] impl
+/// (`doc.emit()`), which wraps this and converts to bytes. This is the
+/// validated `build()` → `Emit` rename path for the `-fmt` crates that
+/// used to expose `build()` instead of the documented `emit()` name (see
+/// `rst-fmt`'s identical precedent).
+pub(crate) fn build(doc: &TikiwikiDoc) -> String {
     let mut output = String::new();
     for block in &doc.blocks {
         build_block(block, &mut output);

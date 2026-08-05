@@ -10,11 +10,11 @@
 //! The harness reports but does NOT fail on low text coverage — the goal is to
 //! catalogue gaps, not gate CI.  Tests DO fail if the parser panics.
 
+use rescribe_format_api::Parse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use textile_fmt::ast::{Block, Inline, TableCell, TextileDoc};
-use textile_fmt::parse;
 
 // ── Path discovery ────────────────────────────────────────────────────────────
 
@@ -240,7 +240,7 @@ fn run_harness(files: &[HarnessFile]) {
         };
 
         // Parse — must not panic.
-        let (doc, diags) = parse(&input);
+        let (doc, diags) = TextileDoc::parse(input.as_bytes());
 
         let parse_col = "OK";
         let our_words = extract_words(&doc);
@@ -326,7 +326,7 @@ fn pandoc_textile_corpus() {
 #[test]
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/textile/oracle/input.textile");
-    let (doc, _diags) = parse(sample);
+    let (doc, _diags) = TextileDoc::parse(sample.as_bytes());
     // Must produce at least one block.
     assert!(
         !doc.blocks.is_empty(),

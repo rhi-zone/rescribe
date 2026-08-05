@@ -3,8 +3,9 @@
 //! Thin adapter layer converting rescribe Document model to zimwiki AST.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
-use zimwiki::{Block, Inline, ListItem, Span, TableRow, ZimwikiDoc, build as build_zimwiki};
+use zimwiki::{Block, Inline, ListItem, Span, TableRow, ZimwikiDoc};
 
 /// Emit a document as ZimWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -28,9 +29,9 @@ pub fn emit_with_options(
         blocks,
         span: zimwiki::Span::NONE,
     };
-    let output = build_zimwiki(&zimwiki_doc);
+    let output = zimwiki_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_node(node: &Node) -> Option<Block> {

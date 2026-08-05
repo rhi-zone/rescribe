@@ -24,14 +24,86 @@ pub use ast::{
     Block, Diagnostic, Inline, ListItem, Severity, Span, TableCell, TableRow, TikiwikiDoc,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_inline_text};
+pub use emit::collect_inline_text;
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
 pub fn tikiwiki_events(input: &str) -> events::EventIter<'_> {
     events::events(input)
+}
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `TikiwikiDoc` implements all five shared API-mode traits. Unlike
+// `rst-fmt`'s `RstDoc<'a>`, `TikiwikiDoc` owns its data (no lifetime
+// parameter) and `parse::parse`/`events::events` already take `&str`, not a
+// `RstDoc`-style borrowing type — so `Parse`/`Events` bridge cleanly via the
+// same `&[u8]` → `&str` pattern `commonmark-fmt` uses (`std::str::from_utf8`,
+// with an `invalid-utf8` `Diagnostic` on failure), rather than being skipped
+// the way `rst-fmt` skips them.
+//
+// `parse::parse(&str)` and `events::events(&str)`/`tikiwiki_events` remain
+// public, non-trait entry points: they have a materially different contract
+// from the trait methods (`&str` input, skipping the UTF-8 check), mirroring
+// `commonmark-fmt`'s kept `parse_str`/`events_str`.
+
+impl Parse for TikiwikiDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse(s),
+            Err(_) => (
+                TikiwikiDoc::default(),
+                vec![
+                    Diagnostic::new(Severity::Warning, "input is not valid UTF-8")
+                        .with_code("tikiwiki::invalid-utf8"),
+                ],
+            ),
+        }
+    }
+}
+
+impl Emit for TikiwikiDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl Events for TikiwikiDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document rather
+    /// than panicking or returning `Option` — the trait's `events()` is
+    /// infallible by contract and has no diagnostic channel (unlike
+    /// `Parse::parse`). Callers that need to *distinguish* "empty document"
+    /// from "invalid UTF-8" should use [`tikiwiki_events`]/[`events::events`]
+    /// directly on an already-validated `&str`.
+    fn events(input: &[u8]) -> EventIter<'_> {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::EventIter::new(s),
+            Err(_) => events::EventIter::new(""),
+        }
+    }
+}
+
+impl StreamingParse for TikiwikiDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for TikiwikiDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -96,7 +168,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("! Title"));
     }
 
@@ -112,7 +184,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("__bold__"));
     }
 
@@ -128,7 +200,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("''italic''"));
     }
 
@@ -145,7 +217,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("[http://example.com|Example]"));
     }
 
@@ -159,7 +231,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let out = build(&doc);
+        let out = emit::build(&doc);
         assert!(out.contains("{CODE(lang=rust)}"));
         assert!(out.contains("let x = 5;"));
     }
@@ -224,7 +296,7 @@ mod tests {
     fn test_roundtrip_simple() {
         let input = "! Heading\n\nParagraph text\n\n__bold__";
         let (doc, _) = parse(input);
-        let output = build(&doc);
+        let output = emit::build(&doc);
         let (doc2, _) = parse(&output);
         assert_eq!(doc.blocks.len(), doc2.blocks.len());
     }

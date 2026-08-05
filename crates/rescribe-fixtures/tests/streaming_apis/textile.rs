@@ -255,9 +255,9 @@ fn textile_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = textile_fmt::parse::parse(&input);
+        let (doc, _diags) = textile_fmt::TextileDoc::parse(input.as_bytes());
         let expected = textile_ast_to_events(&doc);
-        let actual: Vec<_> = textile_fmt::events(&input).collect();
+        let actual: Vec<_> = textile_fmt::TextileDoc::events(input.as_bytes()).collect();
         assert_eq!(
             expected,
             actual,
@@ -297,7 +297,8 @@ fn textile_streaming_parser_matches_events_and_is_incremental() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<textile_fmt::TextileEvent> = textile_fmt::events(input_str).collect();
+        let bulk: Vec<textile_fmt::TextileEvent> =
+            textile_fmt::TextileDoc::events(input_str.as_bytes()).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -374,11 +375,11 @@ fn textile_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = textile_fmt::parse::parse(&input);
-        let built = textile_fmt::emit::emit(&doc);
+        let (doc, _diags) = textile_fmt::TextileDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("textile emit output is UTF-8");
 
         let mut w = textile_fmt::writer::Writer::new(Vec::<u8>::new());
-        for e in textile_fmt::events(&input) {
+        for e in textile_fmt::TextileDoc::events(input.as_bytes()) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
