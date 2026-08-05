@@ -643,6 +643,7 @@ name = "creole"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -846,6 +847,7 @@ name = "dokuwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -1141,6 +1143,7 @@ name = "fountain-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -1242,6 +1245,7 @@ name = "haddock-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3957,6 +3961,7 @@ version = "0.1.0"
 dependencies = [
  "creole",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4013,6 +4018,7 @@ version = "0.1.0"
 dependencies = [
  "dokuwiki",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
