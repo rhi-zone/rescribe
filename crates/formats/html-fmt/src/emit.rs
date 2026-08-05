@@ -10,7 +10,7 @@ pub struct EmitOptions {
 }
 
 /// Emit an `HtmlDoc` as HTML bytes.
-pub fn emit(doc: &HtmlDoc) -> Vec<u8> {
+pub(crate) fn emit(doc: &HtmlDoc) -> Vec<u8> {
     emit_with_options(doc, &EmitOptions::default())
 }
 

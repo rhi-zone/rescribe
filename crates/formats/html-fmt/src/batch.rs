@@ -61,18 +61,9 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming HTML events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming HTML events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming HTML parser that delivers events to a [`Handler`].
 ///
@@ -82,12 +73,12 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
 ///
 /// See the [module docs](self) for why incremental event delivery is not
 /// possible for HTML5.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     buf: Vec<u8>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

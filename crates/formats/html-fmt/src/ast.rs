@@ -1,15 +1,9 @@
 //! AST types for HTML documents.
 
-/// Byte offset span in the source input.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
+/// Byte offset span in the source input. Re-exported from
+/// `rescribe-format-api` — see that crate for why `Span`/`Diagnostic`/
+/// `Severity` are shared across every format crate.
+pub use rescribe_format_api::Span;
 
 /// An HTML document.
 #[derive(Clone, Debug, PartialEq)]
@@ -130,12 +124,8 @@ impl Node {
     }
 }
 
-/// Diagnostic message from parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
-}
+/// Diagnostic message from parsing. Re-exported from `rescribe-format-api`.
+pub use rescribe_format_api::{Diagnostic, Severity};
 
 /// Check if a tag name is a void element (no closing tag in HTML5).
 pub fn is_void_element(tag: &str) -> bool {

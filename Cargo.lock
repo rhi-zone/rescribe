@@ -1422,6 +1422,7 @@ version = "0.1.0"
 dependencies = [
  "html5ever",
  "markup5ever_rcdom",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3544,6 +3545,7 @@ dependencies = [
  "html-fmt",
  "rescribe-core",
  "rescribe-fixtures",
+ "rescribe-format-api",
  "rescribe-std",
  "rescribe-write-html",
  "tree-sitter",

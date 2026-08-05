@@ -1,11 +1,13 @@
 //! HTML parser using html-fmt (wraps html5ever).
 
+use html_fmt::HtmlDoc;
 use html_fmt::Node as HtmlNode;
 use html_fmt::ast::Span;
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Resource,
     ResourceId, ResourceMap, Severity, WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{Node, node, prop};
 
 use crate::{
@@ -27,7 +29,7 @@ pub fn parse_with_options(
     let mut resources = ResourceMap::new();
 
     // Parse HTML using html-fmt (which wraps html5ever)
-    let (doc, _diagnostics) = html_fmt::parse(input.as_bytes());
+    let (doc, _diagnostics) = HtmlDoc::parse(input.as_bytes());
 
     // Extract metadata from <head> (and <html> lang attribute)
     for node in &doc.nodes {

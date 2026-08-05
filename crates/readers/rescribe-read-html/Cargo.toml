@@ -14,6 +14,7 @@ tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-html"]
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+rescribe-format-api.workspace = true
 html-fmt = { workspace = true, optional = true }
 tree-sitter = { version = "0.26", optional = true }
 tree-sitter-html = { version = "0.23", optional = true }

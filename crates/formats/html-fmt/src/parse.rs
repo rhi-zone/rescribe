@@ -15,7 +15,7 @@ use crate::ast::*;
 /// Returns the parsed document and any diagnostics (parse errors reported
 /// by html5ever). html5ever never fails — malformed input is handled per
 /// the HTML5 error-recovery rules.
-pub fn parse(input: &[u8]) -> (HtmlDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (HtmlDoc, Vec<Diagnostic>) {
     let dom = parse_document(RcDom::default(), Default::default())
         .from_utf8()
         .read_from(&mut &*input)
@@ -26,6 +26,8 @@ pub fn parse(input: &[u8]) -> (HtmlDoc, Vec<Diagnostic>) {
         diagnostics.push(Diagnostic {
             message: err.to_string(),
             span: Span::NONE,
+            severity: rescribe_format_api::Severity::Warning,
+            code: "",
         });
     }
 
