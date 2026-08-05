@@ -137,6 +137,8 @@ impl<'a> EventIter<'a> {
                 diagnostics.push(Diagnostic {
                     message: format!("failed to open ZIP archive: {e}"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 EventIter {
                     zip: None,
@@ -180,6 +182,8 @@ impl<'a> Iterator for EventIter<'a> {
                     self.diagnostics.push(Diagnostic {
                         message: format!("entry {i}: failed to read header: {e}"),
                         span: Span::NONE,
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
                     });
                     continue;
                 }
@@ -201,6 +205,8 @@ impl<'a> Iterator for EventIter<'a> {
                 self.diagnostics.push(Diagnostic {
                     message: format!("entry {name}: failed to read raw content: {e}"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
             }
             let content = crate::parse::decompress_raw(

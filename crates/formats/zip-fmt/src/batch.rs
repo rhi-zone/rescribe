@@ -138,26 +138,20 @@ pub enum Event {
     },
 }
 
-/// Diagnostic emitted by the streaming parser.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
-}
+/// Diagnostic emitted by the streaming parser. Re-exported from
+/// `rescribe-format-api` — shared with `crate::ast::Diagnostic` (they used
+/// to be two distinct locally-declared types with the same shape; now
+/// there is exactly one `Diagnostic` type in the crate).
+pub use rescribe_format_api::Diagnostic;
 
-/// Callback sink for [`StreamingParser`]. `handle()` is stack-scoped: the
-/// borrowed `Event<'_>` (its `Data` chunk in particular) is only valid for
-/// the duration of the call, allowing the parser's internal buffer to
-/// compact afterward.
-pub trait Handler {
-    fn handle(&mut self, event: Event);
-}
-
-impl<F: FnMut(Event)> Handler for F {
-    fn handle(&mut self, event: Event) {
-        self(event)
-    }
-}
+/// Callback sink for [`StreamingParser`] — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait. See
+/// that crate's docs for why every format crate's `StreamingParser<H>`
+/// must bound `H` by one shared trait for a common `StreamingParse` trait
+/// to exist at all. `handle()` is stack-scoped: the borrowed `Event<'_>`
+/// (its `Data` chunk in particular) is only valid for the duration of the
+/// call, allowing the parser's internal buffer to compact afterward.
+pub use rescribe_format_api::Handler;
 
 const LOCAL_FILE_HEADER_SIG: u32 = 0x0403_4b50;
 const DATA_DESCRIPTOR_SIG: u32 = 0x0807_4b50;
@@ -289,7 +283,7 @@ enum Phase {
 
 /// Genuinely incremental, chunk-fed ZIP reader. See the module docs for
 /// the full rationale and the entry-metadata timing contract.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<Event>> {
     handler: H,
     phase: Phase,
     buf: Vec<u8>,
@@ -297,7 +291,7 @@ pub struct StreamingParser<H: Handler> {
     bytes_seen: usize,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<Event>> StreamingParser<H> {
     pub fn new(handler: H) -> Self {
         StreamingParser {
             handler,
@@ -322,6 +316,8 @@ impl<H: Handler> StreamingParser<H> {
             self.diagnostics.push(Diagnostic {
                 message: "input ended mid-entry (truncated archive)".to_string(),
                 span: Span::NONE,
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
         }
         self.diagnostics
@@ -353,6 +349,8 @@ impl<H: Handler> StreamingParser<H> {
                                 "unrecognized signature 0x{sig:08x}; stopping entry scan"
                             ),
                             span: Span::NONE,
+                            severity: rescribe_format_api::Severity::Warning,
+                            code: "",
                         });
                         self.phase = Phase::Done;
                     }
@@ -448,6 +446,8 @@ impl<H: Handler> StreamingParser<H> {
                          does not decode; treating content as opaque Stored bytes"
                     ),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 ContentMode::Store
             }
@@ -522,6 +522,8 @@ impl<H: Handler> StreamingParser<H> {
                         self.diagnostics.push(Diagnostic {
                             message: format!("deflate decode error in data-descriptor entry: {e}"),
                             span: Span::NONE,
+                            severity: rescribe_format_api::Severity::Warning,
+                            code: "",
                         });
                         flate2::Status::StreamEnd
                     }
@@ -599,7 +601,7 @@ impl<H: Handler> StreamingParser<H> {
 /// read the descriptor itself (optional 4-byte signature, then CRC-32,
 /// then compressed/uncompressed sizes as 4-byte or 8-byte fields
 /// depending on whether the entry used zip64).
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<Event>> StreamingParser<H> {
     fn drive_descriptor(&mut self) -> bool {
         let Phase::Descriptor {
             zip64,
@@ -674,6 +676,8 @@ fn decompress_chunk(
                             diagnostics.push(Diagnostic {
                                 message: format!("deflate decode error: {e}"),
                                 span: Span::NONE,
+                                severity: rescribe_format_api::Severity::Warning,
+                                code: "",
                             });
                             break;
                         }

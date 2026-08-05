@@ -3421,6 +3421,7 @@ name = "zip-fmt"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "rescribe-format-api",
  "zip 7.2.0",
 ]
 

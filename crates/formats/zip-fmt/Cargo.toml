@@ -20,5 +20,6 @@ writer-builder = ["reader-ast", "writer-streaming"]
 [dependencies]
 zip = { workspace = true, optional = true }
 flate2 = { workspace = true, optional = true }
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

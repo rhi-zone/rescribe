@@ -11,10 +11,12 @@
 //! parsers over well-formed archives.
 
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Events as _, Parse as _};
+use zip_fmt::Archive;
 
 fuzz_target!(|data: &[u8]| {
-    let _ = zip_fmt::parse(data);
-    let _ = zip_fmt::events(data).count();
+    let _ = Archive::parse(data);
+    let _ = Archive::events(data).count();
 
     // Chunked batch parser, split at an arbitrary point so short inputs
     // still exercise a genuine multi-feed() call.

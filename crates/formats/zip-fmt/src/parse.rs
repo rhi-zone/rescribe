@@ -21,7 +21,7 @@ pub use crate::ast::Diagnostic;
 /// Never panics: a malformed or truncated archive produces an empty
 /// `Archive` plus a `Diagnostic` describing the failure, matching the
 /// error-tolerant contract other `-fmt` crates in this workspace follow.
-pub fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>) {
     let mut diags = Vec::new();
     let cursor = Cursor::new(input);
     let mut zip = match zip::ZipArchive::new(cursor) {
@@ -33,6 +33,8 @@ pub fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>) {
                     start: 0,
                     end: input.len(),
                 },
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
             return (
                 Archive {
@@ -58,6 +60,8 @@ pub fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>) {
                 diags.push(Diagnostic {
                     message: format!("entry {i}: failed to read header: {e}"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 continue;
             }
@@ -108,6 +112,8 @@ pub fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>) {
             diags.push(Diagnostic {
                 message: format!("entry {name}: failed to read raw content: {e}"),
                 span: Span::NONE,
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
         }
         let content = decompress_raw(
@@ -179,6 +185,8 @@ pub(crate) fn decompress_raw(
                     diags.push(Diagnostic {
                         message: format!("entry {name}: deflate decode failed: {e}"),
                         span: Span::NONE,
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
                     });
                     Vec::new()
                 }
@@ -191,6 +199,8 @@ pub(crate) fn decompress_raw(
                      content stored as raw (still-compressed) bytes"
                 ),
                 span: Span::NONE,
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
             raw.to_vec()
         }

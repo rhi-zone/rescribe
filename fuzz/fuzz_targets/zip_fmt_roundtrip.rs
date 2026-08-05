@@ -37,6 +37,7 @@
 //! coverage" section), and the archive-level comment.
 
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit as _, Parse as _};
 use zip_fmt::{Archive, CompressionMethod, Entry};
 
 struct Gen<'a> {
@@ -133,8 +134,8 @@ fuzz_target!(|data: &[u8]| {
         span: Default::default(),
     };
 
-    let emitted = zip_fmt::emit(&archive);
-    let (archive2, diags) = zip_fmt::parse(&emitted);
+    let emitted = archive.emit();
+    let (archive2, diags) = Archive::parse(&emitted);
     assert!(
         diags.is_empty(),
         "unexpected diagnostics reparsing generated archive: {diags:?}"

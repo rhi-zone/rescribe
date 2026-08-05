@@ -38,7 +38,7 @@ use crate::ast::{Archive, CompressionMethod, Entry};
 /// an empty `Vec` rather than a partial/corrupt archive — a caller that
 /// needs to distinguish "empty input" from "write failed" should use
 /// [`crate::Writer`] instead, whose `finish()` returns `io::Result`.
-pub fn emit(ast: &Archive) -> Vec<u8> {
+pub(crate) fn emit(ast: &Archive) -> Vec<u8> {
     let cursor = Cursor::new(Vec::new());
     let mut zip = zip::ZipWriter::new(cursor);
     if !ast.comment.is_empty() {

@@ -5,6 +5,7 @@
 //! `emit()`/`parse()`, and why), run here over many pseudo-random seeds
 //! as a committed, non-fuzzer regression check.
 
+use rescribe_format_api::{Emit as _, Parse as _};
 use zip_fmt::{Archive, CompressionMethod, Entry};
 
 /// Minimal xorshift PRNG — no external dependency needed for deterministic,
@@ -79,8 +80,8 @@ fn emit_parse_roundtrip_many_seeds() {
             span: Default::default(),
         };
 
-        let emitted = zip_fmt::emit(&archive);
-        let (archive2, diags) = zip_fmt::parse(&emitted);
+        let emitted = archive.emit();
+        let (archive2, diags) = Archive::parse(&emitted);
         assert!(diags.is_empty(), "seed {seed}: diagnostics: {diags:?}");
         assert_eq!(
             archive.comment, archive2.comment,
@@ -121,7 +122,7 @@ fn emit_then_streaming_parse_roundtrip_many_seeds() {
             comment: Vec::new(),
             span: Default::default(),
         };
-        let emitted = zip_fmt::emit(&archive);
+        let emitted = archive.emit();
 
         let mut names = Vec::new();
         let mut current_content = Vec::new();

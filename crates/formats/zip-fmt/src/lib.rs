@@ -56,23 +56,28 @@
 //!
 //! # API layers
 //!
+//! `Archive` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader (wraps zip::ZipArchive over Cursor<&[u8]>)
-//! pub fn parse(input: &[u8]) -> (Archive, Vec<Diagnostic>);
+//! let (archive, diags): (Archive, Vec<Diagnostic>) = Archive::parse(input);
 //!
 //! // Streaming reader — lazy pull iterator, one entry decompressed per next()
-//! pub fn events(input: &[u8]) -> EventIter<'_>;
+//! let it: EventIter = Archive::events(input);
 //!
 //! // Batch reader — the hand-rolled, genuinely chunk-fed reader (see batch.rs)
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = Archive::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat, any chunk size, any number of times
 //! let diagnostics = p.finish();
 //!
 //! // Builder writer — wraps zip::ZipWriter over Cursor<Vec<u8>>
-//! pub fn emit(ast: &Archive) -> Vec<u8>;
+//! let bytes: Vec<u8> = archive.emit();
 //!
 //! // Streaming writer — adapts zip::write::ZipWriter::new_stream (see writer.rs)
-//! let mut w = Writer::new(sink);
+//! let mut w = Archive::writer(sink);
 //! w.write_entry(&entry); // repeat
 //! let sink = w.finish()?;
 //! ```
@@ -112,19 +117,58 @@ pub mod events;
 pub mod parse;
 pub mod writer;
 
-pub use ast::{Archive, CompressionMethod, Diagnostic, DosTimestamp, Entry, Span};
+pub use ast::{Archive, CompressionMethod, Diagnostic, DosTimestamp, Entry, Severity, Span};
 pub use batch::{Handler, StreamingParser};
-pub use emit::emit;
-pub use events::EventIter;
-pub use parse::parse;
+pub use events::{EventIter, OwnedEvent};
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Return a lazy pull iterator over the archive's entries, without
-/// materializing an `Archive`. See `events.rs`'s module docs for why this
-/// wraps `zip::ZipArchive` directly rather than walking `parse()`'s
-/// output.
-pub fn events(input: &[u8]) -> EventIter<'_> {
-    EventIter::new(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `Archive` implements the five shared API-mode traits directly — no
+// parallel free functions (`zip_fmt::parse(..)`, `zip_fmt::emit(..)`, ...)
+// exist alongside them.
+
+impl Parse for Archive {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for Archive {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for Archive {
+    // zip-fmt's EventIter always yields OwnedEvent regardless of the
+    // input lifetime (decompression can't borrow) — the GAT tolerates an
+    // impl that simply doesn't use its own lifetime parameter, per the
+    // feasibility spike this crate's migration is based on.
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        EventIter::new(input)
+    }
+}
+
+impl StreamingParse for Archive {
+    type Event = batch::Event;
+    type Parser<H: Handler<batch::Event>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<batch::Event>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for Archive {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 #[cfg(test)]
@@ -149,7 +193,7 @@ mod smoke {
     #[test]
     fn smoke_parse() {
         let bytes = sample_zip();
-        let (archive, diags) = parse(&bytes);
+        let (archive, diags) = Archive::parse(&bytes);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(archive.entries.len(), 2);
         assert_eq!(archive.entries[0].name, "hello.txt");
@@ -166,7 +210,7 @@ mod smoke {
     #[test]
     fn smoke_events() {
         let bytes = sample_zip();
-        let evts: Vec<_> = events(&bytes).collect();
+        let evts: Vec<_> = Archive::events(&bytes).collect();
         assert_eq!(evts.len(), 2);
         let events::Event::Entry { name, content, .. } = &evts[0] else {
             panic!("expected Entry event");
@@ -178,9 +222,9 @@ mod smoke {
     #[test]
     fn smoke_emit_roundtrip() {
         let bytes = sample_zip();
-        let (archive1, _) = parse(&bytes);
-        let emitted = emit(&archive1);
-        let (archive2, diags2) = parse(&emitted);
+        let (archive1, _) = Archive::parse(&bytes);
+        let emitted = archive1.emit();
+        let (archive2, diags2) = Archive::parse(&emitted);
         assert!(diags2.is_empty(), "diagnostics: {diags2:?}");
         assert_eq!(archive1.entries.len(), archive2.entries.len());
         for (a, b) in archive1.entries.iter().zip(archive2.entries.iter()) {
@@ -230,7 +274,7 @@ mod smoke {
         };
         w.write_entry(&entry);
         let bytes = w.finish().unwrap();
-        let (archive, diags) = parse(&bytes);
+        let (archive, diags) = Archive::parse(&bytes);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(archive.entries.len(), 1);
         assert_eq!(archive.entries[0].name, "a.txt");
