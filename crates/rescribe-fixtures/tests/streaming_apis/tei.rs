@@ -29,9 +29,11 @@ fn tei_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = tei_fmt::parse(&input);
+        let (doc, _diags) = tei_fmt::TeiDoc::parse(&input);
         let expected = tei_fmt::events::events_from_doc(&doc);
-        let actual: Vec<_> = tei_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let actual: Vec<_> = tei_fmt::TeiDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
         if expected != actual && result.is_ok() {
             result = Err(format!(
@@ -62,8 +64,9 @@ fn tei_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<tei_fmt::OwnedEvent> =
-            tei_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let bulk: Vec<tei_fmt::OwnedEvent> = tei_fmt::TeiDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -118,11 +121,11 @@ fn tei_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = tei_fmt::parse(&input);
-        let built = tei_fmt::emit(&doc);
+        let (doc, _diags) = tei_fmt::TeiDoc::parse(&input);
+        let built = doc.emit();
 
         let mut w = tei_fmt::Writer::new(Vec::<u8>::new());
-        for e in tei_fmt::events(&input) {
+        for e in tei_fmt::TeiDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = w.finish();

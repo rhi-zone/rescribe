@@ -10,17 +10,18 @@
 
 use std::collections::HashMap;
 
-use tei_fmt::Node as TNode;
+use tei_fmt::{Node as TNode, TeiDoc};
 
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse TEI XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, diagnostics) = tei_fmt::parse(input.as_bytes());
+    let (doc, diagnostics) = TeiDoc::parse(input.as_bytes());
 
     let mut warnings: Vec<FidelityWarning> = diagnostics
         .into_iter()
