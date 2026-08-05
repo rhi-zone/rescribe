@@ -48,21 +48,16 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming OPML events. Implemented automatically for
-/// any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming OPML events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see
+/// that crate's docs for why bounding `H` by one shared trait (instead of
+/// each format crate declaring its own concrete `Handler`) is required for
+/// a common `StreamingParse` trait to exist at all.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming OPML parser that delivers events to a [`Handler`] as
 /// soon as they are provably complete.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     pending: Vec<u8>,
     diagnostics: Vec<Diagnostic>,
@@ -81,7 +76,7 @@ pub struct StreamingParser<H: Handler> {
     failed: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     pub fn new(handler: H) -> Self {
         StreamingParser {
             handler,
@@ -232,7 +227,9 @@ impl<H: Handler> StreamingParser<H> {
                                     "XML parse error: expected `</{expected}>`, but `</{name}>` was found"
                                 ),
                                 span: Span::NONE,
-                            });
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
+                    });
                             self.open_stack.push(expected);
                             self.pending.clear();
                             self.failed = true;
@@ -245,7 +242,9 @@ impl<H: Handler> StreamingParser<H> {
                                     "XML parse error: close tag `</{name}>` does not match any open tag"
                                 ),
                                 span: Span::NONE,
-                            });
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
+                    });
                             self.pending.clear();
                             self.failed = true;
                             self.close_out();
@@ -295,6 +294,8 @@ impl<H: Handler> StreamingParser<H> {
                         self.diagnostics.push(Diagnostic {
                             message: format!("XML parse error: {e}"),
                             span: Span::NONE,
+                            severity: rescribe_format_api::Severity::Warning,
+                            code: "",
                         });
                         self.pending.clear();
                         self.close_out();
@@ -313,6 +314,8 @@ impl<H: Handler> StreamingParser<H> {
             self.diagnostics.push(Diagnostic {
                 message: "unclosed element <outline>".to_string(),
                 span: Span::NONE,
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
             self.handler.handle(OwnedEvent::EndOutline);
         }

@@ -25,15 +25,11 @@
 //! without the crate needing to know its name.
 
 /// Byte offset span in the source input.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
+///
+/// Re-exported from `rescribe-format-api` — see that crate for why `Span`/
+/// `Diagnostic`/`Severity` are shared across every format crate rather than
+/// each declaring its own.
+pub use rescribe_format_api::Span;
 
 /// The XML declaration (`<?xml version="1.0" encoding="UTF-8"?>`), if present.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -243,9 +239,5 @@ fn parse_opml_bool(v: Option<&str>) -> Option<bool> {
     }
 }
 
-/// Diagnostic message from parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
-}
+/// Diagnostic message from parsing. Re-exported from `rescribe-format-api`.
+pub use rescribe_format_api::{Diagnostic, Severity};

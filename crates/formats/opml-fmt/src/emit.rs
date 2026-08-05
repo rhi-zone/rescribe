@@ -12,7 +12,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event as Xml
 use crate::ast::*;
 
 /// Emit an `OpmlDoc` as XML bytes.
-pub fn emit(doc: &OpmlDoc) -> Vec<u8> {
+pub(crate) fn emit(doc: &OpmlDoc) -> Vec<u8> {
     let mut writer = XmlWriter::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
     if let Some(decl) = &doc.xml_decl {

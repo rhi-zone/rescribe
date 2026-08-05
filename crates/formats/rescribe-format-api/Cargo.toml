@@ -1,0 +1,9 @@
+[package]
+name = "rescribe-format-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared trait contract (Parse/Events/StreamingParse/Emit/StreamingWrite), Handler<E>, and Diagnostic/Severity for the rescribe -fmt format crates — no rescribe dependency"
+
+[dependencies]

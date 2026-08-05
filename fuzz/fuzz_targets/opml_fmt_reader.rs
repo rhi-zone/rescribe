@@ -6,11 +6,13 @@
 //! input — malformed OPML/XML is reported via Diagnostics, never a panic.
 
 use libfuzzer_sys::fuzz_target;
+use opml_fmt::OpmlDoc;
+use rescribe_format_api::{Events as _, Parse as _};
 
 fuzz_target!(|data: &[u8]| {
-    let _ = opml_fmt::parse(data);
+    let _ = OpmlDoc::parse(data);
     // Also exercise the streaming events iterator on the same data.
-    let _ = opml_fmt::events(data).count();
+    let _ = OpmlDoc::events(data).count();
 
     // And the chunked batch parser, split at an arbitrary point so short
     // inputs still exercise a genuine multi-feed() call.

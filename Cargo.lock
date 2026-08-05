@@ -1136,14 +1136,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "format-crate-trait"
-version = "0.1.0"
-dependencies = [
- "opml-fmt",
- "zip-fmt",
-]
-
-[[package]]
 name = "fountain-fmt"
 version = "0.1.0"
 dependencies = [
@@ -2478,6 +2470,7 @@ name = "opml-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3233,6 +3226,7 @@ dependencies = [
  "org-fmt",
  "pod-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
  "rescribe-read-bbcode",
@@ -3321,6 +3315,10 @@ dependencies = [
  "zimwiki",
  "zip 7.2.0",
 ]
+
+[[package]]
+name = "rescribe-format-api"
+version = "0.1.0"
 
 [[package]]
 name = "rescribe-math"
@@ -3658,6 +3656,7 @@ version = "0.1.0"
 dependencies = [
  "opml-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4223,6 +4222,7 @@ version = "0.1.0"
 dependencies = [
  "opml-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-opml",
  "rescribe-std",
 ]

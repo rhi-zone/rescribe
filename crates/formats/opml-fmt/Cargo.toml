@@ -16,5 +16,6 @@ writer-builder = ["reader-ast", "writer-streaming"]
 
 [dependencies]
 quick-xml = { workspace = true }
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

@@ -21,6 +21,13 @@
 use rescribe_fixtures::streaming_harness::{
     CAPABILITIES, NOT_YET_AUDITED, ObservableSink, adversarial_chunkings, assert_or_known_failure,
 };
+// Shared rescribe-format-api trait imports, needed in scope for the
+// fully-qualified `<Ast>::parse(..)` / `.emit()` / `<Ast>::events(..)` calls
+// below, now that format crates implement these traits instead of exposing
+// parallel free functions. Keep this import list append-only / alphabetized
+// to minimize merge friction across per-crate migration edits to this file.
+#[allow(unused_imports)]
+use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, StreamingWrite};
 use std::path::{Path, PathBuf};
 
 fn fixtures_root() -> PathBuf {
@@ -4745,9 +4752,11 @@ fn opml_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = opml_fmt::parse(&input);
+        let (doc, _diags) = opml_fmt::OpmlDoc::parse(&input);
         let expected = opml_fmt::events::events_from_doc(&doc);
-        let actual: Vec<_> = opml_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let actual: Vec<_> = opml_fmt::OpmlDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
         if expected != actual && result.is_ok() {
             result = Err(format!(
@@ -4778,8 +4787,9 @@ fn opml_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<opml_fmt::OwnedEvent> =
-            opml_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let bulk: Vec<opml_fmt::OwnedEvent> = opml_fmt::OpmlDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -4833,11 +4843,11 @@ fn opml_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = opml_fmt::parse(&input);
-        let built = opml_fmt::emit(&doc);
+        let (doc, _diags) = opml_fmt::OpmlDoc::parse(&input);
+        let built = doc.emit();
 
         let mut w = opml_fmt::Writer::new(Vec::<u8>::new());
-        for e in opml_fmt::events(&input) {
+        for e in opml_fmt::OpmlDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = w.finish();

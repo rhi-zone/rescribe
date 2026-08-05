@@ -10,23 +10,28 @@
 //!
 //! # API layers
 //!
+//! `OpmlDoc` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader
-//! pub fn parse(input: &[u8]) -> (OpmlDoc, Vec<Diagnostic>);
+//! let (doc, diags): (OpmlDoc, Vec<Diagnostic>) = OpmlDoc::parse(input);
 //!
 //! // Streaming reader — true SAX-style pull iterator, no tree built
-//! pub fn events(input: &[u8]) -> EventIter;
+//! let it: EventIter = OpmlDoc::events(input);
 //!
 //! // Batch reader — chunk-driven, dispatches events as soon as provably complete
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = OpmlDoc::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat
 //! p.finish();
 //!
 //! // Builder writer — emit from AST
-//! pub fn emit(doc: &OpmlDoc) -> Vec<u8>;
+//! let bytes: Vec<u8> = doc.emit();
 //!
 //! // Streaming writer — emit from events
-//! let mut w = Writer::new(sink);
+//! let mut w = OpmlDoc::writer(sink);
 //! w.write_event(event); // repeat
 //! w.finish(); // flushes to sink
 //! ```
@@ -56,17 +61,55 @@ pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
-pub use ast::{Body, Diagnostic, Head, OpmlDoc, Outline, Span, XmlDecl};
+pub use ast::{Body, Diagnostic, Head, OpmlDoc, Outline, Severity, Span, XmlDecl};
 pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::emit;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Return a true streaming event iterator over the document, without
-/// building an `OpmlDoc`.
-pub fn events(input: &[u8]) -> EventIter<'_> {
-    EventIter::new(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `OpmlDoc` implements the five shared API-mode traits directly — there are
+// no parallel free functions (`opml_fmt::parse(..)`, `opml_fmt::emit(..)`)
+// alongside these; callers `use rescribe_format_api::Parse;` (etc.) and call
+// `OpmlDoc::parse(bytes)` / `doc.emit()` / `OpmlDoc::events(bytes)`.
+
+impl Parse for OpmlDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for OpmlDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for OpmlDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        EventIter::new(input)
+    }
+}
+
+impl StreamingParse for OpmlDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for OpmlDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 #[cfg(test)]
@@ -89,7 +132,7 @@ mod smoke {
 
     #[test]
     fn smoke_parse_document() {
-        let (doc, diags) = parse(SAMPLE);
+        let (doc, diags) = OpmlDoc::parse(SAMPLE);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc.version, "2.0");
         assert_eq!(doc.head.title.as_deref(), Some("Sample"));
@@ -104,17 +147,17 @@ mod smoke {
 
     #[test]
     fn smoke_roundtrip() {
-        let (doc1, diags1) = parse(SAMPLE);
+        let (doc1, diags1) = OpmlDoc::parse(SAMPLE);
         assert!(diags1.is_empty());
-        let emitted = emit(&doc1);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc1.emit();
+        let (doc2, diags2) = OpmlDoc::parse(&emitted);
         assert!(diags2.is_empty(), "diagnostics: {diags2:?}");
         assert_eq!(doc1.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
     }
 
     #[test]
     fn smoke_events() {
-        let evts: Vec<_> = events(SAMPLE).collect();
+        let evts: Vec<_> = OpmlDoc::events(SAMPLE).collect();
         assert!(!evts.is_empty());
         assert!(evts.iter().any(|e| matches!(e, Event::StartOutline { .. })));
         assert!(evts.iter().any(|e| matches!(e, Event::EmptyOutline { .. })));
@@ -122,7 +165,7 @@ mod smoke {
 
     #[test]
     fn smoke_event_roundtrip() {
-        let (doc1, _) = parse(SAMPLE);
+        let (doc1, _) = OpmlDoc::parse(SAMPLE);
         let evts = events::events_from_doc(&doc1);
         let doc2 = events::collect_doc(evts);
         assert_eq!(
@@ -182,15 +225,15 @@ mod smoke {
     #[test]
     fn smoke_unknown_attributes_and_head_elements_round_trip() {
         let input = br#"<opml version="2.0"><head><title>T</title><futureField>x</futureField></head><body><outline text="A" appSpecific="v"/></body></opml>"#;
-        let (doc, diags) = parse(input);
+        let (doc, diags) = OpmlDoc::parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc.body.outlines[0].attr("appSpecific"), Some("v"));
         assert_eq!(
             doc.head.extra,
             vec![("futureField".to_string(), "x".to_string())]
         );
-        let emitted = emit(&doc);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc.emit();
+        let (doc2, diags2) = OpmlDoc::parse(&emitted);
         assert!(diags2.is_empty());
         assert_eq!(doc.strip_spans(), doc2.strip_spans());
     }

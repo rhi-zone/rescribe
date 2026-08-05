@@ -24,6 +24,7 @@ readme = "README.md"
 [workspace.dependencies]
 # Internal crates
 rescribe-core = { path = "crates/rescribe-core" }
+rescribe-format-api = { path = "crates/formats/rescribe-format-api" }
 rescribe-std = { path = "crates/nodes/rescribe-std" }
 rescribe-math = { path = "crates/nodes/rescribe-math" }
 rescribe-read-markdown = { path = "crates/readers/rescribe-read-markdown" }

@@ -153,6 +153,8 @@ impl<'a> EventIter<'a> {
             self.diagnostics.push(Diagnostic {
                 message: "unclosed element <outline>".to_string(),
                 span: Span::NONE,
+                severity: rescribe_format_api::Severity::Warning,
+                code: "",
             });
             self.pending.push_back(Event::EndOutline);
         }
@@ -242,6 +244,8 @@ impl<'a> Iterator for EventIter<'a> {
                                             "XML parse error reading <{field_name}>: {err}"
                                         ),
                                         span: Span::NONE,
+                                        severity: rescribe_format_api::Severity::Warning,
+                                        code: "",
                                     });
                                     String::new()
                                 }
@@ -301,6 +305,8 @@ impl<'a> Iterator for EventIter<'a> {
                     self.diagnostics.push(Diagnostic {
                         message: format!("XML parse error: {e}"),
                         span: Span::NONE,
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
                     });
                     return self.finalize();
                 }

@@ -331,6 +331,9 @@ path = "../crates/formats/tei-fmt"
 [dependencies.opml-fmt]
 path = "../crates/formats/opml-fmt"
 
+[dependencies.rescribe-format-api]
+path = "../crates/formats/rescribe-format-api"
+
 [dependencies.zip-fmt]
 path = "../crates/formats/zip-fmt"
 

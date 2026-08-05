@@ -21,6 +21,7 @@
 
 use opml_fmt::{Body, Head, OpmlDoc, Outline, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as OPML.
@@ -52,7 +53,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         span: Span::NONE,
     };
 
-    let bytes = opml_fmt::emit(&opml_doc);
+    let bytes = opml_doc.emit();
     Ok(ConversionResult::ok(bytes))
 }
 
@@ -236,6 +237,7 @@ fn extract_text_recursive(node: &Node, out: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rescribe_format_api::Parse as _;
     use rescribe_std::builder::doc;
 
     #[test]
@@ -283,7 +285,7 @@ mod tests {
         let parsed = rescribe_read_opml::parse(opml).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
-        let (doc2, diags) = opml_fmt::parse(xml.as_bytes());
+        let (doc2, diags) = OpmlDoc::parse(xml.as_bytes());
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc2.body.outlines.len(), 1);
         assert_eq!(doc2.body.outlines[0].children.len(), 1);

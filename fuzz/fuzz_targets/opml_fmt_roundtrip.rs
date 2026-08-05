@@ -12,6 +12,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use opml_fmt::{Body, Head, OpmlDoc, Outline, Span};
+use rescribe_format_api::{Emit as _, Parse as _};
 
 struct Gen<'a> {
     data: &'a [u8],
@@ -132,10 +133,10 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // Emit — must not panic.
-    let emitted = opml_fmt::emit(&doc);
+    let emitted = doc.emit();
 
     // Parse back — must not panic.
-    let (doc2, diags) = opml_fmt::parse(&emitted);
+    let (doc2, diags) = OpmlDoc::parse(&emitted);
     assert!(
         diags.is_empty(),
         "unexpected diagnostics reparsing generated document: {diags:?}\nemitted: {}",

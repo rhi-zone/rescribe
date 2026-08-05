@@ -10,3 +10,4 @@ description = "OPML reader for rescribe"
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
 opml-fmt = { workspace = true }
+rescribe-format-api = { workspace = true }

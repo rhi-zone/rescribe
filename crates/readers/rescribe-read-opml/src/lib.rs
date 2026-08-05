@@ -45,16 +45,17 @@
 //! let doc = result.value;
 //! ```
 
-use opml_fmt::{Head, Outline};
+use opml_fmt::{Head, OpmlDoc, Outline};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
     WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse OPML text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, diagnostics) = opml_fmt::parse(input.as_bytes());
+    let (doc, diagnostics) = OpmlDoc::parse(input.as_bytes());
 
     let mut warnings: Vec<FidelityWarning> = diagnostics
         .iter()

@@ -12,6 +12,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+rescribe-format-api = { workspace = true }
 # Our MIT fixture suite (tests/run.rs)
 # Explicitly use pulldown-cmark backend for consistent behaviour; tree-sitter
 # (the default) lacks YAML frontmatter, footnotes, and other GFM extensions.
