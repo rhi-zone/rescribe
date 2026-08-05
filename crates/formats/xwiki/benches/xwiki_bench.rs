@@ -1,5 +1,14 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use xwiki::{build, parse};
+use rescribe_format_api::{Emit, Parse};
+use xwiki::XwikiDoc;
+
+fn parse(input: &str) -> (XwikiDoc, Vec<rescribe_format_api::Diagnostic>) {
+    XwikiDoc::parse(input.as_bytes())
+}
+
+fn build(doc: &XwikiDoc) -> String {
+    String::from_utf8(doc.emit()).expect("xwiki emit output is UTF-8")
+}
 
 const SMALL: &str = r#"
 = Hello World =

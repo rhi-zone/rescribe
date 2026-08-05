@@ -3846,6 +3846,7 @@ name = "rescribe-read-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -4437,6 +4438,7 @@ name = "rescribe-write-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -6042,6 +6044,7 @@ name = "xwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]

@@ -3,7 +3,7 @@
 use crate::ast::*;
 
 /// Build an XWiki string from an [`XwikiDoc`].
-pub fn build(doc: &XwikiDoc) -> String {
+pub(crate) fn build(doc: &XwikiDoc) -> String {
     let mut output = String::new();
     for block in &doc.blocks {
         build_block(block, &mut output);
