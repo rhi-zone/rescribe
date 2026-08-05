@@ -30,7 +30,7 @@ use crate::ast::*;
 ///
 /// Never panics: malformed XML is reported via `Diagnostic`s and parsing
 /// stops at the point of failure, returning whatever tree was built so far.
-pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
     let mut reader = Reader::from_reader(input);
     reader.config_mut().trim_text(false);
 
@@ -96,6 +96,8 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
                 let (declared, entity_diagnostics) = DtdEntities::parse_doctype(&content);
                 for d in entity_diagnostics {
                     diagnostics.push(Diagnostic {
+                        severity: Severity::Warning,
+                        code: "",
                         message: format!("DOCTYPE internal subset: {d}"),
                         span: Span {
                             start: pos,
@@ -173,6 +175,8 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
                     }
                     Some(frame) => {
                         diagnostics.push(Diagnostic {
+                            severity: Severity::Warning,
+                            code: "",
                             message: format!(
                                 "mismatched closing tag: expected </{}>, found </{}>",
                                 frame.name, name
@@ -186,6 +190,8 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
                     }
                     None => {
                         diagnostics.push(Diagnostic {
+                            severity: Severity::Warning,
+                            code: "",
                             message: format!("unexpected closing tag </{}>", name),
                             span: Span {
                                 start: pos,
@@ -263,6 +269,8 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
             Err(e) => {
                 flush_text!(pos);
                 diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    code: "",
                     message: format!("XML parse error: {e}"),
                     span: Span {
                         start: pos,
@@ -278,6 +286,8 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
     // Close any unclosed elements (best-effort recovery for truncated input).
     while let Some(frame) = stack.pop() {
         diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            code: "",
             message: format!("unclosed element <{}>", frame.name),
             span: Span::NONE,
         });
@@ -335,6 +345,8 @@ fn read_attrs(
                 attrs.push((key, value));
             }
             Err(e) => diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                code: "",
                 message: format!("attribute parse error: {e}"),
                 span: Span {
                     start: pos,

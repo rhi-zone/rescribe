@@ -842,6 +842,7 @@ name = "docbook-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
@@ -3440,6 +3441,7 @@ version = "0.1.0"
 dependencies = [
  "docbook-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4002,6 +4004,7 @@ version = "0.1.0"
 dependencies = [
  "docbook-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-docbook",
  "rescribe-std",
 ]

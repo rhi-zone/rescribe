@@ -25,16 +25,17 @@
 
 use std::collections::HashMap;
 
-use docbook_fmt::Node as DbNode;
+use docbook_fmt::{DocBookDoc, Node as DbNode};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse DocBook XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, diagnostics) = docbook_fmt::parse(input.as_bytes());
+    let (doc, diagnostics) = DocBookDoc::parse(input.as_bytes());
 
     let mut warnings: Vec<FidelityWarning> = diagnostics
         .into_iter()
