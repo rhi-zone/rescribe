@@ -6,12 +6,15 @@
 //! This file contains a smoke test that parses a representative sample document
 //! without panicking.
 
+use rescribe_format_api::Parse;
+use zimwiki::ZimwikiDoc;
+
 /// Smoke test: parse the built-in representative ZimWiki sample without panicking.
 /// Runs in normal CI (not `#[ignore]`).
 #[test]
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/zimwiki/oracle/input.zimwiki");
-    let (doc, _diags) = zimwiki::parse(sample);
+    let (doc, _diags) = ZimwikiDoc::parse(sample.as_bytes());
     assert!(
         !doc.blocks.is_empty(),
         "expected at least one block from sample input"

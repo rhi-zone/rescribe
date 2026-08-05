@@ -2,6 +2,23 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-zimwiki` and `rescribe-write-zimwiki` as thin adapter layers.
+//!
+//! # API layers
+//!
+//! `ZimwikiDoc` implements all five shared `rescribe-format-api` traits —
+//! `Parse`, `Emit`, `Events`, `StreamingParse`, `StreamingWrite`. This
+//! crate's native `parse::parse`/`events::events` take `&str`, not `&[u8]`;
+//! the `Parse`/`Events` impls bridge via `std::str::from_utf8` (mirroring
+//! `commonmark-fmt`'s `Parse`/`Events` impls), producing an empty
+//! document/iterator plus a `Warning` diagnostic on invalid UTF-8.
+//! `events::EventIter` has no lifetime parameter — unlike `opml-fmt`'s
+//! zero-copy lazy pull iterator, it eagerly parses and materializes a
+//! `VecDeque<OwnedEvent>` up front (see `events.rs`'s module doc) — so its
+//! `Events::Event<'a>` associated type is `OwnedEvent` regardless of `'a`.
+//! `parse::parse(&str)` and `events::events(&str)` remain public,
+//! module-qualified entry points for callers that already have a `&str` and
+//! want to skip the UTF-8 re-check — a materially different contract from
+//! the trait methods, same as `commonmark-fmt`'s kept `parse_str`.
 
 pub mod ast;
 pub mod batch;
@@ -12,14 +29,66 @@ pub mod writer;
 
 pub use ast::{Block, Diagnostic, Inline, ListItem, Severity, Span, TableRow, ZimwikiDoc};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_inline_text};
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
-pub fn events(input: &str) -> EventIter {
-    events::events(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+
+impl rescribe_format_api::Parse for ZimwikiDoc {
+    /// Non-UTF-8 input yields an empty document and a single `Warning`
+    /// diagnostic (mirrors `commonmark-fmt`'s `Parse` impl) — this crate's
+    /// native `parse::parse` takes `&str`, not `&[u8]`.
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => parse::parse(s),
+            Err(_) => (
+                ZimwikiDoc::default(),
+                vec![Diagnostic {
+                    span: Span::NONE,
+                    severity: Severity::Warning,
+                    message: "input is not valid UTF-8".to_string(),
+                    code: "zimwiki::invalid-utf8",
+                }],
+            ),
+        }
+    }
+}
+
+impl rescribe_format_api::Emit for ZimwikiDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::Events for ZimwikiDoc {
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = EventIter;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document
+    /// (mirrors `commonmark-fmt`'s `Events` impl).
+    fn events(input: &[u8]) -> EventIter {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::events(s),
+            Err(_) => events::events(""),
+        }
+    }
+}
+
+impl rescribe_format_api::StreamingParse for ZimwikiDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for ZimwikiDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -27,6 +96,8 @@ pub fn events(input: &str) -> EventIter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emit::build;
+    use crate::parse::parse;
 
     #[test]
     fn test_parse_heading_level1() {

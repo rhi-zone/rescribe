@@ -3,7 +3,7 @@
 use crate::ast::*;
 
 /// Build a ZimWiki string from a [`ZimwikiDoc`].
-pub fn build(doc: &ZimwikiDoc) -> String {
+pub(crate) fn build(doc: &ZimwikiDoc) -> String {
     let mut ctx = BuildContext::new();
     build_blocks(&doc.blocks, &mut ctx, 0);
     ctx.output

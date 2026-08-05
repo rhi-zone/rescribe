@@ -3858,6 +3858,7 @@ name = "rescribe-read-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -4453,6 +4454,7 @@ name = "rescribe-write-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -6255,6 +6257,7 @@ name = "zimwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]

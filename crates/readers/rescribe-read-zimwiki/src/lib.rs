@@ -3,8 +3,9 @@
 //! Thin adapter layer converting zimwiki AST to rescribe Document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
-use zimwiki::{Block, Inline, ListItem, parse as parse_zimwiki};
+use zimwiki::{Block, Inline, ListItem, ZimwikiDoc};
 
 /// Parse ZimWiki markup.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -16,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (zimwiki_doc, _diags) = parse_zimwiki(input);
+    let (zimwiki_doc, _diags) = ZimwikiDoc::parse(input.as_bytes());
 
     let mut nodes = Vec::new();
     for block in &zimwiki_doc.blocks {
