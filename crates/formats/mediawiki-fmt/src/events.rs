@@ -137,7 +137,7 @@ pub struct EventIter {
 impl EventIter {
     /// Create a new event iterator from input text.
     pub fn new(input: &str) -> Self {
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         let mut events = Vec::new();
         emit_doc_events(&doc, &mut events);
         EventIter { events, pos: 0 }

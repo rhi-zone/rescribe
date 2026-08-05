@@ -3,7 +3,11 @@
 use crate::ast::{Block, Inline, MediawikiDoc};
 
 /// Emit a [`MediawikiDoc`] as a MediaWiki string.
-pub fn emit(doc: &MediawikiDoc) -> String {
+///
+/// Wrapped by `Emit::emit` (which returns `Vec<u8>`, per the shared trait
+/// contract); this string-returning function is the crate-internal builder,
+/// same pattern as `rst-fmt`'s `pub(crate) fn build`.
+pub(crate) fn emit(doc: &MediawikiDoc) -> String {
     let mut ctx = BuildContext::new();
     for block in &doc.blocks {
         build_block(block, &mut ctx);

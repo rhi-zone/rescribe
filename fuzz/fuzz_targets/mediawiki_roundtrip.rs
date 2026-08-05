@@ -9,6 +9,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use mediawiki_fmt::{Block, Inline, MediawikiDoc, Span};
+use rescribe_format_api::{Emit as _, Parse as _};
 
 #[derive(Arbitrary, Debug)]
 enum FuzzBlock {
@@ -32,7 +33,26 @@ enum FuzzBlock {
 /// - `;`, `:` → definition list markers (problematic at line start)
 fn sanitise(s: &str) -> String {
     s.chars()
-        .filter(|c| !matches!(*c, '\'' | '[' | ']' | '{' | '}' | '|' | '!' | '#' | '*' | '=' | '<' | '>' | ';' | ':' | '_' | '\x00'..='\x1f'))
+        .filter(|c| {
+            !matches!(
+                *c,
+                '\'' | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '|'
+                    | '!'
+                    | '#'
+                    | '*'
+                    | '='
+                    | '<'
+                    | '>'
+                    | ';'
+                    | ':'
+                    | '_'
+                    | '\x00'..='\x1f'
+            )
+        })
         .collect::<String>()
         .trim()
         .to_string()
@@ -64,7 +84,11 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
                 if clean.is_empty() {
                     return None;
                 }
-                Some(Block::Heading { level, inlines: vec![Inline::Text(clean)], span: Span::NONE })
+                Some(Block::Heading {
+                    level,
+                    inlines: vec![Inline::Text(clean)],
+                    span: Span::NONE,
+                })
             }
             FuzzBlock::Hr => Some(Block::HorizontalRule),
         })
@@ -74,17 +98,19 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
         return;
     }
 
-    let doc = MediawikiDoc { blocks: doc_blocks, span: Span::NONE };
+    let doc = MediawikiDoc {
+        blocks: doc_blocks,
+        span: Span::NONE,
+    };
 
-    let wiki_text = mediawiki_fmt::emit(&doc);
+    let wiki_text = doc.emit();
 
-    let (parsed, _diags) = mediawiki_fmt::parse(&wiki_text);
+    let (parsed, _diags) = MediawikiDoc::parse(&wiki_text);
     let parsed = parsed.strip_spans();
     let expected = doc.strip_spans();
 
     assert_eq!(
-        expected,
-        parsed,
+        expected, parsed,
         "MediaWiki roundtrip mismatch\n  emitted: {wiki_text:?}"
     );
 });

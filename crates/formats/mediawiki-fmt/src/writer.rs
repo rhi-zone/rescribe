@@ -865,8 +865,8 @@ mod tests {
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc_orig, _) = crate::parse::parse(input);
-        let (doc_emit, _) = crate::parse::parse(&emitted_text);
+        let (doc_orig, _) = crate::parse::parse_str(input);
+        let (doc_emit, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc_orig.blocks.len(),
             doc_emit.blocks.len(),
@@ -902,7 +902,7 @@ mod tests {
             "A link with '''bold''' inside: [http://example.com/ some '''bold''' text].\n",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::emit(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());
@@ -955,7 +955,7 @@ let x = 1;
 
 After the transition.
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         assert!(
             doc.blocks.len() >= 7,
             "expected a rich construct mix, got {:?}",
@@ -969,7 +969,7 @@ After the transition.
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
 
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc.blocks.len(),
             doc2.blocks.len(),
@@ -992,7 +992,7 @@ After the transition.
 ** inner b
 * outer three
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         let built = crate::emit::emit(&doc);
 
         let mut w = Writer::new(Vec::<u8>::new());
@@ -1005,7 +1005,7 @@ After the transition.
             "streaming Writer diverged from emit() for nested-list input"
         );
 
-        let (doc2, _) = crate::parse::parse(&streamed);
+        let (doc2, _) = crate::parse::parse_str(&streamed);
         assert_eq!(
             doc.blocks.len(),
             doc2.blocks.len(),

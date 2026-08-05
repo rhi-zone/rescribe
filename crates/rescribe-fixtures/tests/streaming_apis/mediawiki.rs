@@ -207,7 +207,7 @@ mod mediawiki_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = mediawiki_fmt::parse::parse(&input);
+            let (doc, _diags) = mediawiki_fmt::parse::parse_str(&input);
             let expected = mw_ast_to_events(&doc);
             let actual: Vec<OwnedEvent> = mediawiki_fmt::events(&input)
                 .map(|e| e.into_owned())
@@ -307,8 +307,9 @@ fn mediawiki_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = mediawiki_fmt::parse(&input);
-        let built = mediawiki_fmt::emit(&doc);
+        let (doc, _) = mediawiki_fmt::parse_str(&input);
+        let built =
+            String::from_utf8(mediawiki_fmt::Emit::emit(&doc)).expect("emit() output is UTF-8");
 
         let mut w = mediawiki_fmt::Writer::new(Vec::<u8>::new());
         for e in mediawiki_fmt::events(&input) {

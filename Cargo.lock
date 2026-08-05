@@ -2176,6 +2176,7 @@ name = "mediawiki-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]

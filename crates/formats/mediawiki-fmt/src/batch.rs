@@ -47,22 +47,15 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (MediawikiDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
+        crate::parse::parse_str(&s)
     }
 }
 
-/// Handler trait for streaming MediaWiki events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Callback trait for streaming MediaWiki events -- the shared
+/// `rescribe-format-api` trait, not a local definition. See that crate's
+/// module docs for why every format crate implements this trait directly
+/// rather than declaring its own concrete `Handler`.
+pub use rescribe_format_api::Handler;
 
 /// Block accumulation state for the streaming parser.
 enum BlockState {
@@ -77,14 +70,14 @@ enum BlockState {
 }
 
 /// Chunked streaming MediaWiki parser that delivers events to a [`Handler`].
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
