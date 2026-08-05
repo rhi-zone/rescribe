@@ -12,7 +12,7 @@
 //! let doc = result.value;
 //! ```
 
-use mediawiki_fmt::{Block, Inline, parse as parse_mediawiki};
+use mediawiki_fmt::{Block, Inline, parse_str as parse_mediawiki};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, Properties};
 use rescribe_std::{node, prop};
 

@@ -3,6 +3,7 @@
 //! Parses Perl POD markup into the rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse POD markup.
@@ -15,7 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diagnostics) = pod_fmt::parse(input);
+    let (doc, _diagnostics) = pod_fmt::PodDoc::parse(input.as_bytes());
 
     let blocks: Vec<Node> = doc.blocks.into_iter().map(convert_block).collect();
     let root = Node::new(node::DOCUMENT).children(blocks);

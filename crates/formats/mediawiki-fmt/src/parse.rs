@@ -109,11 +109,34 @@ fn extract_lang_attr(chars: &[char], start: usize, end: usize) -> Option<String>
     None
 }
 
+/// Parse MediaWiki markup from a byte slice into a [`MediawikiDoc`].
+///
+/// Always succeeds; non-UTF-8 input produces a single `Warning` diagnostic
+/// and an empty document (mirrors `commonmark-fmt::parse::parse`).
+pub(crate) fn parse(input: &[u8]) -> (MediawikiDoc, Vec<Diagnostic>) {
+    match std::str::from_utf8(input) {
+        Ok(s) => parse_str(s),
+        Err(_) => (
+            MediawikiDoc {
+                blocks: vec![],
+                span: Span::NONE,
+            },
+            vec![
+                Diagnostic::new(
+                    rescribe_format_api::Severity::Warning,
+                    "input is not valid UTF-8",
+                )
+                .with_code("mediawiki::invalid-utf8"),
+            ],
+        ),
+    }
+}
+
 /// Parse a MediaWiki string into a [`MediawikiDoc`].
 ///
 /// The parser is infallible: any unrecognised input is treated as a paragraph.
 /// Diagnostics (warnings/errors) are returned alongside the document.
-pub fn parse(input: &str) -> (MediawikiDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (MediawikiDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let (blocks, diags) = p.parse();
     (
@@ -447,7 +470,7 @@ impl<'a> Parser<'a> {
             let inner = joined[open_end..end].trim();
             let consumed = joined[..end + "</blockquote>".len()].matches('\n').count() + 1;
             // Parse inner content as blocks
-            let (inner_doc, _) = parse(inner);
+            let (inner_doc, _) = parse_str(inner);
             (
                 Block::Blockquote {
                     children: inner_doc.blocks,
@@ -459,7 +482,7 @@ impl<'a> Parser<'a> {
             // Unclosed blockquote -- treat rest as content
             let open_end = joined.find('>').unwrap_or(0) + 1;
             let inner = joined[open_end..].trim();
-            let (inner_doc, _) = parse(inner);
+            let (inner_doc, _) = parse_str(inner);
             (
                 Block::Blockquote {
                     children: inner_doc.blocks,

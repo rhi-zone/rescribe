@@ -37,6 +37,7 @@
 
 use crate::ast::{Diagnostic, PodDoc};
 use crate::events::OwnedEvent;
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven POD parser that returns the full AST on finish.
 #[derive(Default)]
@@ -58,19 +59,6 @@ impl BatchParser {
     pub fn finish(self) -> (PodDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
         crate::parse::parse(&s)
-    }
-}
-
-/// Handler trait for streaming POD events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
     }
 }
 
@@ -114,7 +102,7 @@ enum State {
 /// established by an earlier flushed block is still recognized (re-parsed
 /// standalone with a synthetic leading `=pod` line to establish the same
 /// state in the isolated re-parse).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
@@ -122,7 +110,7 @@ pub struct StreamingParser<H: Handler> {
     in_pod: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

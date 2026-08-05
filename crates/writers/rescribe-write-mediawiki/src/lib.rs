@@ -13,9 +13,7 @@
 //! let wiki = String::from_utf8(result.value).unwrap();
 //! ```
 
-use mediawiki_fmt::{
-    Block, Inline, MediawikiDoc, Span, TableCell, TableRow, emit as emit_mediawiki,
-};
+use mediawiki_fmt::{Block, Emit, Inline, MediawikiDoc, Span, TableCell, TableRow};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
 
@@ -32,9 +30,9 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         blocks,
         span: Span::NONE,
     };
-    let output = emit_mediawiki(&fmt_doc);
+    let output = fmt_doc.emit();
 
-    Ok(ConversionResult::with_warnings(output.into_bytes(), vec![]))
+    Ok(ConversionResult::with_warnings(output, vec![]))
 }
 
 fn node_to_block(node: &Node) -> Vec<Block> {

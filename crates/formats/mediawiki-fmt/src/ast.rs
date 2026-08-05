@@ -1,47 +1,14 @@
 //! MediaWiki AST types, Span, and Diagnostic.
 
 // -- Span / Diagnostic -------------------------------------------------------
+//
+// `Span`/`Diagnostic`/`Severity` are the shared `rescribe-format-api` types,
+// not local definitions -- see that crate's module docs for the rationale.
+// mediawiki-fmt never constructed a `Diagnostic` (the parser always returns
+// an empty diagnostics vec today), so there were no local `warning()`/
+// `error()` convenience-constructor call sites to migrate.
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // -- AST ----------------------------------------------------------------------
 

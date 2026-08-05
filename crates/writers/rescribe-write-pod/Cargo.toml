@@ -9,4 +9,5 @@ description = "POD (Plain Old Documentation) writer for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+rescribe-format-api = { workspace = true }
 pod-fmt = { workspace = true }

@@ -9,6 +9,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use mediawiki_fmt::{Block, Inline, MediawikiDoc, Span};
+use rescribe_format_api::{Emit as _, Parse as _};
 
 #[derive(Arbitrary, Debug)]
 enum FuzzBlock {
@@ -76,9 +77,9 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
 
     let doc = MediawikiDoc { blocks: doc_blocks, span: Span::NONE };
 
-    let wiki_text = mediawiki_fmt::emit(&doc);
+    let wiki_text = doc.emit();
 
-    let (parsed, _diags) = mediawiki_fmt::parse(&wiki_text);
+    let (parsed, _diags) = MediawikiDoc::parse(&wiki_text);
     let parsed = parsed.strip_spans();
     let expected = doc.strip_spans();
 

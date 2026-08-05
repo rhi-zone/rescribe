@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use mediawiki_fmt::{emit, parse};
+use mediawiki_fmt::parse_str as parse;
+use mediawiki_fmt::{Emit, MediawikiDoc};
 
 const SMALL: &str = r#"
 == Hello World ==
@@ -119,8 +120,9 @@ fn bench_mediawiki_roundtrip_small(c: &mut Criterion) {
     c.bench_function("mediawiki_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = emit(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = MediawikiDoc::emit(std::hint::black_box(&doc));
+            let out = String::from_utf8(out).unwrap();
+            let _ = parse(std::hint::black_box(out.as_str()));
         });
     });
 }
@@ -129,8 +131,9 @@ fn bench_mediawiki_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("mediawiki_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = emit(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = MediawikiDoc::emit(std::hint::black_box(&doc));
+            let out = String::from_utf8(out).unwrap();
+            let _ = parse(std::hint::black_box(out.as_str()));
         });
     });
 }
@@ -139,7 +142,7 @@ fn bench_mediawiki_emit_medium(c: &mut Criterion) {
     c.bench_function("mediawiki_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = emit(std::hint::black_box(&doc));
+            let _ = MediawikiDoc::emit(std::hint::black_box(&doc));
         });
     });
 }

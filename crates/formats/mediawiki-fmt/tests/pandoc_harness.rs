@@ -11,7 +11,7 @@
 //! catalogue gaps, not gate CI. Tests DO fail if the parser panics.
 
 use mediawiki_fmt::ast::{Block, Inline, MediawikiDoc};
-use mediawiki_fmt::parse;
+use mediawiki_fmt::parse_str as parse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;

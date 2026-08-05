@@ -3,6 +3,7 @@
 //! Emits documents as Perl POD markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as POD markup.
@@ -25,9 +26,9 @@ pub fn emit_with_options(
         blocks,
         span: pod_fmt::Span::NONE,
     };
-    let output = pod_fmt::build(&pod_doc);
+    let output = pod_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_node_to_block(node: &Node) -> pod_fmt::Block {
