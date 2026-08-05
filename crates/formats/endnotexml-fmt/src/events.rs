@@ -368,6 +368,8 @@ impl<'a> EventIter<'a> {
                 self.diagnostics.push(Diagnostic {
                     message: "unclosed element at end of input".to_string(),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
             }
             if let Some(ev) = Self::end_event(frame) {
@@ -473,6 +475,8 @@ impl<'a> Iterator for EventIter<'a> {
                     self.diagnostics.push(Diagnostic {
                         message: format!("XML parse error: {e}"),
                         span: Span::NONE,
+                        severity: rescribe_format_api::Severity::Warning,
+                        code: "",
                     });
                     return self.finalize();
                 }

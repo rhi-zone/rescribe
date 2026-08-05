@@ -40,6 +40,7 @@
 
 use endnotexml_fmt::{Dates, EndNoteDoc, Inline, Record};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions, Properties};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{PropValue, node, prop};
 use std::collections::HashMap;
 
@@ -53,7 +54,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diagnostics): (EndNoteDoc, _) = endnotexml_fmt::parse(input.as_bytes());
+    let (doc, _diagnostics) = EndNoteDoc::parse(input.as_bytes());
 
     let entries: Vec<Node> = doc.records.iter().map(convert_record).collect();
 

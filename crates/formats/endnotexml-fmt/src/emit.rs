@@ -18,7 +18,7 @@ use crate::ast::*;
 /// indentation would inject additional whitespace around every tag,
 /// corrupting exactly that content. Mirrors the pre-existing
 /// `rescribe-write-endnotexml` writer's identical choice.
-pub fn emit(doc: &EndNoteDoc) -> Vec<u8> {
+pub(crate) fn emit(doc: &EndNoteDoc) -> Vec<u8> {
     let mut writer = XmlWriter::new(Cursor::new(Vec::new()));
 
     if let Some(decl) = &doc.xml_decl {

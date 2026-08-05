@@ -11,23 +11,28 @@
 //!
 //! # API layers
 //!
+//! `EndNoteDoc` implements the five shared `rescribe-format-api` traits —
+//! no parallel free functions exist alongside them:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader
-//! pub fn parse(input: &[u8]) -> (EndNoteDoc, Vec<Diagnostic>);
+//! let (doc, diags): (EndNoteDoc, Vec<Diagnostic>) = EndNoteDoc::parse(input);
 //!
 //! // Streaming reader — true SAX-style pull iterator, no tree built
-//! pub fn events(input: &[u8]) -> EventIter;
+//! let it: EventIter = EndNoteDoc::events(input);
 //!
 //! // Batch reader — chunk-driven, dispatches events as soon as provably complete
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = EndNoteDoc::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat
 //! p.finish();
 //!
 //! // Builder writer — emit from AST
-//! pub fn emit(doc: &EndNoteDoc) -> Vec<u8>;
+//! let bytes: Vec<u8> = doc.emit();
 //!
 //! // Streaming writer — emit from events
-//! let mut w = Writer::new(sink);
+//! let mut w = EndNoteDoc::writer(sink);
 //! w.write_event(event); // repeat
 //! w.finish(); // flushes to sink
 //! ```
@@ -60,18 +65,55 @@ pub mod writer;
 
 pub use ast::{
     AuthorRole, Contributors, Dates, Diagnostic, Element, EndNoteDoc, ForeignKey, ForeignKeys,
-    Inline, Periodical, Record, RefType, Span, Titles, UrlRole, Urls, XmlDecl,
+    Inline, Periodical, Record, RefType, Severity, Span, Titles, UrlRole, Urls, XmlDecl,
 };
 pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::emit;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Return a true streaming event iterator over the document, without
-/// building an `EndNoteDoc`.
-pub fn events(input: &[u8]) -> EventIter<'_> {
-    EventIter::new(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `EndNoteDoc` implements the five shared API-mode traits directly — no
+// parallel free functions (`endnotexml_fmt::parse(..)`, `::emit(..)`, ...)
+// exist alongside them.
+
+impl Parse for EndNoteDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for EndNoteDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for EndNoteDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        EventIter::new(input)
+    }
+}
+
+impl StreamingParse for EndNoteDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for EndNoteDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 #[cfg(test)]
@@ -91,7 +133,7 @@ mod smoke {
 
     #[test]
     fn smoke_parse_document() {
-        let (doc, diags) = parse(SAMPLE);
+        let (doc, diags) = EndNoteDoc::parse(SAMPLE);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc.records.len(), 1);
         let r = &doc.records[0];
@@ -109,17 +151,17 @@ mod smoke {
 
     #[test]
     fn smoke_roundtrip() {
-        let (doc1, diags1) = parse(SAMPLE);
+        let (doc1, diags1) = EndNoteDoc::parse(SAMPLE);
         assert!(diags1.is_empty());
-        let emitted = emit(&doc1);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc1.emit();
+        let (doc2, diags2) = EndNoteDoc::parse(&emitted);
         assert!(diags2.is_empty(), "diagnostics: {diags2:?}");
         assert_eq!(doc1.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
     }
 
     #[test]
     fn smoke_events() {
-        let evts: Vec<_> = events(SAMPLE).collect();
+        let evts: Vec<_> = EndNoteDoc::events(SAMPLE).collect();
         assert!(!evts.is_empty());
         assert!(evts.iter().any(|e| matches!(e, Event::StartRecord)));
         assert!(
@@ -130,7 +172,7 @@ mod smoke {
 
     #[test]
     fn smoke_event_roundtrip() {
-        let (doc1, _) = parse(SAMPLE);
+        let (doc1, _) = EndNoteDoc::parse(SAMPLE);
         let evts = events::events_from_doc(&doc1);
         let doc2 = events::collect_doc(evts);
         assert_eq!(
@@ -142,9 +184,9 @@ mod smoke {
 
     #[test]
     fn smoke_events_equals_ast_projection() {
-        let (doc, _diags) = parse(SAMPLE);
+        let (doc, _diags) = EndNoteDoc::parse(SAMPLE);
         let expected = events::events_from_doc(&doc);
-        let actual: Vec<_> = events(SAMPLE).map(|e| e.into_owned()).collect();
+        let actual: Vec<_> = EndNoteDoc::events(SAMPLE).map(|e| e.into_owned()).collect();
         assert_eq!(expected, actual);
     }
 
@@ -195,10 +237,10 @@ mod smoke {
   <ref-type>17</ref-type>
   <titles><title><style face="normal">A </style><style face="italic">Great</style><style face="normal"> Paper</style></title></titles>
 </record></records></xml>"#;
-        let (doc, diags) = parse(input);
+        let (doc, diags) = EndNoteDoc::parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
-        let emitted = emit(&doc);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc.emit();
+        let (doc2, diags2) = EndNoteDoc::parse(&emitted);
         assert!(diags2.is_empty());
         assert_eq!(doc.strip_spans(), doc2.strip_spans());
     }
@@ -210,12 +252,12 @@ mod smoke {
   <custom1>foo</custom1>
   <foreign-keys><key app="EN" db-id="abc">42</key></foreign-keys>
 </record></records></xml>"#;
-        let (doc, diags) = parse(input);
+        let (doc, diags) = EndNoteDoc::parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert_eq!(doc.records[0].extra.len(), 1);
         assert_eq!(doc.records[0].extra[0].name, "custom1");
-        let emitted = emit(&doc);
-        let (doc2, diags2) = parse(&emitted);
+        let emitted = doc.emit();
+        let (doc2, diags2) = EndNoteDoc::parse(&emitted);
         assert!(diags2.is_empty());
         assert_eq!(doc.strip_spans(), doc2.strip_spans());
     }

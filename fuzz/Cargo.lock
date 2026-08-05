@@ -49,6 +49,9 @@ dependencies = [
 [[package]]
 name = "ansi-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "anyhow"
@@ -68,6 +71,9 @@ dependencies = [
 [[package]]
 name = "asciidoc"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "autocfg"
@@ -84,6 +90,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "bbcode-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "biblatex"
@@ -281,6 +290,9 @@ dependencies = [
 [[package]]
 name = "creole"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "crossbeam-deque"
@@ -372,18 +384,25 @@ dependencies = [
 [[package]]
 name = "djot-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "docbook-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
 [[package]]
 name = "dokuwiki"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "ecb"
@@ -423,6 +442,7 @@ name = "endnotexml-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -498,6 +518,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "quick-xml",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -526,6 +547,9 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 [[package]]
 name = "fountain-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "futf"
@@ -586,6 +610,9 @@ dependencies = [
 [[package]]
 name = "haddock-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "hashbrown"
@@ -707,12 +734,16 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
 [[package]]
 name = "jira-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "jobserver"
@@ -851,10 +882,16 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 [[package]]
 name = "man-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "markua"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "markup5ever"
@@ -892,6 +929,9 @@ dependencies = [
 [[package]]
 name = "mediawiki-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "memchr"
@@ -920,6 +960,9 @@ dependencies = [
 [[package]]
 name = "muse-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "native"
@@ -1085,6 +1128,9 @@ dependencies = [
 [[package]]
 name = "org-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "parking_lot"
@@ -1196,6 +1242,9 @@ checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 [[package]]
 name = "pod-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "pom"
@@ -1554,6 +1603,7 @@ version = "0.1.0"
 dependencies = [
  "ansi-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1639,6 +1689,7 @@ version = "0.1.0"
 dependencies = [
  "docbook-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1666,6 +1717,7 @@ version = "0.1.0"
 dependencies = [
  "endnotexml-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1744,6 +1796,7 @@ version = "0.1.0"
 dependencies = [
  "jats-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1801,6 +1854,7 @@ version = "0.1.0"
 dependencies = [
  "markua",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1810,6 +1864,7 @@ version = "0.1.0"
 dependencies = [
  "multimarkdown-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1819,6 +1874,7 @@ version = "0.1.0"
 dependencies = [
  "muse-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1887,6 +1943,7 @@ version = "0.1.0"
 dependencies = [
  "pod-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -1916,6 +1973,7 @@ name = "rescribe-read-rtf"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "rtf-fmt",
 ]
@@ -1934,6 +1992,7 @@ name = "rescribe-read-tei"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "tei-fmt",
 ]
@@ -1943,6 +2002,7 @@ name = "rescribe-read-textile"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "textile-fmt",
 ]
@@ -1961,6 +2021,7 @@ name = "rescribe-read-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -1970,6 +2031,7 @@ name = "rescribe-read-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -1989,6 +2051,7 @@ name = "rescribe-read-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -1998,6 +2061,7 @@ name = "rescribe-read-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -2024,6 +2088,7 @@ version = "0.1.0"
 dependencies = [
  "asciidoc",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2066,6 +2131,7 @@ version = "0.1.0"
 dependencies = [
  "creole",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2092,6 +2158,7 @@ version = "0.1.0"
 dependencies = [
  "dokuwiki",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2119,6 +2186,7 @@ version = "0.1.0"
 dependencies = [
  "fb2-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2163,6 +2231,7 @@ version = "0.1.0"
 dependencies = [
  "jira-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2189,6 +2258,7 @@ version = "0.1.0"
 dependencies = [
  "markua",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2206,6 +2276,7 @@ version = "0.1.0"
 dependencies = [
  "muse-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2215,6 +2286,7 @@ version = "0.1.0"
 dependencies = [
  "org-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2232,6 +2304,7 @@ version = "0.1.0"
 dependencies = [
  "pod-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -2267,6 +2340,7 @@ name = "rescribe-write-rtf"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "rtf-fmt",
 ]
@@ -2309,6 +2383,7 @@ name = "rescribe-write-textile"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "textile-fmt",
 ]
@@ -2328,6 +2403,7 @@ name = "rescribe-write-twiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "twiki",
 ]
@@ -2337,6 +2413,7 @@ name = "rescribe-write-vimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "vimwiki-fmt",
 ]
@@ -2355,6 +2432,7 @@ name = "rescribe-write-xwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "xwiki",
 ]
@@ -2364,6 +2442,7 @@ name = "rescribe-write-zimwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "zimwiki",
 ]
@@ -2388,6 +2467,9 @@ dependencies = [
 [[package]]
 name = "rtf-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "rustc-hash"
@@ -2619,12 +2701,16 @@ dependencies = [
 [[package]]
 name = "t2t"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "tei-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
@@ -2655,10 +2741,16 @@ dependencies = [
 [[package]]
 name = "texinfo"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "textile-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "thin-vec"
@@ -2782,6 +2874,9 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 [[package]]
 name = "twiki"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "type1-encoding-parser"
@@ -2808,6 +2903,7 @@ checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 name = "typst-fmt"
 version = "0.1.0"
 dependencies = [
+ "rescribe-format-api",
  "typst-syntax",
 ]
 
@@ -2974,6 +3070,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vimwiki-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "wasip2"
@@ -3290,6 +3389,9 @@ dependencies = [
 [[package]]
 name = "xwiki"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "xz2"
@@ -3343,6 +3445,9 @@ dependencies = [
 [[package]]
 name = "zimwiki"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "zip"

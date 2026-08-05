@@ -41,9 +41,9 @@ fn endnotexml_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = endnotexml_fmt::parse(&input);
+        let (doc, _diags) = endnotexml_fmt::EndNoteDoc::parse(&input);
         let expected = endnotexml_fmt::events::events_from_doc(&doc);
-        let actual: Vec<_> = endnotexml_fmt::events(&input)
+        let actual: Vec<_> = endnotexml_fmt::EndNoteDoc::events(&input)
             .map(|e| e.into_owned())
             .collect();
         checked += 1;
@@ -76,7 +76,7 @@ fn endnotexml_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<endnotexml_fmt::OwnedEvent> = endnotexml_fmt::events(&input)
+        let bulk: Vec<endnotexml_fmt::OwnedEvent> = endnotexml_fmt::EndNoteDoc::events(&input)
             .map(|e| e.into_owned())
             .collect();
         checked += 1;
@@ -133,11 +133,11 @@ fn endnotexml_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = endnotexml_fmt::parse(&input);
-        let built = endnotexml_fmt::emit(&doc);
+        let (doc, _diags) = endnotexml_fmt::EndNoteDoc::parse(&input);
+        let built = doc.emit();
 
         let mut w = endnotexml_fmt::Writer::new(Vec::<u8>::new());
-        for e in endnotexml_fmt::events(&input) {
+        for e in endnotexml_fmt::EndNoteDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = w.finish();

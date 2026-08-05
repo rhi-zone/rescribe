@@ -32,6 +32,7 @@ use endnotexml_fmt::{
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Legacy flat entry kinds, still accepted for backwards compatibility with
@@ -66,7 +67,7 @@ pub fn emit_with_options(
         records,
         span: endnotexml_fmt::Span::NONE,
     };
-    let bytes = endnotexml_fmt::emit(&ast);
+    let bytes = ast.emit();
     Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 

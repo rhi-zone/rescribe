@@ -32,7 +32,7 @@ use crate::ast::*;
 ///
 /// Never panics: malformed XML is reported via `Diagnostic`s and parsing
 /// stops at the point of failure, returning whatever tree was built so far.
-pub fn parse(input: &[u8]) -> (EndNoteDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (EndNoteDoc, Vec<Diagnostic>) {
     let mut reader = Reader::from_reader(input);
     reader.config_mut().trim_text(false);
 
@@ -78,6 +78,8 @@ pub fn parse(input: &[u8]) -> (EndNoteDoc, Vec<Diagnostic>) {
                         start: pos,
                         end: pos,
                     },
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 break;
             }
@@ -251,6 +253,8 @@ fn read_record(
                 diagnostics.push(Diagnostic {
                     message: "unclosed element <record>".to_string(),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 rec.span = Span {
                     start,
@@ -262,6 +266,8 @@ fn read_record(
                 diagnostics.push(Diagnostic {
                     message: format!("XML parse error: {e}"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 return rec;
             }
@@ -932,6 +938,8 @@ fn read_inline_until(
                 diagnostics.push(Diagnostic {
                     message: format!("unclosed element <{end_name}>"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 return out;
             }
@@ -939,6 +947,8 @@ fn read_inline_until(
                 diagnostics.push(Diagnostic {
                     message: format!("XML parse error: {e}"),
                     span: Span::NONE,
+                    severity: rescribe_format_api::Severity::Warning,
+                    code: "",
                 });
                 return out;
             }

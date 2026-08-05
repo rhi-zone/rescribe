@@ -6,12 +6,14 @@
 //! regardless of input — malformed EndNote XML/XML is reported via
 //! Diagnostics, never a panic.
 
+use endnotexml_fmt::EndNoteDoc;
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Events as _, Parse as _};
 
 fuzz_target!(|data: &[u8]| {
-    let _ = endnotexml_fmt::parse(data);
+    let _ = EndNoteDoc::parse(data);
     // Also exercise the streaming events iterator on the same data.
-    let _ = endnotexml_fmt::events(data).count();
+    let _ = EndNoteDoc::events(data).count();
 
     // And the chunked batch parser, split at an arbitrary point so short
     // inputs still exercise a genuine multi-feed() call.

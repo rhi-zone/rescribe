@@ -29,16 +29,10 @@
 //! (see `rescribe-read-endnotexml`, which preserves that exact flattening
 //! behavior when consuming `Inline::Other` for backward compatibility).
 
-/// Byte offset span in the source input.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
+/// Byte offset span in the source input. Re-exported from
+/// `rescribe-format-api` — see that crate for why `Span`/`Diagnostic`/
+/// `Severity` are shared across every format crate.
+pub use rescribe_format_api::Span;
 
 /// The XML declaration (`<?xml version="1.0" encoding="UTF-8"?>`), if present.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -312,9 +306,5 @@ pub enum UrlRole {
     PdfUrls,
 }
 
-/// Diagnostic message from parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
-}
+/// Diagnostic message from parsing. Re-exported from `rescribe-format-api`.
+pub use rescribe_format_api::{Diagnostic, Severity};
