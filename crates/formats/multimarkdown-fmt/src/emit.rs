@@ -14,7 +14,12 @@ use crate::{metadata, transform};
 use rescribe_format_api::Emit as _;
 
 /// Emit an [`MmdDoc`] as MultiMarkdown bytes.
-pub fn emit(doc: &MmdDoc) -> Vec<u8> {
+///
+/// Not part of the crate's public free-function surface — use
+/// [`rescribe_format_api::Emit::emit`] on [`MmdDoc`] instead. Kept
+/// `pub(crate)` because it's the implementation the trait impl and this
+/// crate's own tests call directly.
+pub(crate) fn emit(doc: &MmdDoc) -> Vec<u8> {
     let mut out = String::new();
     metadata::emit(&doc.metadata, doc.metadata_style, &mut out);
 

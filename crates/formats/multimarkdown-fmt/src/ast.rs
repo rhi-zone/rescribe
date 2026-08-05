@@ -24,7 +24,8 @@
 //! type and `commonmark_fmt::CmDoc`.
 
 pub use commonmark_fmt::ColumnAlignment;
-pub use commonmark_fmt::{LinkDef, ListKind, OrderedMarker, Span};
+pub use commonmark_fmt::{LinkDef, ListKind, OrderedMarker};
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 /// A parsed MultiMarkdown document.
 #[derive(Clone, Debug, PartialEq)]
@@ -434,12 +435,4 @@ impl MmdInline {
             },
         }
     }
-}
-
-/// A diagnostic produced during parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub message: String,
-    pub code: &'static str,
 }

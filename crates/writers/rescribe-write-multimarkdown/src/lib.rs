@@ -13,6 +13,7 @@ use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue, Severity,
     WarningKind,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as MultiMarkdown.
@@ -52,7 +53,7 @@ pub fn emit_with_options(
         link_defs: Vec::new(),
     };
 
-    let bytes = multimarkdown_fmt::emit(&mmd_doc);
+    let bytes = mmd_doc.emit();
     Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
@@ -278,6 +279,7 @@ fn node_to_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdInline {
 mod tests {
     use super::*;
     use rescribe_core::NodeKind;
+    use rescribe_format_api::Parse as _;
 
     fn emit_str(doc: &Document) -> String {
         String::from_utf8(emit(doc).unwrap().value).unwrap()
@@ -402,7 +404,7 @@ mod tests {
             ),
         );
         let output = emit_str(&doc);
-        let (parsed, diags) = multimarkdown_fmt::parse(output.as_bytes());
+        let (parsed, diags) = MmdDoc::parse(output.as_bytes());
         assert!(diags.is_empty());
         assert!(matches!(
             &parsed.blocks[0],

@@ -11,7 +11,12 @@ use crate::ast::{Diagnostic, MetadataStyle, MmdDoc, Span};
 use crate::{metadata, transform};
 
 /// Parse MultiMarkdown input into an [`MmdDoc`].
-pub fn parse(input: &[u8]) -> (MmdDoc, Vec<Diagnostic>) {
+///
+/// Not part of the crate's public free-function surface — use
+/// [`rescribe_format_api::Parse::parse`] on [`MmdDoc`] instead. Kept
+/// `pub(crate)` because it's the implementation the trait impl and this
+/// crate's own tests call directly.
+pub(crate) fn parse(input: &[u8]) -> (MmdDoc, Vec<Diagnostic>) {
     match std::str::from_utf8(input) {
         Ok(s) => parse_str(s),
         Err(_) => (
@@ -23,6 +28,7 @@ pub fn parse(input: &[u8]) -> (MmdDoc, Vec<Diagnostic>) {
             },
             vec![Diagnostic {
                 span: Span::NONE,
+                severity: crate::ast::Severity::Error,
                 message: "input is not valid UTF-8".to_string(),
                 code: "multimarkdown::invalid-utf8",
             }],
@@ -39,6 +45,7 @@ pub fn parse_str(input: &str) -> (MmdDoc, Vec<Diagnostic>) {
         .into_iter()
         .map(|d| Diagnostic {
             span: d.span,
+            severity: d.severity,
             message: d.message,
             code: d.code,
         })

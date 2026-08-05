@@ -5,8 +5,9 @@
 //! in the standalone `multimarkdown-fmt` crate. This crate only converts
 //! `multimarkdown_fmt::MmdDoc` into a rescribe `Document`.
 
-use multimarkdown_fmt::{MmdBlock, MmdInline};
+use multimarkdown_fmt::{MmdBlock, MmdDoc, MmdInline};
 use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions, PropValue, Properties};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{Node, node, prop};
 
 /// Parse MultiMarkdown input into a document.
@@ -19,7 +20,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, diags) = multimarkdown_fmt::parse(input.as_bytes());
+    let (doc, diags) = MmdDoc::parse(input.as_bytes());
 
     let mut metadata = Properties::new();
     for entry in &doc.metadata {
