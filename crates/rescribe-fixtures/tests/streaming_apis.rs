@@ -575,7 +575,7 @@ fn rst_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
         let Ok(doc) = rst_fmt::parse(&input) else {
             continue;
         };
-        let built = rst_fmt::build(&doc);
+        let built = String::from_utf8(doc.emit()).expect("rst-fmt emits valid UTF-8");
 
         let mut w = rst_fmt::Writer::new(Vec::<u8>::new());
         for e in rst_fmt::events(&input) {

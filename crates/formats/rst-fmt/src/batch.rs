@@ -59,18 +59,10 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming RST events.
-///
+/// Handler trait for streaming RST events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
 /// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Block accumulation state for the streaming parser.
 enum BlockState {
@@ -89,7 +81,7 @@ enum BlockState {
 /// Known limitations in streaming mode:
 /// - RST link targets defined later in the document are not resolved.
 ///   Use [`BatchParser`] + `parse()` for full resolution.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
@@ -127,7 +119,7 @@ pub struct StreamingParser<H: Handler> {
     heading_levels: Vec<char>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

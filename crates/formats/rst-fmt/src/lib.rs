@@ -11,9 +11,57 @@ pub mod writer;
 
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use events::{Event, OwnedEvent};
+pub use rescribe_format_api::{Emit, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 use std::borrow::Cow;
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// Only `Emit`, `StreamingParse`, and `StreamingWrite` are implemented here.
+// `Parse` and `Events` are deliberately NOT implemented: rst-fmt's
+// `parse(&str) -> Result<RstDoc<'_>, RstError>` and
+// `events(&str) -> EventIter<'_>` differ from the shared trait signatures
+// in three real, non-mechanical ways — `&str` input (not `&[u8]`), a hard
+// `Result<_, RstError>` (not an infallible `(_, Vec<Diagnostic>)` — rst-fmt
+// has no `Diagnostic`/`Severity` type at all), and a `RstDoc<'a>` borrowing
+// from the input (the `Parse` trait's `Self` has no lifetime tied to the
+// `&[u8]` argument, so a lending/GAT-shaped trait would be needed). Forcing
+// these through the current `Parse`/`Events` trait shapes would be a real
+// design change (str-vs-bytes on every crate's trait signature, whether
+// `Self` should support a per-call lifetime via a GAT, and whether a
+// fallible `Result`-returning crate should be coerced into the
+// diagnostics-vec convention every other surveyed crate already follows)
+// — flagged for a decision, not guessed at here.
+//
+// `Emit`/`StreamingParse`/`StreamingWrite` don't hit this: `emit(&self)`
+// takes an already-parsed `&RstDoc<'a>` (no fresh-lifetime construction),
+// and the streaming-parse/streaming-write constructors don't take input at
+// all (input arrives later via `feed()`), so both sides off the associated
+// types are unaffected by RstDoc's lifetime parameter.
+
+impl Emit for RstDoc<'_> {
+    fn emit(&self) -> Vec<u8> {
+        build(self).into_bytes()
+    }
+}
+
+impl StreamingParse for RstDoc<'static> {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for RstDoc<'static> {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
@@ -2543,8 +2591,12 @@ fn find_closing_char(content: &str, start: usize, close: u8) -> Option<usize> {
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
-/// Build an RST string from an [`RstDoc`].
-pub fn build(doc: &RstDoc) -> String {
+/// Build an RST string from an [`RstDoc`]. Crate-internal now — external
+/// callers use the [`rescribe_format_api::Emit`] impl (`doc.emit()`),
+/// which wraps this and converts to bytes. This is the validated
+/// `build()` → `Emit` rename path for the `-fmt` crates that used to
+/// expose `build()` instead of the documented `emit()` name.
+pub(crate) fn build(doc: &RstDoc) -> String {
     let mut ctx = BuildContext::new();
     build_blocks(&doc.blocks, &mut ctx);
     ctx.output

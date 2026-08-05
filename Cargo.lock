@@ -4303,6 +4303,7 @@ name = "rescribe-write-rst"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "rst-fmt",
 ]
@@ -4480,6 +4481,7 @@ name = "rst-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]

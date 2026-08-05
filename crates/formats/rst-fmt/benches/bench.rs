@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use rst_fmt::{build, parse};
+use rescribe_format_api::Emit as _;
+use rst_fmt::parse;
 
 const SMALL: &str = r#"
 Hello World
@@ -149,8 +150,9 @@ fn bench_rst_roundtrip_small(c: &mut Criterion) {
     c.bench_function("rst_roundtrip_small", |b| {
         let doc = parse(SMALL).expect("parse ok");
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let out_str = String::from_utf8(out).expect("rst-fmt emits valid UTF-8");
+            let _ = parse(std::hint::black_box(&out_str));
         });
     });
 }
@@ -159,8 +161,9 @@ fn bench_rst_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("rst_roundtrip_medium", |b| {
         let doc = parse(MEDIUM).expect("parse ok");
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let out_str = String::from_utf8(out).expect("rst-fmt emits valid UTF-8");
+            let _ = parse(std::hint::black_box(&out_str));
         });
     });
 }
@@ -169,7 +172,7 @@ fn bench_rst_emit_medium(c: &mut Criterion) {
     c.bench_function("rst_emit_medium", |b| {
         let doc = parse(MEDIUM).expect("parse ok");
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }

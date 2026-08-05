@@ -7,6 +7,7 @@ use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use rst_fmt::{Block, DefinitionItem, Inline, RstDoc, TableRow};
 use std::borrow::Cow;
@@ -23,11 +24,8 @@ pub fn emit_with_options(
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut warnings = Vec::new();
     let rst = doc_to_rst(doc, &mut warnings);
-    let output = rst_fmt::build(&rst);
-    Ok(ConversionResult::with_warnings(
-        output.into_bytes(),
-        warnings,
-    ))
+    let output = rst.emit();
+    Ok(ConversionResult::with_warnings(output, warnings))
 }
 
 fn doc_to_rst<'d>(doc: &'d Document, warnings: &mut Vec<FidelityWarning>) -> RstDoc<'d> {
