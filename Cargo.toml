@@ -126,6 +126,7 @@ ris = { path = "crates/formats/ris" }
 native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }
 xml-entities = { path = "crates/formats/xml-entities" }
+zip-fmt = { path = "crates/formats/zip-fmt" }
 rescribe-read-rtf = { path = "crates/readers/rescribe-read-rtf" }
 rescribe-write-rtf = { path = "crates/writers/rescribe-write-rtf" }
 rescribe-read-vimwiki = { path = "crates/readers/rescribe-read-vimwiki" }
@@ -224,6 +225,7 @@ quick-xml = { version = "0.39", features = ["serialize"] }
 entities = "1"
 toml = "0.8"
 zip = "7"
+flate2 = "1"
 base64 = "0.22"
 jaq-core = "3.1.0"
 jaq-std = "3.0.1"
