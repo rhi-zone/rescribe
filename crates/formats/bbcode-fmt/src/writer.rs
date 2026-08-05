@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn test_writer_roundtrip() {
         let input = "[b]bold[/b]";
-        let events: Vec<OwnedEvent> = crate::events::events(input)
+        let events: Vec<OwnedEvent> = crate::events::events_str(input)
             .map(|e| e.into_owned())
             .collect();
 
@@ -684,11 +684,11 @@ mod tests {
             "[quote=Bob]\n[list]\n[*]nested item\n[/list]\n[/quote]",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::emit(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());
-            for e in crate::events::events(input) {
+            for e in crate::events::events_str(input) {
                 w.write_event(e);
             }
             let streamed = String::from_utf8(w.finish()).unwrap();

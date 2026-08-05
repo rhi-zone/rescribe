@@ -55,22 +55,11 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (BbcodeDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
+        crate::parse::parse_str(&s)
     }
 }
 
-/// Handler trait for streaming BBCode events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Block accumulation state for the streaming parser.
 enum BlockState {
@@ -87,7 +76,7 @@ enum BlockState {
 /// Chunked streaming BBCode parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block). See the [module-level docs](self) for details.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -96,7 +85,7 @@ pub struct StreamingParser<H: Handler> {
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -175,7 +164,7 @@ impl<H: Handler> StreamingParser<H> {
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events::events(&text) {
+        for event in crate::events::events_str(&text) {
             self.handler.handle(event.into_owned());
         }
     }
@@ -249,7 +238,7 @@ impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     /// Finish parsing and deliver all events to the callback.
     pub fn finish(mut self) {
         let s = String::from_utf8_lossy(&self.buf);
-        for event in crate::events::events(&s) {
+        for event in crate::events::events_str(&s) {
             (self.callback)(event.into_owned());
         }
     }
@@ -321,7 +310,9 @@ mod tests {
 
         let bulk: Vec<OwnedEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events::events(&s).map(|e| e.into_owned()).collect()
+            crate::events::events_str(&s)
+                .map(|e| e.into_owned())
+                .collect()
         };
 
         let mut streamed: Vec<OwnedEvent> = Vec::new();

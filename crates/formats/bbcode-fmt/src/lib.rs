@@ -32,24 +32,87 @@ pub mod writer;
 pub use ast::{AlignKind, BbcodeDoc, Block, Diagnostic, Inline, Severity, Span, TableRow};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use events::{Event, EventIter, OwnedEvent};
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 /// Parse a BBCode string into a [`BbcodeDoc`].
 ///
 /// Always succeeds.  Malformed markup is tolerated; any detected problems are
 /// returned in the `Vec<Diagnostic>`.
+///
+/// Kept as a public, non-trait entry point alongside [`Parse::parse`]
+/// (`rescribe_format_api`'s trait): this crate's original reader/writer
+/// functions all take `&str`, not `&[u8]`, and skip the UTF-8 validity
+/// check the trait's `&[u8]`-input contract requires — a materially
+/// different contract from the shared trait method, same class as
+/// commonmark-fmt's `parse_str`/`events_str` exception.
 pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
-    parse::parse(input)
+    parse::parse_str(input)
 }
 
 /// Emit a [`BbcodeDoc`] to a BBCode string.
+///
+/// Kept alongside [`Emit::emit`] for the same reason as [`parse`]: it
+/// returns `String`, not `Vec<u8>`.
 pub fn emit(doc: &BbcodeDoc) -> String {
     emit::emit(doc)
 }
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+///
+/// Kept alongside [`Events::events`] for the same reason as [`parse`].
 pub fn events(input: &str) -> events::EventIter<'_> {
-    events::events(input)
+    events::events_str(input)
+}
+
+// ── Trait implementations ───────────────────────────────────────────────────
+
+impl Parse for BbcodeDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for BbcodeDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+impl Events for BbcodeDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        // `events_str` borrows text runs straight from its `&str` argument
+        // (see `events.rs`'s `Cow<'a, str>` fields), so on invalid UTF-8
+        // there is no owned buffer this function could hand back a
+        // borrowing `EventIter` from — `Events::events` has no diagnostic
+        // channel to report the failure through either, so it falls back
+        // to an empty-document iterator, matching dokuwiki's/creole's
+        // precedent for the same &[u8]-vs-&str bridging problem.
+        match std::str::from_utf8(input) {
+            Ok(s) => events::events_str(s),
+            Err(_) => events::events_str(""),
+        }
+    }
+}
+
+impl StreamingParse for BbcodeDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for BbcodeDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

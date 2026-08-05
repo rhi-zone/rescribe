@@ -3,7 +3,11 @@
 use crate::ast::{AlignKind, BbcodeDoc, Block, Inline, TableRow};
 
 /// Build a BBCode string from a [`BbcodeDoc`].
-pub fn emit(doc: &BbcodeDoc) -> String {
+///
+/// Reached externally only via [`crate::Emit::emit`] (`rescribe_format_api`'s
+/// trait, which wraps this and returns `Vec<u8>`) — this `String`-returning
+/// helper is `pub(crate)` internal plumbing, not a parallel public API.
+pub(crate) fn emit(doc: &BbcodeDoc) -> String {
     let mut output = String::new();
     for block in &doc.blocks {
         emit_block(block, &mut output);
