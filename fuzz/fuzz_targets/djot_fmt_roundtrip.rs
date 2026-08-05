@@ -11,8 +11,9 @@
 //! own Ast type (not the IR). Covers the full surface area of what Djot can
 //! express, regardless of IR modeling completeness.
 
-use libfuzzer_sys::fuzz_target;
 use djot_fmt::{Alignment, Block, DjotDoc, Inline, TableCell, TableRow};
+use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit as _, Parse as _};
 
 // ── Helpers to build a well-formed DjotDoc from raw bytes ─────────────────────
 
@@ -244,10 +245,18 @@ impl<'a> Gen<'a> {
                     span: djot_fmt::Span::NONE,
                 })
                 .collect();
-            rows.push(TableRow { cells, is_header: false, span: djot_fmt::Span::NONE });
+            rows.push(TableRow {
+                cells,
+                is_header: false,
+                span: djot_fmt::Span::NONE,
+            });
         }
 
-        Block::Table { caption, rows, span: djot_fmt::Span::NONE }
+        Block::Table {
+            caption,
+            rows,
+            span: djot_fmt::Span::NONE,
+        }
     }
 
     fn blocks(&mut self, depth: u8, _min: usize) -> Vec<Block> {
@@ -275,7 +284,10 @@ fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
                 if let Some(Inline::Text { content: prev, .. }) = out.last_mut() {
                     prev.push_str(&content);
                 } else {
-                    out.push(Inline::Text { content, span: djot_fmt::Span::NONE });
+                    out.push(Inline::Text {
+                        content,
+                        span: djot_fmt::Span::NONE,
+                    });
                 }
             }
             other => out.push(other),
@@ -305,10 +317,10 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // Emit — must not panic.
-    let emitted = djot_fmt::emit(&doc);
+    let emitted = doc.emit();
 
     // Parse back — must not panic.
-    let (doc2, _diags) = djot_fmt::parse(&emitted);
+    let (doc2, _diags) = DjotDoc::parse(&emitted);
 
     // Structural equality after strip_spans.
     // parse(emit(doc)).strip_spans() == doc.strip_spans()
