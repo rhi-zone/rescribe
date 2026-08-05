@@ -9,6 +9,7 @@ description = "JATS XML writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+rescribe-format-api.workspace = true
 jats-fmt.workspace = true
 
 [dev-dependencies]

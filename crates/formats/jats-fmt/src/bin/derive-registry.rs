@@ -36,6 +36,7 @@ use jats_fmt::registry_derive::{
     Citation, Construct, ContentModel, FormatInfo, PermittedAttribute, PermittedChild, Provenance,
     Registry, Slice, SourceDigest, emit_rust,
 };
+use rescribe_format_api::Parse as _;
 use sha2::{Digest, Sha256};
 
 const DRIVER: &str = "JATS-archivearticle1-3.rng";
@@ -178,7 +179,7 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
     // Module order comes from the driver's own <include> list, so the primary
     // slice of a multiply-declared construct is defined by the format, not by
     // this tool's traversal order.
-    let (driver_doc, diags) = jats_fmt::parse(&driver);
+    let (driver_doc, diags) = jats_fmt::JatsDoc::parse(&driver);
     if !diags.is_empty() {
         return Err(format!("{DRIVER} did not parse cleanly: {diags:?}"));
     }
@@ -203,7 +204,7 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
         let bytes = std::fs::read(&path).map_err(|e| {
             format!("{path:?}: {e} (re-run scripts/jats/download-spec.sh — it resolves includes transitively)")
         })?;
-        let (doc, diags) = jats_fmt::parse(&bytes);
+        let (doc, diags) = jats_fmt::JatsDoc::parse(&bytes);
         if !diags.is_empty() {
             return Err(format!("{file} did not parse cleanly: {diags:?}"));
         }
@@ -236,7 +237,7 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
     for file in &module_files {
         let path = dir.join(file);
         let bytes = std::fs::read(&path).map_err(|e| format!("{path:?}: {e}"))?;
-        let (doc, diags) = jats_fmt::parse(&bytes);
+        let (doc, diags) = jats_fmt::JatsDoc::parse(&bytes);
         if !diags.is_empty() {
             return Err(format!("{file} did not parse cleanly: {diags:?}"));
         }

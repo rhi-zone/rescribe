@@ -1860,6 +1860,7 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "serde",
  "serde_json",
  "sha2",
@@ -3549,6 +3550,7 @@ version = "0.1.0"
 dependencies = [
  "jats-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4121,6 +4123,7 @@ version = "0.1.0"
 dependencies = [
  "jats-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-jats",
  "rescribe-std",
 ]

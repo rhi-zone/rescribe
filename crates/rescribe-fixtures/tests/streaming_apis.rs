@@ -4436,9 +4436,11 @@ fn jats_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = jats_fmt::parse(&input);
+        let (doc, _diags) = jats_fmt::JatsDoc::parse(&input);
         let expected = jats_fmt::events::events_from_doc(&doc);
-        let actual: Vec<_> = jats_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let actual: Vec<_> = jats_fmt::JatsDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
         if expected != actual && result.is_ok() {
             result = Err(format!(
@@ -4469,8 +4471,9 @@ fn jats_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<jats_fmt::OwnedEvent> =
-            jats_fmt::events(&input).map(|e| e.into_owned()).collect();
+        let bulk: Vec<jats_fmt::OwnedEvent> = jats_fmt::JatsDoc::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -4528,11 +4531,11 @@ fn jats_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = jats_fmt::parse(&input);
-        let built = jats_fmt::emit(&doc);
+        let (doc, _diags) = jats_fmt::JatsDoc::parse(&input);
+        let built = doc.emit();
 
         let mut w = jats_fmt::Writer::new(Vec::<u8>::new());
-        for e in jats_fmt::events(&input) {
+        for e in jats_fmt::JatsDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = w.finish();

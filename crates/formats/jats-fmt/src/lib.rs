@@ -25,26 +25,36 @@
 //!
 //! # API layers
 //!
+//! `JatsDoc` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader
-//! pub fn parse(input: &[u8]) -> (JatsDoc, Vec<Diagnostic>);
+//! let (doc, diags): (JatsDoc, Vec<Diagnostic>) = JatsDoc::parse(input);
 //!
 //! // Streaming reader — true SAX-style pull iterator, no tree built
-//! pub fn events(input: &[u8]) -> EventIter;
+//! let it: EventIter = JatsDoc::events(input);
 //!
 //! // Batch reader — chunk-driven, dispatches events as soon as provably complete
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = JatsDoc::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat
 //! p.finish();
 //!
 //! // Builder writer — emit from AST
-//! pub fn emit(doc: &JatsDoc) -> Vec<u8>;
+//! let bytes: Vec<u8> = doc.emit();
 //!
 //! // Streaming writer — emit from events
-//! let mut w = Writer::new(sink);
+//! let mut w = JatsDoc::writer(sink);
 //! w.write_event(event); // repeat
 //! w.finish(); // flushes to sink
 //! ```
+//!
+//! `emit_fragment` (emits a `Node` subtree rather than a whole `JatsDoc`)
+//! stays as a separate, documented entry point alongside `Emit::emit` — a
+//! materially different contract (different input type), not a redundant
+//! duplicate.
 //!
 //! # Why XML can stream where HTML can't
 //!
@@ -70,17 +80,56 @@ pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
-pub use ast::{Diagnostic, JatsDoc, Node, Span, XmlDecl};
-pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::{emit, emit_fragment};
+pub use ast::{Diagnostic, JatsDoc, Node, Severity, Span, XmlDecl};
+pub use batch::{BatchParser, StreamingParser};
+pub use emit::emit_fragment;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Return a true streaming event iterator over the document, without
-/// building a `JatsDoc`.
-pub fn events(input: &[u8]) -> EventIter<'_> {
-    EventIter::new(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `JatsDoc` implements the shared API-mode traits directly — no parallel
+// free functions (`jats_fmt::parse(..)`, `jats_fmt::emit(..)`,
+// `jats_fmt::events(..)`, ...) exist alongside them. `emit_fragment` stays
+// public (materially different contract: `&[Node]`, not `&JatsDoc`).
+
+impl Parse for JatsDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for JatsDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for JatsDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        EventIter::new(input)
+    }
+}
+
+impl StreamingParse for JatsDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for JatsDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 #[cfg(test)]
@@ -90,7 +139,7 @@ mod smoke {
     #[test]
     fn smoke_parse_document() {
         let input = br#"<?xml version="1.0"?><article><title>Hi</title><p>Body</p></article>"#;
-        let (doc, diags) = parse(input);
+        let (doc, diags) = JatsDoc::parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert!(doc.root().is_some());
     }
@@ -98,9 +147,9 @@ mod smoke {
     #[test]
     fn smoke_roundtrip() {
         let input = br#"<?xml version="1.0"?><article><title>Hi</title><p>A &amp; B</p></article>"#;
-        let (doc1, _) = parse(input);
-        let emitted = emit(&doc1);
-        let (doc2, diags) = parse(&emitted);
+        let (doc1, _) = JatsDoc::parse(input);
+        let emitted = doc1.emit();
+        let (doc2, diags) = JatsDoc::parse(&emitted);
         assert!(diags.is_empty());
         assert_eq!(doc1.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
     }
@@ -108,7 +157,7 @@ mod smoke {
     #[test]
     fn smoke_events() {
         let input = b"<p>Hello <italic>world</italic></p>";
-        let evts: Vec<_> = events(input).collect();
+        let evts: Vec<_> = JatsDoc::events(input).collect();
         assert!(!evts.is_empty());
         assert!(
             evts.iter()
@@ -119,7 +168,7 @@ mod smoke {
     #[test]
     fn smoke_event_roundtrip() {
         let input = br#"<?xml version="1.0"?><article><title>Hi</title><p>Body</p></article>"#;
-        let (doc1, _) = parse(input);
+        let (doc1, _) = JatsDoc::parse(input);
         let evts = events::events_from_doc(&doc1);
         let doc2 = events::collect_doc(evts);
         assert_eq!(
@@ -211,8 +260,8 @@ mod smoke {
     #[test]
     fn smoke_escape() {
         let input = b"<p>&amp; &lt; &gt;</p>";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
+        let (doc, _) = JatsDoc::parse(input);
+        let emitted = doc.emit();
         let xml = String::from_utf8(emitted).unwrap();
         assert!(xml.contains("&amp;"));
         assert!(xml.contains("&lt;"));
@@ -222,8 +271,8 @@ mod smoke {
     #[test]
     fn smoke_self_closing() {
         let input = b"<p>Hello<break/>World</p>";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
+        let (doc, _) = JatsDoc::parse(input);
+        let emitted = doc.emit();
         let xml = String::from_utf8(emitted).unwrap();
         assert!(xml.contains("<break/>"));
     }
