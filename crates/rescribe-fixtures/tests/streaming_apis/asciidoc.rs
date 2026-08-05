@@ -383,10 +383,11 @@ mod asciidoc_events_check {
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
             // `asciidoc::parse` is infallible (diagnostics, not errors), so unlike
             // the rst check there is no fixture to skip for failing to parse.
-            let (doc, _diags) = asciidoc::parse(&input);
+            let (doc, _diags) = asciidoc::parse_str(&input);
             let expected = ad_ast_to_events(&doc);
-            let actual: Vec<OwnedEvent> =
-                asciidoc::events(&input).map(|e| e.into_owned()).collect();
+            let actual: Vec<OwnedEvent> = asciidoc::events_str(&input)
+                .map(|e| e.into_owned())
+                .collect();
             checked += 1;
 
             // Metadata events are compared separately, as an order-independent
@@ -496,7 +497,7 @@ fn asciidoc_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<asciidoc::OwnedEvent> = asciidoc::events(input_str)
+        let bulk: Vec<asciidoc::OwnedEvent> = asciidoc::events_str(input_str)
             .map(|e| e.into_owned())
             .collect();
         // Coverage floor, not a pass counter — see the rst equivalent.
@@ -552,11 +553,11 @@ fn asciidoc_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = asciidoc::parse(&input);
-        let built = asciidoc::build(&doc);
+        let (doc, _) = asciidoc::parse_str(&input);
+        let built = String::from_utf8(doc.emit()).expect("emit produces valid UTF-8");
 
         let mut w = asciidoc::Writer::new(Vec::<u8>::new());
-        for e in asciidoc::events(&input) {
+        for e in asciidoc::events_str(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

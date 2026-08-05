@@ -49,7 +49,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
 use xml_entities::{DtdEntities, EntityResolver};
 
-use crate::ast::{Diagnostic, JatsDoc, Span};
+use crate::ast::{Diagnostic, JatsDoc, Severity, Span};
 use crate::events::OwnedEvent;
 
 /// Chunk-driven JATS/XML parser that returns the full AST on finish.
@@ -80,25 +80,20 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming JATS/XML events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming JATS/XML events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see that
+/// crate's docs for why bounding `H` by one shared trait (instead of each
+/// format crate declaring its own concrete `Handler`) is required for a
+/// common `StreamingParse` trait to exist at all. Implemented automatically
+/// for any `FnMut(OwnedEvent)`.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming JATS/XML parser that delivers events to a
 /// [`Handler`] as soon as they are provably complete.
 ///
 /// See the [module docs](self) for the incremental-draining strategy and
 /// why plain text is the one token that must sometimes wait for more input.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     pending: Vec<u8>,
     diagnostics: Vec<Diagnostic>,
@@ -133,7 +128,7 @@ pub struct StreamingParser<H: Handler> {
     pending_text: Option<String>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -274,6 +269,8 @@ impl<H: Handler> StreamingParser<H> {
                                 Some(expected) if expected == name.as_ref() => {}
                                 Some(expected) => {
                                     self.diagnostics.push(Diagnostic {
+                                        severity: Severity::Warning,
+                                        code: "",
                                         message: format!(
                                             "XML parse error: expected `</{expected}>`, but \
                                              `</{name}>` was found"
@@ -297,6 +294,8 @@ impl<H: Handler> StreamingParser<H> {
                                 }
                                 None => {
                                     self.diagnostics.push(Diagnostic {
+                                        severity: Severity::Warning,
+                                        code: "",
                                         message: format!(
                                             "XML parse error: close tag `</{name}>` does not \
                                              match any open tag"
@@ -320,6 +319,8 @@ impl<H: Handler> StreamingParser<H> {
                         let (declared, entity_diagnostics) = DtdEntities::parse_doctype(content);
                         for d in entity_diagnostics {
                             self.diagnostics.push(Diagnostic {
+                                severity: Severity::Warning,
+                                code: "",
                                 message: format!("DOCTYPE internal subset: {d}"),
                                 span: Span::NONE,
                             });
@@ -338,6 +339,8 @@ impl<H: Handler> StreamingParser<H> {
                         // Err arm in events.rs).
                         self.flush_pending_text();
                         self.diagnostics.push(Diagnostic {
+                            severity: Severity::Warning,
+                            code: "",
                             message: format!("XML parse error: {e}"),
                             span: Span::NONE,
                         });
@@ -362,6 +365,8 @@ impl<H: Handler> StreamingParser<H> {
     fn close_unclosed_elements(&mut self) {
         while let Some(name) = self.open_stack.pop() {
             self.diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                code: "",
                 message: format!("unclosed element <{name}>"),
                 span: Span::NONE,
             });

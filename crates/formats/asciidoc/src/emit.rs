@@ -5,7 +5,11 @@ use crate::ast::{AsciiDoc, Block, DefinitionItem, Inline, QuoteType};
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Build an AsciiDoc string from an [`AsciiDoc`] document.
-pub fn build(doc: &AsciiDoc) -> String {
+///
+/// `pub(crate)`: the public entry point is [`rescribe_format_api::Emit::emit`]
+/// on [`AsciiDoc`], which wraps this and returns `Vec<u8>` per the trait
+/// contract.
+pub(crate) fn build(doc: &AsciiDoc) -> String {
     let mut ctx = BuildContext::new();
     build_blocks(&doc.blocks, &mut ctx);
     ctx.output

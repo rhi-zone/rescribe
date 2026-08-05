@@ -3,20 +3,40 @@
 //! A standalone crate with **no rescribe dependency**.
 //! The `rescribe-read-fb2` and `rescribe-write-fb2` crates are thin adapters.
 //!
-//! # API
+//! # API layers
+//!
+//! `FictionBook` implements all five shared `rescribe-format-api` traits —
+//! its native reader/writer functions already took `&[u8]`/returned
+//! `Vec<u8>`, so the trait impls are thin, direct wrappers with no
+//! signature-mismatch work:
 //!
 //! ```text
-//! // AST round-trip
-//! pub fn parse(input: &[u8]) -> (FictionBook, Vec<Diagnostic>);
-//! pub fn parse_str(input: &str) -> (FictionBook, Vec<Diagnostic>);
-//! pub fn emit(fb: &FictionBook) -> Vec<u8>;
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 //!
-//! // Pull iterator — true incremental XML parsing
-//! pub fn events(input: &[u8]) -> EventIter;
+//! // AST reader
+//! let (fb, diags): (FictionBook, Vec<Diagnostic>) = FictionBook::parse(input);
 //!
-//! // Chunk-driven streaming parser
-//! // StreamingParser<H: Handler> + Handler trait
+//! // Streaming reader — true incremental XML parsing
+//! let it: EventIter = FictionBook::events(input);
+//!
+//! // Batch reader — chunk-driven
+//! let mut p = FictionBook::streaming_parser(|ev| ...);
+//! p.feed(chunk); // repeat
+//! p.finish();
+//!
+//! // Builder writer
+//! let bytes: Vec<u8> = fb.emit();
+//!
+//! // Streaming writer
+//! let mut w = FictionBook::writer(sink);
+//! w.write_event(event); // repeat
+//! w.finish();
 //! ```
+//!
+//! `parse_str` (takes `&str`, skips the UTF-8 check `Parse::parse` implies)
+//! remains a separate, documented entry point alongside the trait methods,
+//! matching `commonmark-fmt`'s precedent for a materially different
+//! contract.
 
 pub mod ast;
 mod emit;
@@ -25,14 +45,60 @@ mod parse;
 pub mod writer;
 
 pub use ast::*;
-pub use emit::emit;
-pub use events::{Event, EventIter, Handler, StreamingParser, events};
-pub use parse::{parse, parse_str};
+pub use events::{Event, EventIter, StreamingParser};
+pub use parse::parse_str;
+pub use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, StreamingWrite};
+pub use writer::Writer;
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `FictionBook` implements the shared API-mode traits directly — no
+// parallel free functions (`fb2_fmt::parse(..)`, `fb2_fmt::emit(..)`, ...)
+// exist alongside them. `parse_str` stays public (materially different
+// contract: str input).
+
+impl Parse for FictionBook {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for FictionBook {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for FictionBook {
+    type Event<'a> = Event;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        events::events(input)
+    }
+}
+
+impl StreamingParse for FictionBook {
+    type Event = Event;
+    type Parser<H: Handler<Event>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<Event>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for FictionBook {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
+}
 
 #[cfg(test)]
 mod whitespace_tests {
     use crate::ast::*;
-    use crate::{emit, parse};
+    use crate::{Emit as _, Parse as _};
 
     fn roundtrip_inline(el: InlineElement) -> InlineElement {
         let mut fb = FictionBook::default();
@@ -44,8 +110,8 @@ mod whitespace_tests {
             section: vec![section],
             ..Default::default()
         });
-        let bytes = emit(&fb);
-        let (fb2, _) = parse(&bytes);
+        let bytes = fb.emit();
+        let (fb2, _) = FictionBook::parse(&bytes);
         match &fb2.bodies[0].section[0].content[0] {
             SectionContent::Para(inlines) => inlines[0].clone(),
             _ => panic!("not para"),

@@ -6,7 +6,7 @@ use quick_xml::{
 };
 use std::io::Cursor;
 
-pub fn emit(fb: &FictionBook) -> Vec<u8> {
+pub(crate) fn emit(fb: &FictionBook) -> Vec<u8> {
     let mut w = Writer::new(Cursor::new(Vec::new()));
 
     // XML declaration

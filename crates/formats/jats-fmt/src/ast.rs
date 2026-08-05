@@ -1,15 +1,12 @@
 //! AST types for JATS (and generic XML) documents.
 
-/// Byte offset span in the source input.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
+// Shared with the rest of the `-fmt` crates via `rescribe-format-api` — see
+// that crate's docs for why. The local `Span` shape (`start`/`end`) already
+// matched exactly; it just gained `Copy`/`Eq`/`Hash`. The local `Diagnostic`
+// (`message`+`span` only) gains `severity`/`code`, populated with
+// `Severity::Warning`/`""` at every construction site in `parse.rs`,
+// `batch.rs`, and `events.rs`.
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 /// The XML declaration (`<?xml version="1.0" encoding="UTF-8"?>`), if present.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -205,13 +202,6 @@ fn collect_text(node: &Node, out: &mut String) {
         }
         _ => {}
     }
-}
-
-/// Diagnostic message from parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
 }
 
 /// Split a processing instruction's raw content (`target data`) into parts.

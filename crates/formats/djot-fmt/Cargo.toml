@@ -15,5 +15,6 @@ writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
 
 [dependencies]
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

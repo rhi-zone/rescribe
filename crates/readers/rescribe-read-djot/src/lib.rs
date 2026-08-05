@@ -17,7 +17,7 @@ use rescribe_std::{node, prop};
 
 /// Parse Djot text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let (djot_doc, _diagnostics) = djot_fmt::parse(input);
+    let (djot_doc, _diagnostics) = djot_fmt::parse_str(input);
     let mut converter = Converter::new();
     let children = converter.convert_doc(&djot_doc);
 

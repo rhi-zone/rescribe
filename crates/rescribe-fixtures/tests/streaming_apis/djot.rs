@@ -381,10 +381,11 @@ mod djot_events_check {
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
             // `parse()` is infallible and returns diagnostics alongside the doc;
             // diagnostics are not this check's concern.
-            let (doc, _diags) = djot_fmt::parse(&input);
+            let (doc, _diags) = djot_fmt::parse_str(&input);
             let expected = dj_ast_to_events(&doc);
-            let actual: Vec<OwnedEvent> =
-                djot_fmt::events(&input).map(|e| e.into_owned()).collect();
+            let actual: Vec<OwnedEvent> = djot_fmt::events_str(&input)
+                .map(|e| e.into_owned())
+                .collect();
             checked += 1;
 
             if expected != actual {
@@ -443,7 +444,7 @@ fn djot_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<djot_fmt::OwnedEvent> = djot_fmt::events(input_str)
+        let bulk: Vec<djot_fmt::OwnedEvent> = djot_fmt::events_str(input_str)
             .map(|e| e.into_owned())
             .collect();
         // Coverage floor, not a pass counter — see the rst equivalent.
@@ -500,11 +501,11 @@ fn djot_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = djot_fmt::parse(&input);
-        let built = djot_fmt::emit(&doc);
+        let (doc, _) = djot_fmt::parse_str(&input);
+        let built = String::from_utf8(doc.emit()).expect("emit produces valid UTF-8");
 
         let mut w = djot_fmt::Writer::new(Vec::<u8>::new());
-        for e in djot_fmt::events(&input) {
+        for e in djot_fmt::events_str(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

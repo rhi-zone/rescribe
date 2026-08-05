@@ -2,7 +2,7 @@ use crate::ast::*;
 use base64::Engine;
 use quick_xml::{Reader, events::Event};
 
-pub fn parse(input: &[u8]) -> (FictionBook, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (FictionBook, Vec<Diagnostic>) {
     let mut reader = Reader::from_reader(input);
     // Do not use trim_text(true) — it strips spaces adjacent to entity refs
 
@@ -224,8 +224,10 @@ impl Parser {
                 Ok(_) => {}
                 Err(e) => {
                     self.diags.push(Diagnostic {
+                        span: Span::NONE,
                         severity: Severity::Error,
                         message: format!("XML parse error: {e}"),
+                        code: "",
                     });
                     break;
                 }
@@ -675,8 +677,10 @@ impl Parser {
                         data,
                     }),
                     Err(_) => self.diags.push(Diagnostic {
+                        span: Span::NONE,
                         severity: Severity::Warning,
                         message: "Failed to decode binary data".to_string(),
+                        code: "",
                     }),
                 }
             }

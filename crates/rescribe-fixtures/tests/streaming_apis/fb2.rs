@@ -224,9 +224,9 @@ fn fb2_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (fb, _diags) = fb2_fmt::parse(&input);
+        let (fb, _diags) = fb2_fmt::FictionBook::parse(&input);
         let expected = fb2_ast_to_events(&fb);
-        let actual: Vec<_> = fb2_fmt::events(&input).collect();
+        let actual: Vec<_> = fb2_fmt::FictionBook::events(&input).collect();
         checked += 1;
         if expected != actual && result.is_ok() {
             result = Err(format!(
@@ -266,7 +266,7 @@ fn fb2_streaming_parser_matches_events_and_is_incremental() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<fb2_fmt::Event> = fb2_fmt::events(&input).collect();
+        let bulk: Vec<fb2_fmt::Event> = fb2_fmt::FictionBook::events(&input).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -343,11 +343,11 @@ fn fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (fb, _diags) = fb2_fmt::parse(&input);
-        let built = fb2_fmt::emit(&fb);
+        let (fb, _diags) = fb2_fmt::FictionBook::parse(&input);
+        let built = fb.emit();
 
         let mut w = fb2_fmt::writer::Writer::new(Vec::<u8>::new());
-        for e in fb2_fmt::events(&input) {
+        for e in fb2_fmt::FictionBook::events(&input) {
             w.write_event(e).expect("write_event");
         }
         let streamed = w.finish().expect("Writer::finish");

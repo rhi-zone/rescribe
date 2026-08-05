@@ -1,20 +1,12 @@
 //! AST types for Djot documents.
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        Span::NONE
-    }
-}
+// Shared with the rest of the `-fmt` crates via `rescribe-format-api` — see
+// that crate's docs for why. The local `Span` shape (`start`/`end`) already
+// matched exactly; it just gained `Copy`/`Eq`/`Hash`. `Diagnostic` gains
+// `severity`/`code` fields nothing in this crate ever populates (its
+// `diagnostics: Vec<Diagnostic>` field is never actually pushed to — parsing
+// is fully infallible here — so there is no construction site to update).
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Attr {
@@ -539,10 +531,4 @@ pub struct LinkDef {
     pub url: String,
     pub title: Option<String>,
     pub attr: Attr,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub message: String,
-    pub span: Span,
 }

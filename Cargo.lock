@@ -154,6 +154,7 @@ name = "asciidoc"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -835,12 +836,16 @@ dependencies = [
 [[package]]
 name = "djot-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-format-api",
+]
 
 [[package]]
 name = "docbook-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
@@ -1047,6 +1052,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "quick-xml 0.39.4",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -1861,6 +1867,7 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "serde",
  "serde_json",
  "sha2",
@@ -3443,6 +3450,7 @@ version = "0.1.0"
 dependencies = [
  "docbook-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -3553,6 +3561,7 @@ version = "0.1.0"
 dependencies = [
  "jats-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -3904,6 +3913,7 @@ version = "0.1.0"
 dependencies = [
  "asciidoc",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4010,6 +4020,7 @@ version = "0.1.0"
 dependencies = [
  "docbook-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-docbook",
  "rescribe-std",
 ]
@@ -4067,6 +4078,7 @@ version = "0.1.0"
 dependencies = [
  "fb2-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4131,6 +4143,7 @@ version = "0.1.0"
 dependencies = [
  "jats-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-jats",
  "rescribe-std",
 ]

@@ -33,16 +33,17 @@
 
 use std::collections::HashMap;
 
-use jats_fmt::Node as JNode;
+use jats_fmt::{JatsDoc, Node as JNode};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse JATS XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, diagnostics) = jats_fmt::parse(input.as_bytes());
+    let (doc, diagnostics) = JatsDoc::parse(input.as_bytes());
 
     let mut warnings: Vec<FidelityWarning> = diagnostics
         .into_iter()

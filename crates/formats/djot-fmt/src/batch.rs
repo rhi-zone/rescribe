@@ -49,22 +49,17 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (DjotDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
+        crate::parse::parse_str(&s)
     }
 }
 
-/// Handler trait for streaming Djot events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming Djot events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see that
+/// crate's docs for why bounding `H` by one shared trait (instead of each
+/// format crate declaring its own concrete `Handler`) is required for a
+/// common `StreamingParse` trait to exist at all. Implemented automatically
+/// for any `FnMut(OwnedEvent)`.
+pub use rescribe_format_api::Handler;
 
 /// Block accumulation state for the streaming parser.
 enum BlockState {
@@ -110,7 +105,7 @@ enum BlockState {
 /// relying on forward-declared shortcut references may still see an
 /// unresolved link from `StreamingParser` where `events()` would have
 /// resolved it. See TODO.md.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
@@ -129,7 +124,7 @@ pub struct StreamingParser<H: Handler> {
     deferred: Vec<String>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -462,7 +457,7 @@ mod tests {
 
         let bulk: Vec<OwnedEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events(&s).map(|e| e.into_owned()).collect()
+            crate::events_str(&s).map(|e| e.into_owned()).collect()
         };
 
         let mut streamed: Vec<OwnedEvent> = Vec::new();

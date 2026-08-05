@@ -1,5 +1,10 @@
-use asciidoc::{build, parse};
+use asciidoc::parse_str as parse;
 use criterion::{Criterion, criterion_group, criterion_main};
+use rescribe_format_api::Emit as _;
+
+fn build(doc: &asciidoc::AsciiDoc) -> String {
+    String::from_utf8(doc.emit()).expect("emit produces valid UTF-8")
+}
 
 const SMALL: &str = r#"
 == Hello World

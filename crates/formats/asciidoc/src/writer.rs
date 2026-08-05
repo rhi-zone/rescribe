@@ -702,7 +702,7 @@ mod tests {
         // Use paragraph + list only; heading roundtrip depends on parse/emit level
         // convention which is tested separately.
         let input = "A paragraph with *strong* text.\n\n* item one\n* item two\n";
-        let evts: Vec<_> = crate::events(input).collect();
+        let evts: Vec<_> = crate::events_str(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);
@@ -710,7 +710,7 @@ mod tests {
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
         // Re-parse the emitted text and emit again; the two emissions must match.
-        let evts2: Vec<_> = crate::events(&emitted_text).collect();
+        let evts2: Vec<_> = crate::events_str(&emitted_text).collect();
         let mut w2 = Writer::new(Vec::<u8>::new());
         for e in evts2 {
             w2.write_event(e);

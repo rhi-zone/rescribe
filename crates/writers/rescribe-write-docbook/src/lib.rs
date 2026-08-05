@@ -27,6 +27,7 @@ use std::collections::HashMap;
 
 use docbook_fmt::{DocBookDoc, Node as DbNode, XmlDecl};
 use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document to DocBook XML.
@@ -122,7 +123,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         nodes: vec![root],
     };
 
-    let bytes = docbook_fmt::emit(&doc_ast);
+    let bytes = doc_ast.emit();
     Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 

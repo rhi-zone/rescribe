@@ -1,42 +1,12 @@
 //! AsciiDoc AST types.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
-
-/// Byte range in the original source input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    /// A zero-width span at the origin.  Used for programmatically constructed
-    /// nodes (e.g. from the rescribe writer) that have no source position.
-    pub const NONE: Self = Self { start: 0, end: 0 };
-
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
-
-/// A diagnostic message produced during parsing.
-///
-/// AsciiDoc parsing is always infallible — malformed constructs are silently
-/// tolerated and produce diagnostics instead of hard errors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
+//
+// Shared with the rest of the `-fmt` crates via `rescribe-format-api` — see
+// that crate's docs for why. AsciiDoc's local shape (span+severity+message+code,
+// `Severity::{Warning,Info}`) was already a strict subset of the shared shape
+// (which adds `Severity::Error`, unused here), so this is a pure re-export.
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
