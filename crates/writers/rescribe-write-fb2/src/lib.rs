@@ -3,9 +3,9 @@
 //! Thin adapter over `fb2-fmt`. Converts rescribe IR → native FB2 AST → XML bytes.
 
 use fb2_fmt::{
-    Author, Binary, Body, Cite, CiteContent, Description, DocumentInfo, FictionBook, Image,
-    InlineElement, Poem, Section, SectionContent, Stanza, Table, TableCell, TableRow, Title,
-    TitleInfo, TitlePara,
+    Annotation, AnnotationContent, Author, Binary, Body, Cite, CiteContent, Description,
+    DocumentInfo, FictionBook, Image, InlineElement, Poem, Section, SectionContent, Stanza, Table,
+    TableCell, TableRow, Title, TitleInfo, TitlePara,
 };
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
@@ -127,6 +127,7 @@ fn collect_footnote_defs(nodes: &[Node]) -> Vec<Section> {
 /// Convert a flat list of rescribe nodes into a single FB2 section.
 fn nodes_to_section(nodes: &[Node]) -> Section {
     let mut section_title: Option<Title> = None;
+    let mut section_annotation: Option<Annotation> = None;
     let mut content = Vec::new();
     for node in nodes {
         match node.kind.as_str() {
@@ -148,6 +149,9 @@ fn nodes_to_section(nodes: &[Node]) -> Section {
                         let inner = nodes_to_section(&node.children);
                         if inner.title.is_some() && section_title.is_none() {
                             section_title = inner.title;
+                        }
+                        if inner.annotation.is_some() && section_annotation.is_none() {
+                            section_annotation = inner.annotation;
                         }
                         content.extend(inner.content);
                     }
@@ -173,7 +177,13 @@ fn nodes_to_section(nodes: &[Node]) -> Section {
                 }
             }
             node::BLOCKQUOTE => {
-                content.push(SectionContent::Cite(blockquote_to_cite(node)));
+                if node.props.get_str("fb2:type") == Some("annotation") {
+                    if section_annotation.is_none() {
+                        section_annotation = Some(blockquote_to_annotation(node));
+                    }
+                } else {
+                    content.push(SectionContent::Cite(blockquote_to_cite(node)));
+                }
             }
             node::IMAGE => {
                 let href = node.props.get_str(prop::URL).unwrap_or("").to_string();
@@ -238,8 +248,49 @@ fn nodes_to_section(nodes: &[Node]) -> Section {
     }
     Section {
         title: section_title,
+        annotation: section_annotation,
         content,
         ..Default::default()
+    }
+}
+
+/// Convert a `blockquote` tagged `fb2:type = "annotation"` (produced by
+/// `rescribe-read-fb2`'s `convert_annotation`) back into a `Section.annotation`. Mirrors
+/// `blockquote_to_cite`'s content-model walk but targets `AnnotationContent` instead of
+/// `CiteContent`, and additionally recognizes `HEADING` (used for `AnnotationContent::Subtitle`
+/// on the read side) since annotation content, unlike cite content, can contain a subtitle.
+fn blockquote_to_annotation(node: &Node) -> Annotation {
+    let mut content = Vec::new();
+    for child in &node.children {
+        match child.kind.as_str() {
+            node::PARAGRAPH => {
+                if child.children.is_empty() {
+                    content.push(AnnotationContent::EmptyLine);
+                } else {
+                    content.push(AnnotationContent::Para(nodes_to_inlines(&child.children)));
+                }
+            }
+            node::HEADING => {
+                content.push(AnnotationContent::Subtitle(nodes_to_inlines(
+                    &child.children,
+                )));
+            }
+            node::TABLE => {
+                content.push(AnnotationContent::Table(node_to_table(child)));
+            }
+            node::DIV if child.props.get_str("html:class") == Some("poem") => {
+                content.push(AnnotationContent::Poem(div_to_poem(child)));
+            }
+            node::BLOCKQUOTE => {
+                content.push(AnnotationContent::Cite(blockquote_to_cite(child)));
+            }
+            _ => {}
+        }
+    }
+    Annotation {
+        id: node.props.get_str(prop::ID).map(|s| s.to_string()),
+        lang: None,
+        content,
     }
 }
 
@@ -488,6 +539,41 @@ mod tests {
         let xml = emit_str(&doc);
         assert!(xml.contains("• one"));
         assert!(xml.contains("• two"));
+    }
+
+    #[test]
+    fn test_emit_section_annotation() {
+        // A `blockquote` tagged `fb2:type = "annotation"` (as produced by
+        // `rescribe-read-fb2`'s `convert_annotation`) must round-trip back to a
+        // `<section><annotation>`, not a `<cite>`, and must be written before the
+        // section's own content — mirroring how `Section.epigraph` is ordered.
+        let annotation = Node::new(node::BLOCKQUOTE)
+            .prop("fb2:type", "annotation")
+            .children(vec![Node::new(node::PARAGRAPH).children(vec![
+                Node::new(node::TEXT).prop(rescribe_std::prop::CONTENT, "A summary."),
+            ])]);
+        let main = Node::new(node::PARAGRAPH).children(vec![
+            Node::new(node::TEXT).prop(rescribe_std::prop::CONTENT, "Main content."),
+        ]);
+        let doc = Document {
+            content: Node::new(node::DOCUMENT).children(vec![annotation, main]),
+            resources: Default::default(),
+            metadata: Properties::new(),
+            source: None,
+        };
+
+        let xml = emit_str(&doc);
+        assert!(xml.contains("<annotation>"), "xml: {xml}");
+        assert!(xml.contains("A summary."));
+        assert!(xml.contains("</annotation>"));
+        assert!(
+            !xml.contains("<cite>"),
+            "annotation must not emit as <cite>: {xml}"
+        );
+        // Annotation content precedes the section's ordinary paragraph content.
+        let ann_pos = xml.find("<annotation>").unwrap();
+        let main_pos = xml.find("Main content.").unwrap();
+        assert!(ann_pos < main_pos);
     }
 
     #[test]

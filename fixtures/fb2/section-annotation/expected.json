@@ -1,10 +1,13 @@
 {
-  "description": "a section-level <annotation> (Section.annotation, distinct from title-info's) must not leak its content into the section's own paragraphs, nor be dropped from fb2-fmt's events()/streaming_writer output",
+  "description": "a section-level <annotation> (Section.annotation, distinct from title-info's) becomes a blockquote with fb2:type annotation, placed before the section's own content",
   "category": "happy",
   "assertions": [
-    { "path": "/0",       "kind": "div" },
-    { "path": "/0/0",     "kind": "div" },
-    { "path": "/0/0/0",   "kind": "paragraph" },
-    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Main content." } }
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "blockquote", "props": { "fb2:type": "annotation" } },
+    { "path": "/0/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "A short summary of this section." } },
+    { "path": "/0/0/1",     "kind": "paragraph" },
+    { "path": "/0/0/1/0",   "kind": "text", "props": { "content": "Main content." } }
   ]
 }

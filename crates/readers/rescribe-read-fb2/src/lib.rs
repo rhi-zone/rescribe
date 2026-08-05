@@ -3,7 +3,7 @@
 //! Thin adapter over `fb2-fmt`. Converts native FB2 AST → rescribe IR.
 
 use fb2_fmt::{
-    AnnotationContent, Body, Cite, CiteContent, Epigraph, EpigraphContent, FictionBook,
+    Annotation, AnnotationContent, Body, Cite, CiteContent, Epigraph, EpigraphContent, FictionBook,
     InlineElement, Poem, Section, SectionContent, Stanza, Table, TitlePara,
 };
 use rescribe_core::{
@@ -171,6 +171,10 @@ fn convert_section(section: &Section, depth: usize) -> Node {
         children.push(convert_epigraph(epigraph));
     }
 
+    if let Some(ann) = &section.annotation {
+        children.push(convert_annotation(ann));
+    }
+
     for item in &section.content {
         children.extend(convert_section_content(item));
     }
@@ -239,6 +243,50 @@ fn convert_epigraph(epigraph: &Epigraph) -> Node {
     Node::new(node::BLOCKQUOTE)
         .prop("fb2:type", "epigraph")
         .children(children)
+}
+
+/// Convert a section-level `<section><annotation>` (`Section.annotation`, distinct from
+/// `TitleInfo.annotation` which is instead flattened into `meta:annotation` document
+/// metadata — a section-level annotation has no natural document-wide metadata slot since
+/// a document can have many sections, so it is modeled structurally instead) into a
+/// `blockquote` node tagged `fb2:type = "annotation"`, mirroring how `convert_epigraph`
+/// models `Section.epigraph` as a `blockquote` tagged `fb2:type = "epigraph"`.
+fn convert_annotation(ann: &Annotation) -> Node {
+    let mut children = Vec::new();
+    for item in &ann.content {
+        match item {
+            AnnotationContent::Para(inlines) => {
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(inlines)));
+            }
+            AnnotationContent::EmptyLine => {
+                children.push(Node::new(node::PARAGRAPH));
+            }
+            AnnotationContent::Subtitle(inlines) => {
+                let il = convert_inlines(inlines);
+                children.push(
+                    Node::new(node::HEADING)
+                        .prop(prop::LEVEL, 4i64)
+                        .children(il),
+                );
+            }
+            AnnotationContent::Poem(poem) => {
+                children.push(convert_poem(poem));
+            }
+            AnnotationContent::Cite(cite) => {
+                children.push(convert_cite(cite));
+            }
+            AnnotationContent::Table(table) => {
+                children.push(convert_table(table));
+            }
+        }
+    }
+    let mut n = Node::new(node::BLOCKQUOTE)
+        .prop("fb2:type", "annotation")
+        .children(children);
+    if let Some(id) = &ann.id {
+        n = n.prop(prop::ID, id.clone());
+    }
+    n
 }
 
 fn convert_cite(cite: &Cite) -> Node {

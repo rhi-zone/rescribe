@@ -1,10 +1,12 @@
 {
-  "description": "a <table> nested inside a section-level <annotation> must not leak out as top-level section content, nor be dropped — mirrors fixtures/fb2/annotation-table but for Section.annotation instead of TitleInfo.annotation",
+  "description": "a <table> nested inside a section-level <annotation> becomes a blockquote with fb2:type annotation, placed before the section's own content — mirrors fixtures/fb2/annotation-table but for Section.annotation instead of TitleInfo.annotation",
   "category": "happy",
   "assertions": [
     { "path": "/0",       "kind": "div" },
     { "path": "/0/0",     "kind": "div" },
-    { "path": "/0/0/0",   "kind": "paragraph" },
-    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Main content." } }
+    { "path": "/0/0/0",   "kind": "blockquote", "props": { "fb2:type": "annotation" } },
+    { "path": "/0/0/0/0", "kind": "table" },
+    { "path": "/0/0/1",   "kind": "paragraph" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Main content." } }
   ]
 }
