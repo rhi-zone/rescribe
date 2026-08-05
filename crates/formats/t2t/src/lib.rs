@@ -17,11 +17,78 @@ pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::{parse, parse_str};
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of events.
 pub fn events(input: &str) -> events::EventIter {
     events::events(input)
+}
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `T2tDoc` implements all five shared API-mode traits. Unlike `rst-fmt`
+// (whose `RstDoc<'a>` borrows from the input and whose `parse` returns a
+// hard `Result<_, RstError>`), `T2tDoc` is a plain owned type and
+// `parse::parse`/`parse::parse_str` are already infallible
+// `(T2tDoc, Vec<Diagnostic>)` — the only mismatch versus the shared trait
+// signatures is `&str` input vs. `&[u8]`, bridged the same way
+// `BatchParser::finish` already does: a lossy UTF-8 decode. `parse`/
+// `parse_str`/`events` (the `&str`-taking crate-root functions) stay public:
+// they have a materially different contract (no lossy-decode step; callers
+// that already have a `&str` skip it) and are real external-consumer entry
+// points (used throughout this crate's own tests, `rescribe-read-t2t`, and
+// the cross-API fixture harness), not redundant duplicates of the trait
+// methods.
+
+impl rescribe_format_api::Parse for T2tDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
+    }
+}
+
+impl rescribe_format_api::Emit for T2tDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::Events for T2tDoc {
+    // `EventIter` isn't lifetime-generic — it re-parses into an owned
+    // `T2tDoc` and always yields `OwnedEvent` (`Event<'static>`) regardless
+    // of `'a`, the same "GAT tolerates an impl that doesn't use its lifetime
+    // parameter" case `zip-fmt` hits (decompression can't borrow either).
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = events::EventIter;
+
+    /// Invalid UTF-8 input yields an iterator over an empty document
+    /// (`StartDocument`/`EndDocument` only) rather than panicking — the
+    /// trait's `events()` is infallible by contract. Callers that need to
+    /// distinguish "empty document" from "invalid UTF-8" should use
+    /// [`events()`](crate::events) directly on a `&str` they've already
+    /// validated.
+    fn events(input: &[u8]) -> events::EventIter {
+        let s = String::from_utf8_lossy(input);
+        events::events(&s)
+    }
+}
+
+impl rescribe_format_api::StreamingParse for T2tDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for T2tDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Legacy compatibility (removed) ────────────────────────────────────────────

@@ -37,6 +37,11 @@
 use crate::ast::{Diagnostic, T2tDoc};
 use crate::events::OwnedEvent;
 
+/// Shared handler trait — see `rescribe_format_api::Handler`'s docs for why
+/// every format crate depends on and implements this trait directly instead
+/// of declaring its own local `Handler`.
+pub use rescribe_format_api::Handler;
+
 /// Chunk-driven txt2tags parser that returns the full AST on finish.
 #[derive(Default)]
 pub struct BatchParser {
@@ -60,19 +65,6 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming txt2tags events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
-
 /// Block accumulation state for the streaming parser.
 enum BlockState {
     /// Between blocks — waiting for the first non-blank line.
@@ -86,7 +78,7 @@ enum BlockState {
 /// Chunked streaming txt2tags parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block). See the [module-level docs](self) for details.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -109,7 +101,7 @@ pub struct StreamingParser<H: Handler> {
     pending_deflist_blank: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     ///
     /// Dispatches `StartDocument` immediately: bulk `events()` always wraps
