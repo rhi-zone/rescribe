@@ -1,22 +1,9 @@
 //! AST types for CommonMark documents.
 
-/// Byte-offset span into the source input.
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        Span::NONE
-    }
-}
+/// Byte-offset span into the source input. Re-exported from
+/// `rescribe-format-api` — see that crate for why `Span`/`Diagnostic`/
+/// `Severity` are shared across every format crate.
+pub use rescribe_format_api::Span;
 
 /// A parsed CommonMark document.
 #[derive(Clone, Debug, PartialEq)]
@@ -486,18 +473,6 @@ pub struct LinkDef {
     pub title: Option<String>,
 }
 
-/// A diagnostic produced during parsing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
-
-/// Severity level for a [`Diagnostic`].
-#[derive(Clone, Debug, PartialEq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
+/// A diagnostic produced during parsing. Re-exported from
+/// `rescribe-format-api`.
+pub use rescribe_format_api::{Diagnostic, Severity};

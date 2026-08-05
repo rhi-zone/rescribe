@@ -13,7 +13,7 @@ reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = ["writer-streaming"]
-arbitrary = ["dep:arbitrary"]
+arbitrary = ["dep:arbitrary", "rescribe-format-api/arbitrary"]
 
 # ── Construct features ──────────────────────────────────────────────────────
 # commonmark-fmt is a spec-named crate: plain CommonMark parses/emits with
@@ -40,5 +40,6 @@ extensions = ["gfm", "frontmatter", "footnotes", "definition-lists", "math"]
 [dependencies]
 pulldown-cmark = { version = "0.13", default-features = false }
 arbitrary = { version = "1", features = ["derive"], optional = true }
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

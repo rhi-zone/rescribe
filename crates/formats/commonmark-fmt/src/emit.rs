@@ -6,7 +6,7 @@ use crate::ast::*;
 ///
 /// Round-trip guarantee: `parse(emit(ast)).0.strip_spans() == ast.strip_spans()`
 /// for any valid [`CmDoc`].
-pub fn emit(doc: &CmDoc) -> Vec<u8> {
+pub(crate) fn emit(doc: &CmDoc) -> Vec<u8> {
     let mut out = Emitter::new();
     #[cfg(feature = "frontmatter")]
     out.emit_frontmatter(&doc.frontmatter);

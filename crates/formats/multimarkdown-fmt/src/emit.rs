@@ -6,11 +6,12 @@
 //! the literal bracket text CommonMark itself would produce for an
 //! unresolved reference
 //! (`crate::transform::mmd_to_cm_blocks`); actual CommonMark writing is then
-//! fully delegated to `commonmark_fmt::emit::emit` — this crate never
-//! hand-writes Markdown syntax.
+//! fully delegated to `commonmark_fmt::CmDoc`'s `rescribe_format_api::Emit`
+//! impl — this crate never hand-writes Markdown syntax.
 
 use crate::ast::MmdDoc;
 use crate::{metadata, transform};
+use rescribe_format_api::Emit as _;
 
 /// Emit an [`MmdDoc`] as MultiMarkdown bytes.
 pub fn emit(doc: &MmdDoc) -> Vec<u8> {
@@ -29,7 +30,7 @@ pub fn emit(doc: &MmdDoc) -> Vec<u8> {
         // enable via Cargo feature unification.
         frontmatter: None,
     };
-    let body = commonmark_fmt::emit::emit(&cmdoc);
+    let body = cmdoc.emit();
     out.push_str(std::str::from_utf8(&body).expect("commonmark-fmt emits valid UTF-8"));
     out.into_bytes()
 }

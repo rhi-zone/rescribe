@@ -4150,7 +4150,7 @@ fn commonmark_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = commonmark_fmt::parse::parse(&input);
+        let (doc, _diags) = commonmark_fmt::CmDoc::parse(&input);
         let expected = commonmark_ast_to_events(&doc);
         let Some(actual_iter) = commonmark_fmt::events::events(&input) else {
             continue; // non-UTF8 input: events() returns None, not this check's concern
@@ -4192,8 +4192,8 @@ fn commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = commonmark_fmt::parse::parse(&input);
-        let built = commonmark_fmt::emit::emit(&doc);
+        let (doc, _diags) = commonmark_fmt::CmDoc::parse(&input);
+        let built = doc.emit();
 
         let Some(events_iter) = commonmark_fmt::events::events(&input) else {
             continue;

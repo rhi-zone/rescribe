@@ -13,6 +13,7 @@
 
 use commonmark_fmt::ast::{Block, CmDoc, Inline, ListItem, ListKind, OrderedMarker, Span};
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit as _, Parse as _};
 
 // ── Helpers to build a well-formed CmDoc from raw bytes ───────────────────────
 
@@ -431,10 +432,10 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // Emit — must not panic.
-    let emitted = commonmark_fmt::emit(&doc);
+    let emitted = doc.emit();
 
     // Parse back — must not panic.
-    let (reparsed, _diags) = commonmark_fmt::parse(&emitted);
+    let (reparsed, _diags) = CmDoc::parse(&emitted);
 
     // Structural equality after strip_spans.
     // parse(emit(doc)).strip_spans() == doc.strip_spans()

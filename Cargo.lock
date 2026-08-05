@@ -570,6 +570,7 @@ version = "0.1.0"
 dependencies = [
  "arbitrary",
  "pulldown-cmark 0.13.4",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -2222,6 +2223,7 @@ version = "0.1.0"
 dependencies = [
  "arbitrary",
  "commonmark-fmt",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3319,6 +3321,9 @@ dependencies = [
 [[package]]
 name = "rescribe-format-api"
 version = "0.1.0"
+dependencies = [
+ "arbitrary",
+]
 
 [[package]]
 name = "rescribe-math"
@@ -3378,6 +3383,7 @@ version = "0.1.0"
 dependencies = [
  "commonmark-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "serde_yaml",
  "toml",
@@ -3577,6 +3583,7 @@ dependencies = [
  "commonmark-fmt",
  "pulldown-cmark 0.12.2",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-html",
  "rescribe-std",
  "rescribe-write-html",

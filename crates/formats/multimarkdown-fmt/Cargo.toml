@@ -26,5 +26,6 @@ commonmark-fmt = { path = "../commonmark-fmt", default-features = false, feature
     "frontmatter",
 ] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
+rescribe-format-api = { workspace = true }
 
 [dev-dependencies]

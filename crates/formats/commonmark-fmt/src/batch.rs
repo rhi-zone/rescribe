@@ -26,18 +26,10 @@
 
 use crate::events::OwnedEvent;
 
-/// Handler closure or type for batch-mode CommonMark events.
-///
+/// Handler closure or type for batch-mode CommonMark events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
 /// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming parser for CommonMark.
 ///
@@ -48,12 +40,12 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
 /// incremental chunked streaming is not possible without a native CommonMark
 /// parser. For large-file use cases, prefer loading the full input and using
 /// [`events`](crate::events::events) instead.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     buf: Vec<u8>,
     handler: H,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

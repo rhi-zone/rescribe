@@ -8,6 +8,7 @@ use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Severity,
     Span, WarningKind,
 };
+use rescribe_format_api::Parse as _;
 use rescribe_std::{Node, node, prop};
 
 /// Parse CommonMark input into a document.
@@ -24,7 +25,7 @@ pub fn parse_with_options(
 }
 
 fn parse_bytes(input: &[u8], _opts: &ParseOptions) -> ConversionResult<Document> {
-    let (cm_doc, diags) = commonmark_fmt::parse(input);
+    let (cm_doc, diags) = CmDoc::parse(input);
 
     let mut warnings: Vec<FidelityWarning> = diags
         .into_iter()

@@ -230,6 +230,7 @@ version = "0.1.0"
 dependencies = [
  "arbitrary",
  "pulldown-cmark 0.13.1",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -913,6 +914,7 @@ name = "multimarkdown-fmt"
 version = "0.1.0"
 dependencies = [
  "commonmark-fmt",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -1423,6 +1425,9 @@ dependencies = [
 [[package]]
 name = "rescribe-format-api"
 version = "0.1.0"
+dependencies = [
+ "arbitrary",
+]
 
 [[package]]
 name = "rescribe-fuzz"
@@ -1594,6 +1599,7 @@ version = "0.1.0"
 dependencies = [
  "commonmark-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "serde_yaml",
  "toml",
@@ -1774,6 +1780,7 @@ dependencies = [
  "commonmark-fmt",
  "pulldown-cmark 0.12.2",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "serde_yaml",
  "toml",

@@ -40,19 +40,19 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
                 if !remainder.is_empty() {
                     src.push(CmInline::Text {
                         content: remainder.to_string(),
-                        span: text_span.clone(),
+                        span: *text_span,
                     });
                 }
                 src.extend(inlines[1..].iter().cloned());
                 return MmdBlock::CitationDefinition {
                     label: label.to_string(),
                     content: cm_to_mmd_inlines(&src),
-                    span: span.clone(),
+                    span: *span,
                 };
             }
             MmdBlock::Paragraph {
                 inlines: cm_to_mmd_inlines(inlines),
-                span: span.clone(),
+                span: *span,
             }
         }
         CmBlock::Heading {
@@ -65,7 +65,7 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
                 level: *level,
                 inlines,
                 anchor,
-                span: span.clone(),
+                span: *span,
             }
         }
         CmBlock::CodeBlock {
@@ -75,15 +75,15 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
         } => MmdBlock::CodeBlock {
             language: language.clone(),
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         CmBlock::HtmlBlock { content, span } => MmdBlock::HtmlBlock {
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         CmBlock::Blockquote { blocks, span } => MmdBlock::Blockquote {
             blocks: cm_to_mmd_blocks(blocks),
-            span: span.clone(),
+            span: *span,
         },
         CmBlock::List {
             kind,
@@ -96,14 +96,14 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
                 .iter()
                 .map(|item| MmdListItem {
                     blocks: cm_to_mmd_blocks(&item.blocks),
-                    span: item.span.clone(),
+                    span: item.span,
                     checked: item.checked,
                 })
                 .collect(),
             tight: *tight,
-            span: span.clone(),
+            span: *span,
         },
-        CmBlock::ThematicBreak { span } => MmdBlock::ThematicBreak { span: span.clone() },
+        CmBlock::ThematicBreak { span } => MmdBlock::ThematicBreak { span: *span },
         CmBlock::Table {
             alignments,
             head,
@@ -113,7 +113,7 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
             alignments: alignments.clone(),
             head: cm_to_mmd_row(head),
             rows: rows.iter().map(cm_to_mmd_row).collect(),
-            span: span.clone(),
+            span: *span,
         },
         CmBlock::FootnoteDefinition {
             label,
@@ -122,7 +122,7 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
         } => MmdBlock::FootnoteDefinition {
             label: label.clone(),
             blocks: cm_to_mmd_blocks(blocks),
-            span: span.clone(),
+            span: *span,
         },
         CmBlock::DefinitionList { items, tight, span } => MmdBlock::DefinitionList {
             items: items
@@ -134,11 +134,11 @@ fn cm_to_mmd_block(block: &CmBlock) -> MmdBlock {
                         .iter()
                         .map(|d| cm_to_mmd_blocks(d))
                         .collect(),
-                    span: item.span.clone(),
+                    span: item.span,
                 })
                 .collect(),
             tight: *tight,
-            span: span.clone(),
+            span: *span,
         },
     }
 }
@@ -150,10 +150,10 @@ fn cm_to_mmd_row(row: &CmTableRow) -> MmdTableRow {
             .iter()
             .map(|c| MmdTableCell {
                 inlines: cm_to_mmd_inlines(&c.inlines),
-                span: c.span.clone(),
+                span: c.span,
             })
             .collect(),
-        span: row.span.clone(),
+        span: row.span,
     }
 }
 
@@ -169,33 +169,33 @@ fn cm_to_mmd_inlines(inlines: &[CmInline]) -> Vec<MmdInline> {
                 {
                     out.push(MmdInline::Text {
                         content: content.clone(),
-                        span: span.clone(),
+                        span: *span,
                     });
                 } else {
                     out.extend(pieces);
                 }
             }
-            CmInline::SoftBreak { span } => out.push(MmdInline::SoftBreak { span: span.clone() }),
-            CmInline::HardBreak { span } => out.push(MmdInline::HardBreak { span: span.clone() }),
+            CmInline::SoftBreak { span } => out.push(MmdInline::SoftBreak { span: *span }),
+            CmInline::HardBreak { span } => out.push(MmdInline::HardBreak { span: *span }),
             CmInline::Emphasis { inlines, span } => out.push(MmdInline::Emphasis {
                 inlines: cm_to_mmd_inlines(inlines),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::Strong { inlines, span } => out.push(MmdInline::Strong {
                 inlines: cm_to_mmd_inlines(inlines),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::Strikethrough { inlines, span } => out.push(MmdInline::Strikethrough {
                 inlines: cm_to_mmd_inlines(inlines),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::Code { content, span } => out.push(MmdInline::Code {
                 content: content.clone(),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::HtmlInline { content, span } => out.push(MmdInline::HtmlInline {
                 content: content.clone(),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::Link {
                 inlines,
@@ -206,7 +206,7 @@ fn cm_to_mmd_inlines(inlines: &[CmInline]) -> Vec<MmdInline> {
                 inlines: cm_to_mmd_inlines(inlines),
                 url: url.clone(),
                 title: title.clone(),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::Image {
                 alt,
@@ -217,21 +217,21 @@ fn cm_to_mmd_inlines(inlines: &[CmInline]) -> Vec<MmdInline> {
                 alt: alt.clone(),
                 url: url.clone(),
                 title: title.clone(),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::FootnoteReference { label, span } => {
                 out.push(MmdInline::FootnoteReference {
                     label: label.clone(),
-                    span: span.clone(),
+                    span: *span,
                 });
             }
             CmInline::InlineMath { source, span } => out.push(MmdInline::InlineMath {
                 source: source.clone(),
-                span: span.clone(),
+                span: *span,
             }),
             CmInline::DisplayMath { source, span } => out.push(MmdInline::DisplayMath {
                 source: source.clone(),
-                span: span.clone(),
+                span: *span,
             }),
         }
     }
@@ -275,7 +275,7 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
     match block {
         MmdBlock::Paragraph { inlines, span } => CmBlock::Paragraph {
             inlines: mmd_to_cm_inlines(inlines),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::Heading {
             level,
@@ -287,13 +287,13 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
             if let Some(anchor) = anchor {
                 cm_inlines.push(CmInline::Text {
                     content: format!(" [{anchor}]"),
-                    span: span.clone(),
+                    span: *span,
                 });
             }
             CmBlock::Heading {
                 level: *level,
                 inlines: cm_inlines,
-                span: span.clone(),
+                span: *span,
             }
         }
         MmdBlock::CodeBlock {
@@ -303,15 +303,15 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
         } => CmBlock::CodeBlock {
             language: language.clone(),
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::HtmlBlock { content, span } => CmBlock::HtmlBlock {
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::Blockquote { blocks, span } => CmBlock::Blockquote {
             blocks: mmd_to_cm_blocks(blocks),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::List {
             kind,
@@ -324,14 +324,14 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
                 .iter()
                 .map(|item| commonmark_fmt::ListItem {
                     blocks: mmd_to_cm_blocks(&item.blocks),
-                    span: item.span.clone(),
+                    span: item.span,
                     checked: item.checked,
                 })
                 .collect(),
             tight: *tight,
-            span: span.clone(),
+            span: *span,
         },
-        MmdBlock::ThematicBreak { span } => CmBlock::ThematicBreak { span: span.clone() },
+        MmdBlock::ThematicBreak { span } => CmBlock::ThematicBreak { span: *span },
         MmdBlock::Table {
             alignments,
             head,
@@ -341,7 +341,7 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
             alignments: alignments.clone(),
             head: mmd_to_cm_row(head),
             rows: rows.iter().map(mmd_to_cm_row).collect(),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::FootnoteDefinition {
             label,
@@ -350,7 +350,7 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
         } => CmBlock::FootnoteDefinition {
             label: label.clone(),
             blocks: mmd_to_cm_blocks(blocks),
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::DefinitionList { items, tight, span } => CmBlock::DefinitionList {
             items: items
@@ -362,11 +362,11 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
                         .iter()
                         .map(|d| mmd_to_cm_blocks(d))
                         .collect(),
-                    span: item.span.clone(),
+                    span: item.span,
                 })
                 .collect(),
             tight: *tight,
-            span: span.clone(),
+            span: *span,
         },
         MmdBlock::CitationDefinition {
             label,
@@ -375,12 +375,12 @@ fn mmd_to_cm_block(block: &MmdBlock) -> CmBlock {
         } => {
             let mut inlines = vec![CmInline::Text {
                 content: format!("[#{label}]: "),
-                span: span.clone(),
+                span: *span,
             }];
             inlines.extend(mmd_to_cm_inlines(content));
             CmBlock::Paragraph {
                 inlines,
-                span: span.clone(),
+                span: *span,
             }
         }
     }
@@ -393,10 +393,10 @@ fn mmd_to_cm_row(row: &MmdTableRow) -> CmTableRow {
             .iter()
             .map(|c| CmTableCell {
                 inlines: mmd_to_cm_inlines(&c.inlines),
-                span: c.span.clone(),
+                span: c.span,
             })
             .collect(),
-        span: row.span.clone(),
+        span: row.span,
     }
 }
 
@@ -408,29 +408,29 @@ fn mmd_to_cm_inline(inline: &MmdInline) -> CmInline {
     match inline {
         MmdInline::Text { content, span } => CmInline::Text {
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
-        MmdInline::SoftBreak { span } => CmInline::SoftBreak { span: span.clone() },
-        MmdInline::HardBreak { span } => CmInline::HardBreak { span: span.clone() },
+        MmdInline::SoftBreak { span } => CmInline::SoftBreak { span: *span },
+        MmdInline::HardBreak { span } => CmInline::HardBreak { span: *span },
         MmdInline::Emphasis { inlines, span } => CmInline::Emphasis {
             inlines: mmd_to_cm_inlines(inlines),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Strong { inlines, span } => CmInline::Strong {
             inlines: mmd_to_cm_inlines(inlines),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Strikethrough { inlines, span } => CmInline::Strikethrough {
             inlines: mmd_to_cm_inlines(inlines),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Code { content, span } => CmInline::Code {
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::HtmlInline { content, span } => CmInline::HtmlInline {
             content: content.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Link {
             inlines,
@@ -441,7 +441,7 @@ fn mmd_to_cm_inline(inline: &MmdInline) -> CmInline {
             inlines: mmd_to_cm_inlines(inlines),
             url: url.clone(),
             title: title.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Image {
             alt,
@@ -452,19 +452,19 @@ fn mmd_to_cm_inline(inline: &MmdInline) -> CmInline {
             alt: alt.clone(),
             url: url.clone(),
             title: title.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::FootnoteReference { label, span } => CmInline::FootnoteReference {
             label: label.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::InlineMath { source, span } => CmInline::InlineMath {
             source: source.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::DisplayMath { source, span } => CmInline::DisplayMath {
             source: source.clone(),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::Citation {
             locator,
@@ -472,7 +472,7 @@ fn mmd_to_cm_inline(inline: &MmdInline) -> CmInline {
             span,
         } => CmInline::Text {
             content: format!("[{}][#{}]", locator.as_deref().unwrap_or(""), label),
-            span: span.clone(),
+            span: *span,
         },
         MmdInline::CrossReference {
             target,
@@ -484,7 +484,7 @@ fn mmd_to_cm_inline(inline: &MmdInline) -> CmInline {
             } else {
                 format!("[{target}]")
             },
-            span: span.clone(),
+            span: *span,
         },
     }
 }

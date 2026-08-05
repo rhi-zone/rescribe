@@ -6,4 +6,12 @@ license.workspace = true
 repository.workspace = true
 description = "Shared trait contract (Parse/Events/StreamingParse/Emit/StreamingWrite), Handler<E>, and Diagnostic/Severity for the rescribe -fmt format crates — no rescribe dependency"
 
+[features]
+# Derives `arbitrary::Arbitrary` on Span/Severity/Diagnostic, for format
+# crates (e.g. commonmark-fmt) whose fuzz targets build an arbitrary AST
+# directly via `#[derive(arbitrary::Arbitrary)]` rather than hand-rolling a
+# byte-consuming generator.
+arbitrary = ["dep:arbitrary"]
+
 [dependencies]
+arbitrary = { version = "1", features = ["derive"], optional = true }

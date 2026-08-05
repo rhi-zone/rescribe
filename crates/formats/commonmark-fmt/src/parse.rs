@@ -172,7 +172,7 @@ enum Frame {
 /// an empty document. Any unknown pulldown-cmark events are silently skipped —
 /// this is a strict superset of the CommonMark spec and diagnostics are only
 /// generated for encoding problems.
-pub fn parse(input: &[u8]) -> (CmDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &[u8]) -> (CmDoc, Vec<Diagnostic>) {
     let s = match std::str::from_utf8(input) {
         Ok(s) => s,
         Err(_) => {
@@ -1048,13 +1048,13 @@ fn inline_span(inline: &Inline) -> Span {
         | Inline::Code { span, .. }
         | Inline::HtmlInline { span, .. }
         | Inline::Link { span, .. }
-        | Inline::Image { span, .. } => span.clone(),
+        | Inline::Image { span, .. } => *span,
         #[cfg(feature = "strikethrough")]
-        Inline::Strikethrough { span, .. } => span.clone(),
+        Inline::Strikethrough { span, .. } => *span,
         #[cfg(feature = "footnotes")]
-        Inline::FootnoteReference { span, .. } => span.clone(),
+        Inline::FootnoteReference { span, .. } => *span,
         #[cfg(feature = "math")]
-        Inline::InlineMath { span, .. } | Inline::DisplayMath { span, .. } => span.clone(),
+        Inline::InlineMath { span, .. } | Inline::DisplayMath { span, .. } => *span,
     }
 }
 

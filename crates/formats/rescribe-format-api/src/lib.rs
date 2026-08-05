@@ -44,6 +44,7 @@ use std::io::Write as IoWrite;
 /// (`start`/`end`, half-open `[start, end)`) was already identical across
 /// every crate surveyed except for name (`Span` everywhere).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -71,6 +72,7 @@ impl Span {
 /// it into `Warning` would have dropped real information those crates
 /// captured. Most crates only ever construct `Warning`/`Info`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Severity {
     Info,
     Warning,

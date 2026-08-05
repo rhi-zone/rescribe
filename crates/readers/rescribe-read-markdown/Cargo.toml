@@ -13,6 +13,7 @@ pulldown = ["dep:pulldown-cmark"]
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+rescribe-format-api.workspace = true
 commonmark-fmt = { workspace = true, features = [
     "frontmatter",
     "tables",
