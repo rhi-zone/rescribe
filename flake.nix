@@ -55,10 +55,14 @@
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH";
 
           # Sharing one target/ dir across the main checkout and every git
-          # worktree of this repo is handled by .cargo/config.toml's
-          # `include` mechanism (populated by
-          # scripts/setup-worktree-target.sh / .ps1, run once per
-          # worktree, nix users included) — see that file for details.
+          # worktree of this repo is NOT handled here -- there is no
+          # shellHook for it. It's handled at the filesystem level: each
+          # worktree's target/ is a symlink (junction on windows) to the
+          # main checkout's target/, created automatically by the
+          # .githooks/post-checkout hook, or manually via
+          # scripts/setup-worktree-target.sh / .ps1 -- see those scripts
+          # and CLAUDE.md's "Development" section. Applies to nix users
+          # too; there is nothing for this shell to do about it.
         };
 
         # Fuzzing shell with nightly Rust

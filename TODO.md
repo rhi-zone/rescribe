@@ -7862,7 +7862,6 @@ during the earlier audit pass (`csl-json`, `pandoc-json`, `ipynb`, `bibtex`, `bi
 during that earlier pass as legitimate thin wrappers around sanctioned third-party
 libraries or genuinely reader-less/writer-only targets, not CLAUDE.md violations — that
 question is not reopened here, only recorded as already closed.
-
 **Not attempted this pass** (construct coverage remains incomplete beyond the two flagged
 gaps above): abbreviation definitions/references, glossary terms/references, TOC
 placeholders (`{{TOC}}`), file transclusion (`{{file}}`), image dimensions
@@ -7870,3 +7869,54 @@ placeholders (`{{TOC}}`), file transclusion (`{{file}}`), image dimensions
 `docs/format-audit.md` (all five API modes + fixtures + harness + fuzz-target-compile
 complete; construct coverage gaps remain, tracked in `fixtures/multimarkdown/COVERAGE.md`),
 not yet 5-Production.
+
+## Shared worktree target-dir mechanism: `.cargo/config.toml` include never worked, replaced with filesystem symlinks (2026-08-05)
+
+**Incident:** the `include = ["config.local.toml"]` mechanism in `.cargo/config.toml`
+(populated per-worktree by `scripts/setup-worktree-target.sh`/`.ps1`) never actually
+worked. `include` requires the unstable `-Z config-include` cargo flag; the toolchain
+actually installed (cargo 1.91.1) silently never loaded `config.local.toml` — confirmed
+by `CARGO_LOG` tracing showing the file was never read, and by an isolated scratch-dir
+repro outside this repo. Every one of 11 concurrent agent worktrees under
+`.claude/worktrees/` therefore built its own full local `target/` instead of sharing one,
+which filled the machine's disk to ~100% (~137GB of duplicated build output) before being
+caught.
+
+**Fix:** replaced the cargo-config-based mechanism with a filesystem-level one that needs
+no cargo awareness at all. `scripts/setup-worktree-target.sh`/`.ps1` now make each
+worktree's `target/` a real link to the main checkout's `target/` — a symlink on
+mac/linux, a directory junction on windows (junctions chosen over symlinks on windows
+because they need no Administrator/Developer-Mode privilege for a regular user; verified
+via web search against current Microsoft/community documentation, not assumed — see
+`scripts/setup-worktree-target.ps1`'s header comment for the full writeup, including the
+same-volume caveat and the symlink fallback for cross-drive worktrees). The dead
+`include` line was removed from the tracked `.cargo/config.toml`. Both scripts now
+detect and refuse to silently delete a worktree's `target/` if it already exists as a
+real (non-link) directory — e.g. exactly the state the incident above left the 11 live
+worktrees in — requiring an explicit `--adopt-existing`/`-AdoptExisting` flag to merge it
+into the shared dir instead. The 11 live worktrees under `.claude/worktrees/` were
+deliberately left untouched by this work (they have real in-progress uncommitted work
+from concurrent agent sessions); retrofitting them is separate follow-up.
+
+**"Zero setup" gap closed:** it was previously true that nothing automatically ran the
+setup script for a new worktree — no `post-checkout` hook existed, and the
+`isolation: "worktree"` agent-spawn path just does a plain `git worktree add`. Verified
+empirically this session (not assumed) that `git worktree add` **does** fire the
+`post-checkout` hook, by adding a throwaway marker-writing hook, creating a throwaway
+worktree, confirming the marker appeared, then removing both. Added
+`.githooks/post-checkout` (this repo's `core.hooksPath` is `.githooks/`) that runs the
+platform-appropriate setup script automatically on every checkout, including worktree
+creation — so no manual step or agent-remembered action is required for a fresh worktree
+to get the shared `target/` link.
+
+**Verification:** created a throwaway test worktree, confirmed `.githooks/post-checkout`
+fired automatically and linked its `target/` to the shared dir with no manual script
+invocation, confirmed `cargo metadata --format-version 1 --no-deps` resolved
+`target_directory` to the shared path, confirmed a `cargo check` actually wrote build
+artifacts into the shared `target/` (not a local one), then removed the throwaway
+worktree.
+
+**Docs updated:** CLAUDE.md's "Development" section, `.envrc`, `flake.nix`'s dev-shell
+comment (both previously claimed direnv/nix handled this via the `include` mechanism —
+already false, and `flake.nix`'s shellHook covering it had already been removed earlier
+this session).

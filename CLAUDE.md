@@ -347,12 +347,39 @@ cargo clippy       # Lint
 cd docs && bun dev # Local docs
 ```
 
-After creating a new worktree, run `scripts/setup-worktree-target.sh` (mac/linux) or
-`scripts/setup-worktree-target.ps1` (windows) once to share the build cache across
-worktrees — this applies regardless of direnv/nix. The script writes the shared
-`target-dir` to `.cargo/config.local.toml`, an untracked, per-worktree file pulled in by
-the tracked `.cargo/config.toml` via its `include` key (stable since Rust 1.94) — running
-the script never dirties the tracked config file.
+Every worktree shares one `target/` dir with the main checkout, via a filesystem link
+(symlink on mac/linux, directory junction on windows) at `<worktree>/target` pointing to
+the main checkout's `target/`. This is set up **automatically** by the
+`.githooks/post-checkout` hook (this repo's `core.hooksPath` is `.githooks/`) — confirmed
+empirically that `git worktree add` fires `post-checkout`, so a fresh worktree gets the
+link with no manual step. If you ever need to run it by hand (e.g. the hook didn't fire,
+or you're relinking after moving a worktree), use `scripts/setup-worktree-target.sh`
+(mac/linux) or `scripts/setup-worktree-target.ps1` (windows) — safe to re-run, applies
+regardless of direnv/nix.
+
+**History:** this used to work by writing a `target-dir` key to
+`.cargo/config.local.toml`, pulled in by the tracked `.cargo/config.toml` via its
+`include` key. That never actually worked — `include` requires the unstable
+`-Z config-include` cargo flag, and the actually-installed toolchain (cargo 1.91.1)
+silently never loaded `config.local.toml` (confirmed via `CARGO_LOG` tracing and an
+isolated scratch-dir repro). Every worktree silently built its own full local `target/`
+instead, which filled the machine's disk to ~100% with ~137GB of duplicated build output
+across 11 concurrent worktrees. The `include` line has been removed from
+`.cargo/config.toml`; the symlink/junction mechanism needs no cargo config awareness at
+all, so this class of failure can't recur. `scripts/setup-worktree-target.sh`/`.ps1`
+detect and remove any leftover `.cargo/config.local.toml` from the old mechanism, and
+refuse (rather than silently delete) if a worktree's `target/` already exists as a real
+directory — pass `--adopt-existing` / `-AdoptExisting` to explicitly merge it into the
+shared dir instead.
+
+**Windows specifics:** directory junctions (`New-Item -ItemType Junction`, no admin or
+Developer Mode required) are tried first; they only work within one NTFS volume, which
+is not a real constraint for the normal case of a repo and its worktrees on one drive.
+If the main checkout and a worktree are on different drives, junction creation fails and
+the script falls back to a true symbolic link, which works cross-drive but requires
+Administrator privileges or Developer Mode (Windows 10 1703+, not on by default) — if
+both fail, the script stops with an explicit error rather than silently leaving `target/`
+unlinked.
 
 Also run `scripts/setup-worktree-spec.sh` (mac/linux) or `scripts/setup-worktree-spec.ps1`
 (windows) once per fresh worktree. `spec/` (ECMA-376 schema files consumed by
