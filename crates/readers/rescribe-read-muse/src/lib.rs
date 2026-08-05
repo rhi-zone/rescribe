@@ -3,6 +3,7 @@
 //! Parses Emacs Muse markup into the rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse Muse markup.
@@ -16,7 +17,7 @@ pub fn parse_with_options(
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
     // Parse using the format-specific crate
-    let (muse_doc, _diagnostics) = muse_fmt::parse(input);
+    let (muse_doc, _diagnostics) = muse_fmt::MuseDoc::parse(input.as_bytes());
 
     // Convert muse_doc to rescribe Document
     let blocks = convert_blocks(&muse_doc.blocks);

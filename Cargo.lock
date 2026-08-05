@@ -2231,6 +2231,7 @@ name = "muse-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3635,6 +3636,7 @@ dependencies = [
  "muse-fmt",
  "rescribe-core",
  "rescribe-fixtures",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4202,6 +4204,7 @@ version = "0.1.0"
 dependencies = [
  "muse-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 

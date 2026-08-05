@@ -2,6 +2,66 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-muse` and `rescribe-write-muse` as thin adapter layers.
+//!
+//! # API layers
+//!
+//! `MuseDoc` implements four of the five shared `rescribe-format-api`
+//! traits — no parallel free functions (`muse_fmt::parse(..)`,
+//! `muse_fmt::build(..)`) exist alongside them:
+//!
+//! ```text
+//! use rescribe_format_api::{Emit, Parse, StreamingParse, StreamingWrite};
+//!
+//! // AST reader
+//! let (doc, diags): (MuseDoc, Vec<Diagnostic>) = MuseDoc::parse(input);
+//!
+//! // Batch reader — chunk-driven, dispatches events as soon as provably complete
+//! let mut p = MuseDoc::streaming_parser(|ev| ...);
+//! p.feed(chunk); // repeat
+//! p.finish();
+//!
+//! // Builder writer — emit from AST
+//! let bytes: Vec<u8> = doc.emit();
+//!
+//! // Streaming writer — emit from events
+//! let mut w = MuseDoc::writer(sink);
+//! w.write_event(event); // repeat
+//! w.finish(); // flushes to sink
+//! ```
+//!
+//! `events::events(doc: &MuseDoc) -> EventIter<'_>` remains a separate,
+//! non-trait entry point — it is not a redundant wrapper around a trait
+//! method, because `Events` is deliberately **not** implemented here (see
+//! below).
+//!
+//! # Why `Events` is not implemented
+//!
+//! `rescribe_format_api::Events::events(input: &[u8]) -> Self::EventIter<'_>`
+//! takes raw input directly and is meant to be a genuinely incremental
+//! byte-to-event parser that never materializes a full AST (see
+//! `opml-fmt`/`zip-fmt`/`commonmark-fmt`, whose `EventIter` borrows
+//! straight from `input`). `muse-fmt`'s only existing pull-iterator,
+//! [`events::events`], has a fundamentally different shape: it takes an
+//! **already-parsed** `&MuseDoc` and walks it, eagerly enqueueing every
+//! event into a `VecDeque` up front (see `events.rs`'s `EventIter::new`).
+//! There is no function in this crate matching the trait's `fn
+//! events(input: &[u8]) -> Self::EventIter<'_>` signature: implementing it
+//! honestly would mean writing a new, genuinely incremental byte-to-event
+//! parser (real implementation work, out of scope for this trait-wiring
+//! vertical); implementing it by parsing to a full `MuseDoc` inside the
+//! method and returning a pre-collected `Vec<OwnedMuseEvent>`'s iterator
+//! would compile, but is exactly the "fake streaming API... builds the
+//! full AST internally then wraps it" anti-pattern this repo's CLAUDE.md
+//! forbids. Flagged for a decision (does `Events` get a real incremental
+//! implementation, or does the trait need a variant that admits
+//! AST-backed iterators?), not guessed at here — same spirit as
+//! `rst-fmt`'s documented `Parse`/`Events` skip, for a different concrete
+//! reason.
+//!
+//! `muse-fmt`'s genuinely incremental, byte-driven reader is
+//! [`batch::StreamingParser`] (the [`rescribe_format_api::StreamingParse`]
+//! impl below) — it re-parses each top-level block from raw bytes as soon
+//! as its boundary is confirmed, without ever holding a full `MuseDoc`.
 
 #[cfg(test)]
 mod alloc_probe;
@@ -15,18 +75,59 @@ pub mod writer;
 // Re-export primary types for convenience.
 pub use ast::{Block, Diagnostic, Inline, MuseDoc, Severity, Span, TableRow};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::build;
 pub use events::{EventIter, MuseEvent, OwnedMuseEvent};
+pub use rescribe_format_api::{Emit, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `MuseDoc` implements `Parse`, `Emit`, `StreamingParse`, and
+// `StreamingWrite` directly. `Events` is deliberately not implemented —
+// see the module docs above for the exact structural reason. The old
+// crate-root `parse`/`build` free functions (thin wrappers duplicating
+// what are now trait methods) are gone from the public API; a `#[cfg(test)]`
+// `crate::parse`/`crate::build` alias survives only because this crate's
+// own `#[cfg(test)]` modules (here and in `batch.rs`/`writer.rs`/
+// `events.rs`) call them by that bare name dozens of times — kept as
+// test-only scaffolding rather than mechanically rewriting every call site
+// to the trait spelling for no behavioral difference.
 
-/// Parse a Muse string into a [`MuseDoc`] and any diagnostics.
-///
-/// This is the primary entry point. Parsing is infallible — malformed input
-/// produces diagnostics rather than errors.
-pub fn parse(input: &str) -> (MuseDoc, Vec<Diagnostic>) {
+#[cfg(test)]
+fn parse(input: &str) -> (MuseDoc, Vec<Diagnostic>) {
     parse::parse(input)
+}
+
+#[cfg(test)]
+use emit::build;
+
+impl rescribe_format_api::Parse for MuseDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
+    }
+}
+
+impl rescribe_format_api::Emit for MuseDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl rescribe_format_api::StreamingParse for MuseDoc {
+    type Event = OwnedMuseEvent;
+    type Parser<H: Handler<OwnedMuseEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedMuseEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl rescribe_format_api::StreamingWrite for MuseDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

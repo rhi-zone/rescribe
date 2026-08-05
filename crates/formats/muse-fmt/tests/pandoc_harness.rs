@@ -11,7 +11,7 @@
 //! catalogue gaps, not gate CI.  Tests DO fail if the parser panics.
 
 use muse_fmt::ast::{Block, Inline, MuseDoc, TableRow};
-use muse_fmt::parse;
+use rescribe_format_api::Parse as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -238,7 +238,7 @@ fn run_harness(files: &[HarnessFile]) {
         };
 
         // Parse — must not panic.
-        let (doc, diags) = parse(&input);
+        let (doc, diags) = MuseDoc::parse(input.as_bytes());
 
         let parse_col = "OK";
         let our_words = extract_words(&doc);
@@ -324,7 +324,7 @@ fn pandoc_muse_corpus() {
 #[test]
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/muse/oracle/input.muse");
-    let (doc, _diags) = parse(sample);
+    let (doc, _diags) = MuseDoc::parse(sample.as_bytes());
     // Must produce at least one block.
     assert!(
         !doc.blocks.is_empty(),

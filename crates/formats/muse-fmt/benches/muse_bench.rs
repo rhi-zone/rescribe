@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use muse_fmt::{build, parse};
+use muse_fmt::MuseDoc;
+use rescribe_format_api::{Emit, Parse};
 
 const SMALL: &str = r#"* Hello World
 
@@ -135,7 +136,7 @@ A paragraph with a hard<br>line break in it.
 fn bench_muse_parse_small(c: &mut Criterion) {
     c.bench_function("muse_parse_small", |b| {
         b.iter(|| {
-            let _ = parse(std::hint::black_box(SMALL));
+            let _ = MuseDoc::parse(std::hint::black_box(SMALL.as_bytes()));
         });
     });
 }
@@ -143,16 +144,16 @@ fn bench_muse_parse_small(c: &mut Criterion) {
 fn bench_muse_parse_medium(c: &mut Criterion) {
     c.bench_function("muse_parse_medium", |b| {
         b.iter(|| {
-            let _ = parse(std::hint::black_box(MEDIUM));
+            let _ = MuseDoc::parse(std::hint::black_box(MEDIUM.as_bytes()));
         });
     });
 }
 
 fn bench_muse_emit_medium(c: &mut Criterion) {
     c.bench_function("muse_emit_medium", |b| {
-        let (doc, _) = parse(MEDIUM);
+        let (doc, _) = MuseDoc::parse(MEDIUM.as_bytes());
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }

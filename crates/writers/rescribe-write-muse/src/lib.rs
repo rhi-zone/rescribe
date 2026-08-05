@@ -4,6 +4,7 @@
 
 use muse_fmt::{Block, Inline, MuseDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as Muse markup.
@@ -25,9 +26,9 @@ pub fn emit_with_options(
         span: Span::NONE,
         ..Default::default()
     };
-    let output = muse_fmt::build(&muse_doc);
+    let output = muse_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_nodes_to_blocks(nodes: &[Node]) -> Vec<Block> {

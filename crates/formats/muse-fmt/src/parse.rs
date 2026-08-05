@@ -7,7 +7,7 @@ use crate::ast::{Block, Diagnostic, Inline, MuseDoc, Span, TableRow};
 /// Parse a Muse string into a [`MuseDoc`], returning any diagnostics.
 ///
 /// This function is infallible — malformed input produces diagnostics, not errors.
-pub fn parse(input: &str) -> (MuseDoc, Vec<Diagnostic>) {
+pub(crate) fn parse(input: &str) -> (MuseDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse();
     let doc = MuseDoc {
