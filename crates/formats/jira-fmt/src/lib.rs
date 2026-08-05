@@ -2,6 +2,41 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-jira` and `rescribe-write-jira` as thin adapter layers.
+//!
+//! # API layers
+//!
+//! `JiraDoc` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
+//!
+//! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
+//! // AST reader
+//! let (doc, diags): (JiraDoc, Vec<Diagnostic>) = JiraDoc::parse(input);
+//!
+//! // Streaming reader — iterator over owned events, pre-computed from the AST
+//! let it: EagerEventIter = JiraDoc::events(input);
+//!
+//! // Batch reader — chunk-driven, dispatches events as soon as provably complete
+//! let mut p = JiraDoc::streaming_parser(|ev| ...);
+//! p.feed(chunk); // repeat
+//! p.finish();
+//!
+//! // Builder writer — emit from AST
+//! let bytes: Vec<u8> = doc.emit();
+//!
+//! // Streaming writer — emit from events
+//! let mut w = JiraDoc::writer(sink);
+//! w.write_event(event); // repeat
+//! w.finish(); // flushes to sink
+//! ```
+//!
+//! [`parse_str`](parse::parse_str) and [`events_str`](events::events_str)
+//! (take `&str`, skip the UTF-8 check the trait methods perform on `&[u8]`)
+//! remain as separate, non-trait entry points — a materially different
+//! contract from the trait methods, not a redundant duplicate, mirroring
+//! `commonmark-fmt`'s `parse_str`/`events_str` split (see that crate's
+//! module docs for the full reasoning).
 
 pub mod ast;
 pub mod batch;
@@ -15,14 +50,63 @@ pub use ast::{
     TableRow,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_inline_text};
-pub use events::{Event, OwnedEvent};
-pub use parse::parse;
+pub use emit::collect_inline_text;
+pub use events::{Event, OwnedEvent, events_str};
+pub use parse::parse_str;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
-pub fn events(input: &str) -> events::EagerEventIter {
-    events::events(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `JiraDoc` implements the five shared API-mode traits directly — there are
+// no parallel free functions (`jira_fmt::parse(..)`, `jira_fmt::build(..)`)
+// alongside these; callers `use rescribe_format_api::Parse;` (etc.) and call
+// `JiraDoc::parse(bytes)` / `doc.emit()` / `JiraDoc::events(bytes)`.
+
+impl Parse for JiraDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for JiraDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::build(self).into_bytes()
+    }
+}
+
+impl Events for JiraDoc {
+    // jira-fmt's `EagerEventIter` always yields `OwnedEvent` regardless of
+    // the input lifetime (it pre-computes events from the parsed AST
+    // rather than borrowing from the input) — the GAT tolerates an impl
+    // that simply doesn't use its own lifetime parameter, per the shared
+    // trait's docs (and `zip-fmt`'s identical situation).
+    type Event<'a> = OwnedEvent;
+    type EventIter<'a> = events::EagerEventIter;
+
+    fn events(input: &[u8]) -> events::EagerEventIter {
+        match std::str::from_utf8(input) {
+            Ok(s) => events::events_str(s),
+            Err(_) => events::events_str(""),
+        }
+    }
+}
+
+impl StreamingParse for JiraDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for JiraDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -33,21 +117,21 @@ mod tests {
 
     #[test]
     fn test_parse_simple_text() {
-        let (doc, _) = parse("Hello world");
+        let (doc, _) = parse_str("Hello world");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
     }
 
     #[test]
     fn test_parse_heading() {
-        let (doc, _) = parse("h1. Title");
+        let (doc, _) = parse_str("h1. Title");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::Heading { level: 1, .. }));
     }
 
     #[test]
     fn test_parse_bold() {
-        let (doc, _) = parse("This is *bold* text.");
+        let (doc, _) = parse_str("This is *bold* text.");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -56,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_parse_italic() {
-        let (doc, _) = parse("This is _italic_ text.");
+        let (doc, _) = parse_str("This is _italic_ text.");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -65,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_parse_code() {
-        let (doc, _) = parse("Use {{code}} here.");
+        let (doc, _) = parse_str("Use {{code}} here.");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -74,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_parse_link() {
-        let (doc, _) = parse("Click [here|https://example.com].");
+        let (doc, _) = parse_str("Click [here|https://example.com].");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -83,14 +167,14 @@ mod tests {
 
     #[test]
     fn test_parse_list() {
-        let (doc, _) = parse("* Item 1\n* Item 2");
+        let (doc, _) = parse_str("* Item 1\n* Item 2");
         let block = &doc.blocks[0];
         assert!(matches!(block, Block::List { ordered: false, .. }));
     }
 
     #[test]
     fn test_parse_code_block() {
-        let (doc, _) = parse("{code:java}\npublic class Test {}\n{code}");
+        let (doc, _) = parse_str("{code:java}\npublic class Test {}\n{code}");
         let code = &doc.blocks[0];
         assert!(matches!(code, Block::CodeBlock { .. }));
         if let Block::CodeBlock { language, .. } = code {
@@ -100,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_parse_noformat() {
-        let (doc, _) = parse("{noformat}\nraw text\n{noformat}");
+        let (doc, _) = parse_str("{noformat}\nraw text\n{noformat}");
         assert!(matches!(doc.blocks[0], Block::Noformat { .. }));
         if let Block::Noformat { content, .. } = &doc.blocks[0] {
             assert_eq!(content, "raw text");
@@ -109,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_parse_color_span() {
-        let (doc, _) = parse("{color:red}warning{color}");
+        let (doc, _) = parse_str("{color:red}warning{color}");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -122,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_parse_mention() {
-        let (doc, _) = parse("Hello @alice!");
+        let (doc, _) = parse_str("Hello @alice!");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
@@ -135,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_parse_panel_with_title() {
-        let (doc, _) = parse("{panel:title=Note}\nContent\n{panel}");
+        let (doc, _) = parse_str("{panel:title=Note}\nContent\n{panel}");
         assert!(matches!(doc.blocks[0], Block::Panel { .. }));
         if let Block::Panel { title, .. } = &doc.blocks[0] {
             assert_eq!(title.as_deref(), Some("Note"));
@@ -144,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_parse_nested_list() {
-        let (doc, _) = parse("* Item 1\n** Sub item\n* Item 2");
+        let (doc, _) = parse_str("* Item 1\n** Sub item\n* Item 2");
         let Block::List { items, .. } = &doc.blocks[0] else {
             panic!("expected list");
         };
@@ -162,7 +246,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let output = build(&doc);
+        let output = emit::build(&doc);
         assert!(output.contains("Hello"));
     }
 
@@ -178,7 +262,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let output = build(&doc);
+        let output = emit::build(&doc);
         assert!(output.contains("*bold*"));
     }
 
@@ -192,7 +276,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let output = build(&doc);
+        let output = emit::build(&doc);
         assert!(output.contains("h1. Title"));
     }
 
@@ -206,7 +290,7 @@ mod tests {
             }],
             span: Span::NONE,
         };
-        let output = build(&doc);
+        let output = emit::build(&doc);
         assert!(output.contains("{code:python}"));
         assert!(output.contains("print('hi')"));
         assert!(output.contains("{code}"));
@@ -215,16 +299,16 @@ mod tests {
     #[test]
     fn test_roundtrip_heading() {
         let original = "h1. Title";
-        let (doc, _) = parse(original);
-        let rebuilt = build(&doc);
+        let (doc, _) = parse_str(original);
+        let rebuilt = emit::build(&doc);
         assert!(rebuilt.contains("h1. Title"));
     }
 
     #[test]
     fn test_roundtrip_bold() {
         let original = "This is *bold* text.";
-        let (doc, _) = parse(original);
-        let rebuilt = build(&doc);
+        let (doc, _) = parse_str(original);
+        let rebuilt = emit::build(&doc);
         assert!(rebuilt.contains("*bold*"));
     }
 
@@ -266,7 +350,7 @@ mod tests {
             "{quote}\nunclosed quote",
         ];
         for s in &samples {
-            let _ = parse(s);
+            let _ = parse_str(s);
         }
     }
 }

@@ -590,15 +590,15 @@ mod tests {
     #[test]
     fn test_writer_roundtrip_via_events() {
         let input = "h1. Hello\n\nA paragraph with *bold* text.\n\n* item one\n* item two\n";
-        let evts: Vec<_> = crate::events::events(input).collect();
+        let evts: Vec<_> = crate::events::events_str(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc_orig, _) = crate::parse::parse(input);
-        let (doc_emit, _) = crate::parse::parse(&emitted_text);
+        let (doc_orig, _) = crate::parse::parse_str(input);
+        let (doc_emit, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc_orig.blocks.len(),
             doc_emit.blocks.len(),
@@ -631,11 +631,11 @@ mod tests {
             "A para\n\n* item\n\ncontinued paragraph\n",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::build(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());
-            for e in crate::events::events(input) {
+            for e in crate::events::events_str(input) {
                 w.write_event(e);
             }
             let streamed = String::from_utf8(w.finish()).unwrap();
@@ -679,7 +679,7 @@ let x = 1;
 
 After the transition.
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         assert!(
             doc.blocks.len() >= 7,
             "expected a rich construct mix, got {:?}",
@@ -687,13 +687,13 @@ After the transition.
         );
 
         let mut w = Writer::new(Vec::<u8>::new());
-        for e in crate::events::events(input) {
+        for e in crate::events::events_str(input) {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
 
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc.blocks.len(),
             doc2.blocks.len(),
@@ -717,7 +717,7 @@ After the transition.
     /// item already wrote its own trailing `"\n"`) — that stacks into a
     /// blank line, which `parse()` reads as the list ending. This is a
     /// pre-existing `build()`/`parse()` round-trip defect (reproduced here:
-    /// `crate::emit::build(&crate::parse::parse(input).0)` loses the nested
+    /// `crate::emit::build(&crate::parse::parse_str(input).0)` loses the nested
     /// list on re-parse too), independent of streaming vs. non-streaming —
     /// out of scope for this pass, which is about `Writer` incrementality,
     /// not `build()`'s own construct coverage. Tracked in TODO.md by the
@@ -731,11 +731,11 @@ After the transition.
 ** inner b
 * outer three
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         let built = crate::emit::build(&doc);
 
         let mut w = Writer::new(Vec::<u8>::new());
-        for e in crate::events::events(input) {
+        for e in crate::events::events_str(input) {
             w.write_event(e);
         }
         let emitted_text = String::from_utf8(w.finish()).unwrap();

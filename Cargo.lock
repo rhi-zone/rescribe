@@ -1932,6 +1932,7 @@ name = "jira-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -4158,6 +4159,7 @@ version = "0.1.0"
 dependencies = [
  "jira-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 

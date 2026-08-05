@@ -138,8 +138,8 @@ impl<'a> Event<'a> {
 }
 
 /// Parse `input` and return a streaming iterator of events.
-pub fn events(input: &str) -> EagerEventIter {
-    let (doc, _) = crate::parse::parse(input);
+pub fn events_str(input: &str) -> EagerEventIter {
+    let (doc, _) = crate::parse::parse_str(input);
     let mut evs = Vec::new();
     emit_doc_events(&doc, &mut evs);
     EagerEventIter {
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_events_heading() {
-        let evs: Vec<_> = events("h1. Hello").collect();
+        let evs: Vec<_> = events_str("h1. Hello").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_events_paragraph() {
-        let evs: Vec<_> = events("Hello world").collect();
+        let evs: Vec<_> = events_str("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
         assert!(
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_events_code_block() {
-        let evs: Vec<_> = events("{code:java}\npublic class Test {}\n{code}").collect();
+        let evs: Vec<_> = events_str("{code:java}\npublic class Test {}\n{code}").collect();
         assert!(
             evs.iter().any(
                 |e| matches!(e, OwnedEvent::CodeBlock { language: Some(l), .. } if l == "java")
@@ -370,14 +370,14 @@ mod tests {
 
     #[test]
     fn test_events_bold() {
-        let evs: Vec<_> = events("*bold*").collect();
+        let evs: Vec<_> = events_str("*bold*").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartBold)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndBold)));
     }
 
     #[test]
     fn test_events_link() {
-        let evs: Vec<_> = events("[click|https://example.com]").collect();
+        let evs: Vec<_> = events_str("[click|https://example.com]").collect();
         assert!(
             evs.iter().any(
                 |e| matches!(e, OwnedEvent::StartLink { url } if url == "https://example.com")
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_events_list() {
-        let evs: Vec<_> = events("* item 1\n* item 2").collect();
+        let evs: Vec<_> = events_str("* item 1\n* item 2").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_events_table() {
-        let evs: Vec<_> = events("||H1||H2||\n|a|b|").collect();
+        let evs: Vec<_> = events_str("||H1||H2||\n|a|b|").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
         assert!(
             evs.iter()
@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_events_horizontal_rule() {
-        let evs: Vec<_> = events("----").collect();
+        let evs: Vec<_> = events_str("----").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::HorizontalRule)));
     }
 }

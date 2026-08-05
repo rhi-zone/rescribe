@@ -1,47 +1,11 @@
 //! Jira wiki markup AST types with span information.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
+//
+// Shared with every other `-fmt` crate via `rescribe-format-api` — see that
+// crate's module docs for why (unifies ~37 divergent per-crate definitions).
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub const NONE: Span = Span { start: 0, end: 0 };
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub span: Span,
-}
-
-impl Diagnostic {
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-            span,
-        }
-    }
-
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self {
-            severity: Severity::Error,
-            message: message.into(),
-            span,
-        }
-    }
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── AST ───────────────────────────────────────────────────────────────────────
 

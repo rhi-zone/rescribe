@@ -3,8 +3,9 @@
 //! Emits documents as Jira/Confluence wiki markup.
 //! Thin adapter over `jira-fmt` standalone library.
 
-use jira_fmt::{Block, Inline, JiraDoc, Span, build as jira_build};
+use jira_fmt::{Block, Inline, JiraDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit;
 use rescribe_std::{node, prop};
 
 /// Emit a document as Jira markup.
@@ -26,8 +27,8 @@ pub fn emit_with_options(
         blocks,
         span: Span::NONE,
     };
-    let output = jira_build(&jira_doc);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = jira_doc.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn node_to_block(node: &Node) -> Block {

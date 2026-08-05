@@ -3,7 +3,7 @@
 //! Parses Jira/Confluence wiki markup into rescribe documents.
 //! Thin adapter over `jira-fmt` standalone library.
 
-use jira_fmt::{Block, Inline, ListItem, ListItemContent, parse as jira_parse};
+use jira_fmt::{Block, Inline, ListItem, ListItemContent, parse_str as jira_parse};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
 

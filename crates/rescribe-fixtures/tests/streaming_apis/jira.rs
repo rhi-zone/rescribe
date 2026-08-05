@@ -257,9 +257,9 @@ fn jira_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = jira_fmt::parse(&input);
+        let (doc, _diags) = jira_fmt::JiraDoc::parse(input.as_bytes());
         let expected = jira_ast_to_events(&doc);
-        let actual: Vec<_> = jira_fmt::events(&input).collect();
+        let actual: Vec<_> = jira_fmt::events_str(&input).collect();
         checked += 1;
         if expected != actual && result.is_ok() {
             result = Err(format!(
@@ -293,7 +293,7 @@ fn jira_streaming_parser_matches_events_under_adversarial_chunking() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let bulk: Vec<jira_fmt::OwnedEvent> = jira_fmt::events(input_str).collect();
+        let bulk: Vec<jira_fmt::OwnedEvent> = jira_fmt::events_str(input_str).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -364,11 +364,11 @@ fn jira_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = jira_fmt::parse(&input);
-        let built = jira_fmt::build(&doc);
+        let (doc, _diags) = jira_fmt::JiraDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("emit produces UTF-8");
 
         let mut w = jira_fmt::Writer::new(Vec::<u8>::new());
-        for e in jira_fmt::events(&input) {
+        for e in jira_fmt::events_str(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");

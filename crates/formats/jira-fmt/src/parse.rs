@@ -2,8 +2,31 @@
 
 use crate::ast::*;
 
+/// Parse a Jira byte slice into a [`JiraDoc`].
+///
+/// Delegates to [`parse_str`] after a UTF-8 check — invalid UTF-8 yields an
+/// empty document plus a single `Warning` diagnostic, mirroring
+/// `commonmark-fmt`'s `Parse::parse`/`parse_str` split (see that crate's
+/// module docs). This is what backs `impl Parse for JiraDoc`; callers that
+/// already hold a `&str` should call [`parse_str`] directly to skip the
+/// redundant UTF-8 check.
+pub(crate) fn parse(input: &[u8]) -> (JiraDoc, Vec<Diagnostic>) {
+    match std::str::from_utf8(input) {
+        Ok(s) => parse_str(s),
+        Err(_) => (
+            JiraDoc::default(),
+            vec![Diagnostic {
+                span: Span::NONE,
+                severity: Severity::Warning,
+                message: "input is not valid UTF-8".to_string(),
+                code: "jira::invalid-utf8",
+            }],
+        ),
+    }
+}
+
 /// Parse a Jira string into a [`JiraDoc`].
-pub fn parse(input: &str) -> (JiraDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (JiraDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse().unwrap_or_default();
     (

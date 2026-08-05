@@ -4,7 +4,7 @@
 //! skipped. This file contains a no-panic CI test that exercises the parser
 //! on a representative sample.
 
-use jira_fmt::parse;
+use jira_fmt::parse_str as parse;
 
 const SAMPLE: &str = r#"
 h1. Document Title
@@ -76,8 +76,9 @@ fn parse_sample_no_panic() {
 
 #[test]
 fn roundtrip_sample() {
+    use rescribe_format_api::Emit;
     let (doc, _) = parse(SAMPLE);
-    let emitted = jira_fmt::build(&doc);
+    let emitted = String::from_utf8(doc.emit()).expect("emit produces UTF-8");
     let (doc2, _) = parse(&emitted);
     assert_eq!(
         doc.blocks.len(),

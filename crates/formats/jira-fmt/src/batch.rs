@@ -27,6 +27,7 @@
 
 use crate::ast::{Diagnostic, JiraDoc};
 use crate::events::OwnedEvent;
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven Jira parser that returns the full AST on finish.
 #[derive(Default)]
@@ -47,20 +48,7 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (JiraDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
-    }
-}
-
-/// Handler trait for streaming Jira events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
+        crate::parse::parse_str(&s)
     }
 }
 
@@ -75,7 +63,7 @@ enum BlockState {
 }
 
 /// Chunked streaming Jira parser that delivers events to a [`Handler`].
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -84,7 +72,7 @@ pub struct StreamingParser<H: Handler> {
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -193,7 +181,7 @@ impl<H: Handler> StreamingParser<H> {
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events::events(&text) {
+        for event in crate::events::events_str(&text) {
             self.handler.handle(event);
         }
     }
@@ -233,7 +221,7 @@ impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     /// Finish parsing and deliver all events to the callback.
     pub fn finish(mut self) {
         let s = String::from_utf8_lossy(&self.buf);
-        for event in crate::events::events(&s) {
+        for event in crate::events::events_str(&s) {
             (self.callback)(event);
         }
     }

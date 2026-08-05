@@ -3,7 +3,12 @@
 use crate::ast::*;
 
 /// Build a Jira string from a [`JiraDoc`].
-pub fn build(doc: &JiraDoc) -> String {
+///
+/// Backs `impl Emit for JiraDoc` (`Emit::emit` wraps this with
+/// `.into_bytes()`) — kept `pub(crate)` since nothing outside this crate
+/// called `jira_fmt::build` directly (unlike `rst-fmt`'s local `build`,
+/// which followed the same demotion for the same reason).
+pub(crate) fn build(doc: &JiraDoc) -> String {
     let mut ctx = BuildContext::new();
     for block in &doc.blocks {
         build_block(block, &mut ctx);

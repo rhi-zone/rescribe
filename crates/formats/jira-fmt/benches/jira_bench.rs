@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use jira_fmt::{build, parse};
+use jira_fmt::parse_str as parse;
+use rescribe_format_api::Emit;
 
 const SMALL: &str = "h1. Hello World\n\n\
 This is a _short_ paragraph with {{inline code}} and a [link|https://example.com].\n\n\
@@ -66,7 +67,7 @@ fn bench_jira_roundtrip_small(c: &mut Criterion) {
     c.bench_function("jira_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = String::from_utf8(doc.emit()).expect("emit produces UTF-8");
             let _ = parse(std::hint::black_box(&out));
         });
     });
@@ -76,7 +77,7 @@ fn bench_jira_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("jira_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
+            let out = String::from_utf8(doc.emit()).expect("emit produces UTF-8");
             let _ = parse(std::hint::black_box(&out));
         });
     });
@@ -86,7 +87,7 @@ fn bench_jira_emit_medium(c: &mut Criterion) {
     c.bench_function("jira_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = doc.emit();
         });
     });
 }
