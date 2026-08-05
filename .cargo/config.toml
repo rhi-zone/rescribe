@@ -1,21 +1,19 @@
-# Machine-local overrides (currently: the shared target-dir written by
-# scripts/setup-worktree-target.sh / .ps1 for contributors without
-# direnv/nix). Untracked, per-worktree, never committed — see
-# .cargo/config.local.toml's own comment and .gitignore.
-#
-# NOTE: this was briefly `include = [{ path = "config.local.toml", optional
-# = true }]` (the per-entry `{ path = ..., optional = true }` table form),
-# added on the claim that cargo 1.97.1 supported it. The actually-installed
-# toolchain here is cargo 1.91.1, which rejects that form outright ("failed
-# to parse key `include`... expected string but found table in list") --
-# confirmed by direct reproduction in an isolated scratch directory, not by
-# reading a changelog. That broke `cargo` for every command, in every
-# worktree, unconditionally. Reverted to the plain string form, which cargo
-# has supported for longer and which behaves identically for the "file may
-# not exist yet" case: a missing `config.local.toml` is silently skipped
-# with no error either way (also confirmed by direct reproduction) -- the
-# `optional = true` was never actually load-bearing for that behavior.
-include = ["config.local.toml"]
+# NOTE (2026-08-05): this file used to `include = ["config.local.toml"]` to
+# pull in a machine-local shared target-dir written by
+# scripts/setup-worktree-target.sh / .ps1. That mechanism never actually
+# worked: `include` requires the unstable `-Z config-include` flag on the
+# cargo actually installed here (1.91.1) -- confirmed by direct
+# reproduction (CARGO_LOG tracing showed config.local.toml was never
+# loaded, plus an isolated scratch-dir repro). Every worktree silently fell
+# back to building its own full local target/, which filled the machine's
+# disk to ~100% with ~137GB of duplicated build output across 11 concurrent
+# worktrees. Replaced with a symlink/junction-based mechanism that needs no
+# cargo config at all: scripts/setup-worktree-target.sh / .ps1 now make
+# each worktree's target/ a real filesystem link to the main checkout's
+# target/, so cargo just writes into it normally. See those scripts and
+# CLAUDE.md's "Development" section for details. The `include` line is
+# removed here rather than left in place, since it never did anything on
+# this toolchain and its presence implied otherwise.
 
 # Reduce target/ directory bloat
 [profile.dev]

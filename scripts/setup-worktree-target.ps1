@@ -1,23 +1,56 @@
 <#
 Share one target/ dir across the main checkout and every git worktree of
-this repo (windows). For contributors who don't use direnv or
-`nix develop` -- both of those already set CARGO_TARGET_DIR dynamically,
-see .envrc and flake.nix. This script gets the same effect via
-.cargo/config.local.toml's [build] target-dir for anyone running plain
-`cargo` outside of direnv/nix.
+this repo (windows), by making each worktree's target/ a directory
+junction (falling back to a symbolic link) pointing at the main checkout's
+target/.
 
-Run once per worktree, from inside that worktree:
+History: this used to write .cargo/config.local.toml, included by the
+tracked .cargo/config.toml via its `include` key. That mechanism never
+actually worked -- `include` requires the unstable `-Z config-include` flag
+on the cargo actually installed here (1.91.1), confirmed by direct
+reproduction (CARGO_LOG tracing showed config.local.toml was never
+loaded). Every worktree silently built its own full local target/ instead,
+which is what filled the machine's disk to ~100% with ~137GB of duplicated
+build output across 11 concurrent worktrees. This script now does the
+simple thing that needs zero cargo config awareness at all: it makes
+target/ inside the worktree a real filesystem link to the shared dir, so
+cargo just writes into it like any other directory.
+
+Windows link choice: directory junctions (`New-Item -ItemType Junction`,
+equivalent to `mklink /J`) do NOT require Administrator or Developer Mode
+for a regular user to create -- unlike true NTFS symbolic links
+(`New-Item -ItemType SymbolicLink` / `mklink /D`), which need the
+SeCreateSymbolicLinkPrivilege (granted to Administrators by default, or to
+any user if Developer Mode is enabled -- Windows 10 1703+, not on by
+default). Junctions are therefore the zero-setup choice and are tried
+first. Their one limitation: junctions only work within the same NTFS
+volume/drive letter (unlike symlinks, which can cross drives). For the
+normal case -- a repo and its worktrees all under one user's home volume --
+this is not a real constraint. If the main checkout and this worktree are
+on different drives, junction creation will fail; this script then tries a
+true symbolic link as a fallback, which works cross-drive but needs admin
+or Developer Mode. If both fail, it stops with an explicit error rather
+than silently leaving target/ unlinked.
+
+Run once per worktree, from inside that worktree (or let the post-checkout
+hook in .githooks/ run it automatically -- confirmed empirically that
+`git worktree add` fires post-checkout):
   scripts/setup-worktree-target.ps1
 
-Safe to re-run (idempotent) and safe to run in a worktree that already
-gets CARGO_TARGET_DIR from direnv/nix -- CARGO_TARGET_DIR, if set, takes
-precedence over this file's target-dir, so this is inert for those users.
+Safe to re-run (idempotent). If this worktree's target/ is already a
+link (junction or symlink) to the right place, this is a no-op.
 
-This writes to .cargo/config.local.toml, which is untracked (see
-.gitignore) and included by the tracked .cargo/config.toml via its
-`include` key. It never touches the tracked config.toml, so the tracked
-file stays clean regardless of how many worktrees run this script.
+If target/ already exists in this worktree as a REAL directory (not a
+link) -- e.g. a worktree that built its own local cache before this script
+existed -- this script refuses to touch it and exits non-zero, rather than
+silently deleting a build cache that might be the only copy of something.
+Pass -AdoptExisting to explicitly merge that directory's contents into the
+shared target dir (via robocopy /MOVE) and replace it with a link.
 #>
+
+param(
+  [switch]$AdoptExisting
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -27,48 +60,76 @@ Set-Location $repoRoot
 $gitCommonDir = (git rev-parse --git-common-dir).Trim()
 # Resolve symlinks the same way .envrc's `realpath` does.
 $commonDirAbs = (Resolve-Path -LiteralPath $gitCommonDir).Path
-# Use forward slashes so the TOML value matches the .sh script's output
-# byte-for-byte when both compute the same underlying path, and because
-# Cargo accepts forward slashes in target-dir on Windows.
-$targetDir = ((Split-Path -Parent $commonDirAbs) -replace '\\', '/') + "/target"
+$mainRoot = Split-Path -Parent $commonDirAbs
+$targetDir = Join-Path $mainRoot "target"
+$worktreeRoot = (Get-Location).Path
 
-$configDir = ".cargo"
-$configFile = ".cargo/config.local.toml"
-if (-not (Test-Path -LiteralPath $configDir)) {
-  New-Item -ItemType Directory -Path $configDir | Out-Null
+# Clean up the dead marker file from the old (broken) include-based
+# mechanism, if present. Nothing reads it anymore; leaving it around could
+# mislead someone into thinking it's still load-bearing.
+$staleConfig = ".cargo/config.local.toml"
+if (Test-Path -LiteralPath $staleConfig) {
+  Remove-Item -LiteralPath $staleConfig -Force
+  Write-Host "Removed stale $staleConfig (old cargo include-based mechanism -- never actually worked, see this script's header)"
 }
-if (-not (Test-Path -LiteralPath $configFile)) {
-  New-Item -ItemType File -Path $configFile | Out-Null
+
+if (-not (Test-Path -LiteralPath $targetDir)) {
+  New-Item -ItemType Directory -Path $targetDir | Out-Null
 }
 
-$content = Get-Content -LiteralPath $configFile -Raw
-if ($null -eq $content) { $content = "" }
-
-$targetLine = "target-dir = `"$targetDir`""
-
-if ($content.Contains($targetLine)) {
-  Write-Host "Already set: [build] $targetLine in $configFile"
+if ($worktreeRoot -eq $mainRoot) {
+  Write-Host "This is the main checkout ($mainRoot) -- target/ is already the shared dir, nothing to link."
   exit 0
 }
 
-if ($content -match '(?m)^target-dir\s*=.*$') {
-  # Stale target-dir line present (e.g. copied from a different machine or
-  # a moved repo) -- replace it in place rather than duplicating the key.
-  # Using a MatchEvaluator (scriptblock) instead of a replacement string
-  # avoids $targetLine's `$` and backslashes being reinterpreted as regex
-  # replacement syntax.
-  $newContent = [regex]::Replace($content, '(?m)^target-dir\s*=.*$', { param($m) $targetLine })
-  Set-Content -LiteralPath $configFile -Value $newContent -NoNewline
-  Write-Host "Updated: [build] $targetLine in $configFile"
-} elseif ($content -match '(?m)^\[build\]\s*$') {
-  # [build] table exists but has no target-dir key -- insert right after
-  # the table header.
-  $newContent = [regex]::Replace($content, '(?m)^\[build\]\s*$', { param($m) "[build]`n$targetLine" }, 1)
-  Set-Content -LiteralPath $configFile -Value $newContent -NoNewline
-  Write-Host "Added to existing [build] table: $targetLine in $configFile"
-} else {
-  # No [build] table at all -- append a new one.
-  $append = "`n# Machine-local: shared target dir across worktrees of this repo.`n# Set by scripts/setup-worktree-target.sh or .ps1. This file is`n# untracked (see .gitignore) -- included by .cargo/config.toml.`n[build]`n$targetLine`n"
-  Add-Content -LiteralPath $configFile -Value $append -NoNewline
-  Write-Host "Appended new [build] table: $targetLine in $configFile"
+$localTarget = Join-Path $worktreeRoot "target"
+
+if (Test-Path -LiteralPath $localTarget) {
+  $item = Get-Item -LiteralPath $localTarget -Force
+  $isLink = [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
+  if ($isLink) {
+    Write-Host "target is already a link -- removing and relinking to $targetDir to make sure it points at the right place."
+    Remove-Item -LiteralPath $localTarget -Force
+  } elseif ($AdoptExisting) {
+    Write-Host "Adopting existing target/ into $targetDir (merging via robocopy /MOVE -- files already in the shared dir are overwritten by this worktree's copy on conflict)..."
+    robocopy $localTarget $targetDir /E /MOVE /NFL /NDL /NJH /NJS | Out-Null
+    if (Test-Path -LiteralPath $localTarget) {
+      Remove-Item -LiteralPath $localTarget -Recurse -Force
+    }
+    Write-Host "Merged local target/ into $targetDir."
+  } else {
+    Write-Error @"
+target/ already exists in this worktree as a real directory ($localTarget).
+Refusing to delete it automatically -- it may be a build cache from before
+this mechanism existed (this is exactly the state the incident that
+prompted this rewrite left worktrees in).
+
+To adopt it (merge its contents into the shared dir at $targetDir, then
+replace it with a link), re-run:
+  scripts\setup-worktree-target.ps1 -AdoptExisting
+
+Or move/remove it yourself first, then re-run this script with no args.
+"@
+    exit 1
+  }
+}
+
+try {
+  New-Item -ItemType Junction -Path $localTarget -Target $targetDir -ErrorAction Stop | Out-Null
+  Write-Host "Linked (junction): $localTarget -> $targetDir"
+} catch {
+  Write-Host "Junction creation failed ($($_.Exception.Message)) -- likely because $mainRoot and $worktreeRoot are on different volumes (junctions are same-volume only). Trying a symbolic link instead (requires Administrator or Developer Mode)..."
+  try {
+    New-Item -ItemType SymbolicLink -Path $localTarget -Target $targetDir -ErrorAction Stop | Out-Null
+    Write-Host "Linked (symlink): $localTarget -> $targetDir"
+  } catch {
+    Write-Error @"
+Could not link target/ -> $targetDir as either a junction or a symbolic link.
+Junctions need $mainRoot and $worktreeRoot on the same drive; symbolic links
+need Administrator privileges or Developer Mode (Settings > System > For
+developers) enabled. Enable one of those, or move this worktree onto the
+same drive as $mainRoot, then re-run this script.
+"@
+    exit 1
+  }
 }
