@@ -1447,17 +1447,15 @@ impl SemanticState {
             // `Image` variant) — dropped unless it's inline content of a
             // paragraph/table cell/etc., mirroring the top-level
             // `in_inline_context()` branch.
-            "image" => {
-                if self.ann_in_inline_context() {
-                    let href = attrs.get("href").cloned().unwrap_or_default();
-                    let img = Image {
-                        href,
-                        alt: attrs.get("alt").cloned(),
-                        title: attrs.get("title").cloned(),
-                        id: attrs.get("id").cloned(),
-                    };
-                    self.ann_push_inline(InlineElement::Image(img));
-                }
+            "image" if self.ann_in_inline_context() => {
+                let href = attrs.get("href").cloned().unwrap_or_default();
+                let img = Image {
+                    href,
+                    alt: attrs.get("alt").cloned(),
+                    title: attrs.get("title").cloned(),
+                    id: attrs.get("id").cloned(),
+                };
+                self.ann_push_inline(InlineElement::Image(img));
             }
             _ => {}
         }
