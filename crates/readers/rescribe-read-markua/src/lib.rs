@@ -3,6 +3,7 @@
 //! Thin adapter from standalone markua format crate to rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 
 /// Parse Markua markup.
@@ -15,7 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (markua_doc, _diagnostics) = markua::parse(input);
+    let (markua_doc, _diagnostics) = markua::MarkuaDoc::parse(input.as_bytes());
     let nodes = convert_blocks(&markua_doc.blocks);
 
     let root = Node::new(node::DOCUMENT).children(nodes);

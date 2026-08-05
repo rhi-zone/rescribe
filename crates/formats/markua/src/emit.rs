@@ -3,18 +3,19 @@
 use crate::ast::{Block, Inline, MarkuaDoc};
 
 /// Emit a [`MarkuaDoc`] as a Markua-formatted string.
-pub fn emit(doc: &MarkuaDoc) -> String {
+///
+/// Used by [`rescribe_format_api::Emit::emit`]'s `MarkuaDoc` impl, which
+/// converts the `String` this returns to `Vec<u8>`. Not `pub`: the old
+/// crate-root `markua::emit`/`markua::build` (a redundant `#[inline]` alias
+/// of `emit`) free functions duplicated the trait method with no material
+/// contract difference, so both are gone — callers use
+/// `<MarkuaDoc as Emit>::emit`.
+pub(crate) fn emit(doc: &MarkuaDoc) -> String {
     let mut out = String::new();
     for block in &doc.blocks {
         emit_block(block, &mut out);
     }
     out
-}
-
-/// Alias for [`emit`] — kept for backwards compatibility.
-#[inline]
-pub fn build(doc: &MarkuaDoc) -> String {
-    emit(doc)
 }
 
 // ── Block emitter ─────────────────────────────────────────────────────────────

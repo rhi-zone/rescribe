@@ -1,42 +1,13 @@
 //! Markua AST types: nodes, spans, diagnostics.
 
 // ── Span / Diagnostic ─────────────────────────────────────────────────────────
+//
+// `Span`/`Diagnostic`/`Severity` are the shared `rescribe-format-api` types,
+// not locally declared ones — see that crate's docs for why unifying these
+// across every format crate (rather than ~37 divergent per-crate versions)
+// matters.
 
-/// Byte range in the original source input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    /// A zero-width span at the origin.  Used for programmatically constructed
-    /// nodes (e.g. from the rescribe writer) that have no source position.
-    pub const NONE: Self = Self { start: 0, end: 0 };
-
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Info,
-}
-
-/// A diagnostic message produced during parsing.
-///
-/// Markua parsing is always infallible — malformed constructs produce
-/// diagnostics instead of hard errors.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub span: Span,
-    pub severity: Severity,
-    pub message: String,
-    pub code: &'static str,
-}
+pub use rescribe_format_api::{Diagnostic, Severity, Span};
 
 // ── Document ──────────────────────────────────────────────────────────────────
 

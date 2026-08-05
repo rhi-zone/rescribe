@@ -1,11 +1,32 @@
 //! Markua parser — infallible, returns (MarkuaDoc, Vec<Diagnostic>).
 
-use crate::ast::{Block, Diagnostic, Inline, MarkuaDoc, Span, TableRow};
+use crate::ast::{Block, Diagnostic, Inline, MarkuaDoc, Severity, Span, TableRow};
+
+/// Parse Markua from a byte slice, for [`rescribe_format_api::Parse`].
+///
+/// Always succeeds; non-UTF-8 input produces a single `Warning` diagnostic
+/// and an empty document — mirroring `commonmark-fmt::parse`. This wrapper
+/// exists because [`parse_str`] (the real implementation) takes `&str`
+/// while the shared trait's contract is `&[u8]`.
+pub(crate) fn parse(input: &[u8]) -> (MarkuaDoc, Vec<Diagnostic>) {
+    match std::str::from_utf8(input) {
+        Ok(s) => parse_str(s),
+        Err(_) => (
+            MarkuaDoc::default(),
+            vec![Diagnostic {
+                span: Span::NONE,
+                severity: Severity::Warning,
+                message: "input is not valid UTF-8".to_string(),
+                code: "markua::invalid-utf8",
+            }],
+        ),
+    }
+}
 
 /// Parse a Markua string into a [`MarkuaDoc`].
 ///
 /// Always succeeds — malformed markup is tolerated and may produce diagnostics.
-pub fn parse(input: &str) -> (MarkuaDoc, Vec<Diagnostic>) {
+pub fn parse_str(input: &str) -> (MarkuaDoc, Vec<Diagnostic>) {
     let diagnostics = Vec::new();
     let offsets = line_byte_offsets(input);
     let mut p = Parser::new(input, &offsets);

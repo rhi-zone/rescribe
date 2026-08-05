@@ -47,25 +47,19 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (MarkuaDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
+        crate::parse::parse_str(&s)
     }
 }
 
-/// Handler trait for streaming Markua events.
-///
-/// Implemented automatically for any `FnMut(OwnedMarkuaEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedMarkuaEvent);
-}
-
-impl<F: FnMut(OwnedMarkuaEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedMarkuaEvent) {
-        self(event);
-    }
-}
+/// Handler trait for streaming Markua events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see
+/// that crate's docs for why bounding `H` by one shared trait (instead of
+/// each format crate declaring its own concrete `Handler`) is required for
+/// a common `StreamingParse` trait to exist at all.
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming Markua parser that delivers events to a [`Handler`].
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedMarkuaEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -77,7 +71,7 @@ pub struct StreamingParser<H: Handler> {
     code_fence: String,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedMarkuaEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -158,7 +152,7 @@ impl<H: Handler> StreamingParser<H> {
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events::events(&text) {
+        for event in crate::events::events_str(&text) {
             self.handler.handle(event.into_owned());
         }
     }
@@ -203,7 +197,7 @@ impl<F: FnMut(OwnedMarkuaEvent)> BatchSink<F> {
     /// Finish parsing and deliver all events to the callback.
     pub fn finish(mut self) {
         let s = String::from_utf8_lossy(&self.buf);
-        for event in crate::events::events(&s) {
+        for event in crate::events::events_str(&s) {
             (self.callback)(event.into_owned());
         }
     }
@@ -304,7 +298,9 @@ mod tests {
 
         let bulk: Vec<OwnedMarkuaEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events::events(&s).map(|e| e.into_owned()).collect()
+            crate::events::events_str(&s)
+                .map(|e| e.into_owned())
+                .collect()
         };
 
         let mut streamed: Vec<OwnedMarkuaEvent> = Vec::new();

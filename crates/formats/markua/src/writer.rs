@@ -719,15 +719,15 @@ mod tests {
     #[test]
     fn test_writer_roundtrip_via_events() {
         let input = "# Hello\n\nA paragraph with **bold** text.\n\n- item one\n- item two\n";
-        let evts: Vec<_> = crate::events::events(input).collect();
+        let evts: Vec<_> = crate::events::events_str(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc_orig, _) = crate::parse::parse(input);
-        let (doc_emit, _) = crate::parse::parse(&emitted_text);
+        let (doc_orig, _) = crate::parse::parse_str(input);
+        let (doc_emit, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc_orig.blocks.len(),
             doc_emit.blocks.len(),
@@ -799,11 +799,11 @@ mod tests {
             "> W> Nested warning inside blockquote.\n",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::emit(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());
-            for e in crate::events::events(input) {
+            for e in crate::events::events_str(input) {
                 w.write_event(e);
             }
             let streamed = String::from_utf8(w.finish()).unwrap();
@@ -936,7 +936,7 @@ See ^[a note] for details.
 
 After the transition.
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
         assert!(
             doc.blocks.len() >= 9,
             "expected a rich construct mix, got {:?}",
@@ -944,13 +944,13 @@ After the transition.
         );
 
         let mut w = Writer::new(Vec::<u8>::new());
-        for e in crate::events::events(input) {
+        for e in crate::events::events_str(input) {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
 
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc.blocks.len(),
             doc2.blocks.len(),
@@ -980,16 +980,16 @@ After the transition.
 
 - outer three
 ";
-        let (doc, _) = crate::parse::parse(input);
+        let (doc, _) = crate::parse::parse_str(input);
 
         let mut w = Writer::new(Vec::<u8>::new());
-        for e in crate::events::events(input) {
+        for e in crate::events::events_str(input) {
             w.write_event(e);
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
 
-        let (doc2, _) = crate::parse::parse(&emitted_text);
+        let (doc2, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc.blocks.len(),
             doc2.blocks.len(),

@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 description = "Markua parser, AST, and builder — no rescribe dependency"
 
+[dependencies]
+rescribe-format-api = { workspace = true }
+
 [dev-dependencies]
 criterion.workspace = true
 
