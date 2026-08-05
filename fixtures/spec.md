@@ -126,6 +126,13 @@ HTML `<meta>` tags). Keys and value semantics are identical to `props` assertion
 A fixture suite for a format is **complete** when `fixtures/{format}/COVERAGE.md` has all
 items checked. That file is the source of truth for what's missing.
 
+**Exception — container-only formats.** This schema asserts against a rescribe
+*document* tree (`kind`/`props` on `paragraph`/`heading`/... nodes). A format crate
+that has no document tree of its own — e.g. `zip-fmt`, a ZIP-container reader/writer
+that hands callers raw `(name, bytes)` entries and never interprets content — has
+nothing for this schema to assert against. See `fixtures/zip-fmt/README.md` for the
+worked explanation and what exercises that crate's correctness properties instead.
+
 The suite must cover all six test dimensions:
 
 | Dimension | What it tests |
