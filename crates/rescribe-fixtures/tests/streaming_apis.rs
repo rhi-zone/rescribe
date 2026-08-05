@@ -6097,7 +6097,7 @@ fn creole_streaming_writer_matches_builder_over_all_fixtures() {
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
         let (doc, _diags) = creole::parse(&input);
-        let built = creole::build(&doc);
+        let built = String::from_utf8(doc.emit()).expect("build() output is UTF-8");
 
         let mut w = creole::writer::Writer::new(Vec::<u8>::new());
         for e in creole::events(&input) {
@@ -6546,7 +6546,7 @@ fn dokuwiki_streaming_writer_matches_builder_over_all_fixtures() {
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
         let (doc, _diags) = dokuwiki::parse(&input);
-        let built = dokuwiki::build(&doc);
+        let built = String::from_utf8(doc.emit()).expect("build() output is UTF-8");
 
         let mut w = dokuwiki::Writer::new(Vec::<u8>::new());
         for e in dokuwiki::events(&input).map(dokuwiki::Event::into_owned) {

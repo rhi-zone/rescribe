@@ -4,6 +4,7 @@
 //! to the format-independent `creole` crate, then to Creole markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as Creole markup.
@@ -18,8 +19,8 @@ pub fn emit_with_options(
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let blocks = convert_nodes(&doc.content.children);
     let creole_doc = creole::CreoleDoc { blocks };
-    let output = creole::build(&creole_doc);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = creole_doc.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_nodes(nodes: &[Node]) -> Vec<creole::Block> {

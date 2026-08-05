@@ -27,6 +27,7 @@
 
 use crate::ast::{CreoleDoc, Diagnostic};
 use crate::events::OwnedEvent;
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven Creole parser that returns the full AST on finish.
 #[derive(Default)]
@@ -51,24 +52,11 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming Creole events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
-
 /// Chunked streaming Creole parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block). Accumulates lines between blank lines, then
 /// parses and emits events for each block.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -78,7 +66,7 @@ pub struct StreamingParser<H: Handler> {
     in_nowiki: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
