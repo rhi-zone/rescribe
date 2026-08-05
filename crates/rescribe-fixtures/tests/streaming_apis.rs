@@ -7571,7 +7571,7 @@ fn tikiwiki_streaming_writer_matches_builder_over_all_fixtures() {
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
         let (doc, _) = tikiwiki::parse(&input);
-        let built = tikiwiki::build(&doc);
+        let built = String::from_utf8(Emit::emit(&doc)).expect("emit() output is UTF-8");
 
         let mut w = tikiwiki::Writer::new(Vec::<u8>::new());
         for e in tikiwiki::tikiwiki_events(&input) {
@@ -7582,7 +7582,7 @@ fn tikiwiki_streaming_writer_matches_builder_over_all_fixtures() {
         checked += 1;
         if built != streamed && result.is_ok() {
             result = Err(format!(
-                "streaming Writer diverged from build() for fixture {}:\n  build():  \
+                "streaming Writer diverged from emit() for fixture {}:\n  emit():   \
                  {built:?}\n  Writer(): {streamed:?}",
                 path.display()
             ));
