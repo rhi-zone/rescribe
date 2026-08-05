@@ -284,9 +284,11 @@ writer that drops attributes), caught only when someone hand-wrote the first-eve
 that specific API.
 
 `crates/rescribe-fixtures/src/streaming_harness.rs` and
-`crates/rescribe-fixtures/tests/streaming_apis.rs` extend the harness to cover `events()`,
+`crates/rescribe-fixtures/tests/streaming_apis.rs` (a bare `mod` list — the actual
+per-format checks live one file per format under `crates/rescribe-fixtures/tests/streaming_apis/`,
+with shared helpers in that directory's `common.rs`) extend the harness to cover `events()`,
 `StreamingParser<H>`, and the streaming writer directly against the `{format}-fmt` crates
-(not just the rescribe adapter). This section documents that contract; see those two files
+(not just the rescribe adapter). This section documents that contract; see those files
 for the current implementation and the honest, per-format accounting of what's actually
 wired vs. declared-but-not-yet-checked.
 
@@ -300,7 +302,7 @@ to its test, reconstructing the exact `Event` sequence `events()` is expected to
 from the AST `parse()` returned, and compares it against the real `events()` output using
 the format crate's own `PartialEq` on `Event`. This is **exact** sequence equality (order and
 every attribute), not a lossy shape-only comparison — possible because a well-designed
-`Event` type already carries every attribute the AST does. `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+`Event` type already carries every attribute the AST does. `crates/rescribe-fixtures/tests/streaming_apis/rst.rs`'s
 `ast_to_events` for rst-fmt is the reference instantiation.
 
 **`StreamingParser<H>` vs. `events()`.** Feed the same input to `StreamingParser` under
@@ -339,7 +341,7 @@ an `ApiState`:
 
 Every format tested in `tests/run.rs` must appear either in `CAPABILITIES` or in the
 `NOT_YET_AUDITED` list (an even more honest "nobody has individually verified this format's
-API status yet" placeholder) — `tests/streaming_apis.rs::every_run_rs_format_has_a_capability_entry`
+API status yet" placeholder) — `tests/streaming_apis/common.rs::every_run_rs_format_has_a_capability_entry`
 enforces this. The design intent: "not checked" must always be a line of code someone wrote
 and can review in a diff, never silent absence from the harness.
 
