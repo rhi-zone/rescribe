@@ -4384,6 +4384,7 @@ name = "rescribe-write-tikiwiki"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "tikiwiki",
 ]
@@ -5005,6 +5006,7 @@ name = "tikiwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
