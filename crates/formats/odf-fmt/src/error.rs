@@ -59,49 +59,24 @@ impl From<std::io::Error> for Error {
 ///
 /// Diagnostics describe constructs that were encountered but could not be
 /// fully represented (fidelity warnings) or other non-fatal issues.
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    /// Human-readable message.
-    pub message: String,
-    /// Severity level.
-    pub level: DiagLevel,
+/// Re-exported from `rescribe-format-api` — see that crate for why
+/// `Diagnostic`/`Severity`/`Span` are shared across every format crate.
+/// odf-fmt never populated `span`/`code` (uses `Span::NONE`/`""`); `level`
+/// (`Warning`/`Info`, no `Error` variant) maps directly onto the shared
+/// `Severity` enum, which is a strict superset.
+pub use rescribe_format_api::Diagnostic;
+/// Severity of a [`Diagnostic`]. Alias for the shared `Severity` type,
+/// kept under its original name for source compatibility.
+pub use rescribe_format_api::Severity as DiagLevel;
+
+/// Create a warning-level diagnostic.
+pub fn warn(message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagLevel::Warning, message)
 }
 
-/// Severity of a [`Diagnostic`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagLevel {
-    /// Non-fatal: construct was preserved but may have lost some fidelity.
-    Warning,
-    /// Informational: construct was skipped (e.g. unsupported feature).
-    Info,
-}
-
-impl Diagnostic {
-    /// Create a warning-level diagnostic.
-    pub fn warn(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            level: DiagLevel::Warning,
-        }
-    }
-
-    /// Create an info-level diagnostic.
-    pub fn info(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            level: DiagLevel::Info,
-        }
-    }
-}
-
-impl fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prefix = match self.level {
-            DiagLevel::Warning => "warning",
-            DiagLevel::Info => "info",
-        };
-        write!(f, "[{prefix}] {}", self.message)
-    }
+/// Create an info-level diagnostic.
+pub fn info(message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagLevel::Info, message)
 }
 
 /// Parse result: the parsed value plus any non-fatal diagnostics.

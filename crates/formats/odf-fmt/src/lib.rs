@@ -49,6 +49,50 @@ pub mod writer;
 pub use ast::*;
 pub use error::{DiagLevel, Diagnostic, Error, ParseResult};
 pub use events::{EventIter, OdfEvent};
+pub use rescribe_format_api::{Events, StreamingWrite};
+
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// Only `Events` and `StreamingWrite` are implemented here. `Parse` and
+// `Emit` are deliberately NOT implemented: this crate's `parse(&[u8]) ->
+// Result<ParseResult<OdfDocument>, Error>` and `emit(&OdfDocument) ->
+// Result<Vec<u8>, Error>` are hard-`Result`-returning (a corrupt ZIP or a
+// failed write is a real `Error`, not a diagnosable-and-continue case —
+// a deliberately different philosophy from zip-fmt's own `Parse` impl,
+// which treats archive corruption as diagnosable). Forcing these into the
+// trait's infallible `(Self, Vec<Diagnostic>)` / `Vec<u8>` shapes would
+// mean silently swallowing the `Err` case or synthesizing a placeholder
+// document/byte vector on failure — a real behavior change, not a
+// mechanical rename, and not something to guess at (same category as
+// rst-fmt's `Parse`/`Events` gap, documented in that crate's `lib.rs`).
+//
+// `StreamingParse` is also NOT implemented: unlike zip-fmt (which hand-
+// rolled a genuinely incremental, `Handler`-dispatching chunk parser to
+// work around ZIP's end-of-file central directory), odf-fmt's own
+// `batch::BatchParser` is pull-style (`feed()` buffers, `finish()` parses
+// the whole buffer and returns the AST) — there is no `Handler<E>`-based
+// push-dispatch construct anywhere in this crate to hang a `StreamingParse`
+// impl on. Building one would be new-feature work (a real, pre-existing
+// gap against this crate's own documented "ODF is ZIP-based, true
+// incremental parsing is not possible" limitation — see `batch.rs`'s
+// module docs), not a trait migration.
+
+impl Events for OdfDocument {
+    type Event<'a> = OdfEvent<'static>;
+    type EventIter<'a> = EventIter;
+
+    fn events(input: &[u8]) -> EventIter {
+        events::events(input)
+    }
+}
+
+impl StreamingWrite for OdfDocument {
+    type Writer<W: std::io::Write> = batch::Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> batch::Writer<W> {
+        batch::Writer::new(sink)
+    }
+}
 
 /// Parse an ODF ZIP archive from bytes and return a SAX-style event iterator.
 ///

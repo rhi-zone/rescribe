@@ -659,6 +659,7 @@ version = "0.1.0"
 dependencies = [
  "html5ever",
  "markup5ever_rcdom",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -1015,6 +1016,7 @@ version = "0.1.0"
 dependencies = [
  "ooxml-codegen",
  "quick-xml",
+ "rescribe-format-api",
  "serde",
  "serde_yaml",
  "thiserror",
@@ -1775,6 +1777,7 @@ version = "0.1.0"
 dependencies = [
  "html-fmt",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 

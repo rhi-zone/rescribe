@@ -51,6 +51,7 @@ extra-children = []
 quick-xml.workspace = true
 thiserror.workspace = true
 serde.workspace = true
+rescribe-format-api.workspace = true
 zip.workspace = true
 
 [build-dependencies]

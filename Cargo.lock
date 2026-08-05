@@ -2338,6 +2338,7 @@ version = "0.1.0"
 dependencies = [
  "ooxml-codegen",
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "serde",
  "serde_yaml",
  "thiserror",
