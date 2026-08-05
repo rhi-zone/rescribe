@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 mod muse_events_check {
     use super::{find_input, fixtures_root};
     use muse_fmt::{Block, Inline, MuseDoc, OwnedMuseEvent};
+    use rescribe_format_api::Parse;
     use std::borrow::Cow;
 
     /// Reconstruct the exact [`muse_fmt::OwnedMuseEvent`] sequence `events()`
@@ -222,7 +223,7 @@ mod muse_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = muse_fmt::parse(&input);
+            let (doc, _diags) = muse_fmt::MuseDoc::parse(input.as_bytes());
             let expected = muse_ast_to_events(&doc);
             let actual: Vec<OwnedMuseEvent> = muse_fmt::events::events(&doc)
                 .map(|e| e.into_owned())
@@ -280,7 +281,7 @@ fn muse_streaming_parser_matches_events_and_is_incremental() {
         let Ok(input_str) = std::str::from_utf8(&input) else {
             continue;
         };
-        let (doc, _diags) = muse_fmt::parse(input_str);
+        let (doc, _diags) = muse_fmt::MuseDoc::parse(input_str.as_bytes());
         let bulk: Vec<muse_fmt::OwnedMuseEvent> = muse_fmt::events::events(&doc)
             .map(|e| e.into_owned())
             .collect();
@@ -361,8 +362,8 @@ fn muse_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = muse_fmt::parse(&input);
-        let built = muse_fmt::build(&doc);
+        let (doc, _diags) = muse_fmt::MuseDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("emit produces valid UTF-8");
 
         let mut w = muse_fmt::Writer::new(Vec::<u8>::new());
         for e in muse_fmt::events::events(&doc) {

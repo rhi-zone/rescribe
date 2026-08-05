@@ -9,7 +9,9 @@
 //!
 //! # Example
 //! ```
-//! let (doc, _) = muse_fmt::parse("* Hello\n\nA paragraph.\n");
+//! use rescribe_format_api::Parse;
+//!
+//! let (doc, _) = muse_fmt::MuseDoc::parse(b"* Hello\n\nA paragraph.\n");
 //! let events: Vec<_> = muse_fmt::events::events(&doc).collect();
 //! assert!(events.len() > 0);
 //! ```

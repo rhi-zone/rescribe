@@ -85,16 +85,11 @@ impl BatchParser {
 
 /// Handler trait for streaming Muse events.
 ///
-/// Implemented automatically for any `FnMut(OwnedMuseEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedMuseEvent);
-}
-
-impl<F: FnMut(OwnedMuseEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedMuseEvent) {
-        self(event);
-    }
-}
+/// Re-exported from `rescribe-format-api` — see that crate for why every
+/// format crate's `StreamingParser<H>` bounds `H` by this one shared trait
+/// instead of a locally declared one. Implemented automatically for any
+/// `FnMut(OwnedMuseEvent)`.
+pub use rescribe_format_api::Handler;
 
 // ── Block-boundary classification ───────────────────────────────────────────
 
@@ -213,7 +208,7 @@ enum Pending {
 ///
 /// Memory: O(largest block). See the module docs for the block-boundary
 /// design and its relationship to [`crate::parse::Parser::parse_block_loop`].
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedMuseEvent>> {
     handler: H,
     /// Raw bytes not yet forming a complete line. `\n` is never a
     /// continuation byte in valid UTF-8, so splitting on raw `\n` bytes
@@ -228,7 +223,7 @@ pub struct StreamingParser<H: Handler> {
     keywords: Option<String>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedMuseEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     /// Emits `StartDocument` immediately.
     pub fn new(mut handler: H) -> Self {

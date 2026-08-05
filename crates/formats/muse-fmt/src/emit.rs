@@ -5,7 +5,7 @@ use crate::ast::{Block, Inline, MuseDoc};
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Build a Muse string from a [`MuseDoc`].
-pub fn build(doc: &MuseDoc) -> String {
+pub(crate) fn build(doc: &MuseDoc) -> String {
     let mut ctx = BuildContext::new();
 
     // Emit document header directives
