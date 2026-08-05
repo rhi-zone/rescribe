@@ -16,6 +16,7 @@ use rescribe_core::{
     WarningKind,
 };
 use rescribe_std::prop;
+use std::collections::HashMap;
 
 /// BibLaTeX entry node type.
 const BIBLATEX_ENTRY: &str = "biblatex:entry";
@@ -33,15 +34,24 @@ pub fn emit_with_options(
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut ctx = EmitContext::new();
     collect_nodes(&doc.content.children, &mut ctx);
-    let output = ctx.bibliography.to_biblatex_string();
-    Ok(ConversionResult::with_warnings(
-        output.into_bytes(),
-        ctx.warnings,
-    ))
+    let output = render_bibliography(&ctx);
+    Ok(ConversionResult::with_warnings(output, ctx.warnings))
+}
+
+/// Per-entry raw-preservation splice: the entry's original type name, when
+/// `EntryType::new()` didn't recognize it (`EntryType::Unknown(_)`).
+/// `Entry::to_biblatex_string()` collapses `Unknown` to `misc` internally,
+/// with no public API to opt out — see `render_bibliography`, which splices
+/// the original name back into the entry's own rendered output.
+#[derive(Default)]
+struct EntrySplice {
+    raw_entry_type: Option<String>,
 }
 
 struct EmitContext {
     bibliography: Bibliography,
+    /// Splice instructions keyed by cite key, applied in `render_bibliography`.
+    splices: HashMap<String, EntrySplice>,
     warnings: Vec<FidelityWarning>,
 }
 
@@ -49,16 +59,19 @@ impl EmitContext {
     fn new() -> Self {
         Self {
             bibliography: Bibliography::new(),
+            splices: HashMap::new(),
             warnings: Vec::new(),
         }
     }
 
-    /// Insert a finished entry, warning (rather than silently dropping) if
-    /// its cite key collides with one already present — BibLaTeX itself
-    /// requires unique keys, so a collision here reflects unrepresentable
-    /// source data, not an adapter bug.
-    fn insert(&mut self, entry: Entry) {
+    /// Insert a finished entry (with its raw-preservation splice info),
+    /// warning (rather than silently dropping) if its cite key collides with
+    /// one already present — BibLaTeX itself requires unique keys, so a
+    /// collision here reflects unrepresentable source data, not an adapter
+    /// bug.
+    fn insert(&mut self, entry: Entry, splice: EntrySplice) {
         let key = entry.key.clone();
+        self.splices.insert(key.clone(), splice);
         if self.bibliography.insert(entry).is_some() {
             self.warnings.push(FidelityWarning::new(
                 Severity::Minor,
@@ -71,26 +84,62 @@ impl EmitContext {
     }
 }
 
-/// Build an `EntryType` from a source-provided type name, warning when the
-/// name isn't part of `biblatex`'s known vocabulary: both
-/// `Entry::to_biblatex_string` and `Entry::to_bibtex_string` silently
-/// collapse any `EntryType::Unknown(_)` to `misc` (there is no public API to
-/// opt out of this), so a custom/unrecognized entry type name is lost on
-/// emission. This is a `biblatex`-crate limitation, not a design choice made
-/// here.
-fn entry_type_for(name: &str, warnings: &mut Vec<FidelityWarning>) -> EntryType {
-    let ty = EntryType::new(name);
-    if matches!(ty, EntryType::Unknown(_)) {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::UnsupportedNode(format!("biblatex:type={name}")),
-            format!(
-                "Custom BibLaTeX entry type '{name}' is not recognized by the biblatex crate and \
-                 will be emitted as 'misc' (biblatex::EntryType::Unknown collapses to Misc on write)"
-            ),
-        ));
+/// Render every entry in `ctx.bibliography` to BibLaTeX and apply each
+/// entry's raw-preservation splice, joining with the exact same
+/// blank-line-between, trailing-newline convention
+/// `biblatex::Bibliography::write_biblatex` uses (verified against
+/// `biblatex` 0.11's source: no separator before the first entry, `"\n\n"`
+/// between entries, one trailing `"\n"`) — so output is byte-identical to
+/// the un-spliced path when no splice applies. Per-entry serialization
+/// itself is still entirely `Entry::to_biblatex_string()`; this function
+/// only joins strings and substitutes the entry-type token in the entry's
+/// own output, it does not build BibLaTeX syntax.
+fn render_bibliography(ctx: &EmitContext) -> Vec<u8> {
+    let mut parts = Vec::new();
+    for entry in ctx.bibliography.iter() {
+        let mut text = entry.to_biblatex_string();
+        if let Some(splice) = ctx.splices.get(&entry.key)
+            && let Some(raw_type) = &splice.raw_entry_type
+        {
+            text = splice_entry_type(&text, raw_type);
+        }
+        parts.push(text);
     }
-    ty
+    let mut out = parts.join("\n\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out.into_bytes()
+}
+
+/// Replace a `@misc{` entry header with `@{raw_type}{`. Only ever called when
+/// `raw_type` was the entry's real source type and `EntryType::new(raw_type)`
+/// produced `Unknown` (so `Entry::to_biblatex_string()` is guaranteed to have
+/// emitted `@misc{` — see `EntryType::to_biblatex`), and `raw_type` itself
+/// can never literally be `"misc"` (that string parses to the known `Misc`
+/// variant, not `Unknown`), so this never fires as a spurious no-op rename.
+fn splice_entry_type(entry_text: &str, raw_type: &str) -> String {
+    match entry_text.strip_prefix("@misc{") {
+        Some(rest) => format!("@{raw_type}{{{rest}"),
+        None => entry_text.to_string(),
+    }
+}
+
+/// Build an `EntryType` from a source-provided type name. When the name
+/// isn't part of `biblatex`'s known vocabulary (`EntryType::Unknown`),
+/// `Entry::to_biblatex_string` would otherwise silently collapse it to
+/// `misc` (there is no public API to opt out) — the caller splices the
+/// original name back into the rendered output instead (see
+/// `splice_entry_type`), so this no longer needs to warn.
+fn entry_type_for(name: &str) -> EntryType {
+    EntryType::new(name)
+}
+
+/// The original entry type name, if `ty` came back `Unknown` — i.e. the
+/// value `splice_entry_type` needs, or `None` if `ty` is one `biblatex`
+/// recognizes and will round-trip on its own.
+fn raw_entry_type_if_unknown(ty: &EntryType, name: &str) -> Option<String> {
+    matches!(ty, EntryType::Unknown(_)).then(|| name.to_string())
 }
 
 /// Set a field to a single plain (non-verbatim) chunk if `value` is
@@ -118,21 +167,21 @@ fn collect_node(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
         "document" | "definition_list" => collect_nodes(&node.children, ctx),
         BIBLATEX_ENTRY => {
-            let entry = build_biblatex_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_biblatex_entry(node);
+            ctx.insert(entry, splice);
         }
         BIBTEX_ENTRY => {
-            let entry = build_bibtex_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_bibtex_entry(node);
+            ctx.insert(entry, splice);
         }
         "citation_entry" => {
-            let entry = build_citation_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_citation_entry(node);
+            ctx.insert(entry, splice);
         }
         _ => {
             if is_biblatex_type(node.kind.as_str()) {
-                let entry = build_typed_entry(node, &mut ctx.warnings);
-                ctx.insert(entry);
+                let (entry, splice) = build_typed_entry(node);
+                ctx.insert(entry, splice);
             } else {
                 ctx.warnings.push(FidelityWarning::new(
                     Severity::Minor,
@@ -181,14 +230,15 @@ fn is_biblatex_type(s: &str) -> bool {
     )
 }
 
-fn build_biblatex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_biblatex_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.props.get_str("biblatex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("biblatex:key").unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     let mut fields: Vec<(&str, String)> = Vec::new();
     for (key, value) in node.props.iter() {
@@ -205,17 +255,18 @@ fn build_biblatex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Ent
         set_field(&mut entry, name, &value);
     }
 
-    entry
+    (entry, splice)
 }
 
-fn build_bibtex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_bibtex_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.props.get_str("bibtex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     // BibLaTeX field mappings from BibTeX.
     let field_mappings = [
@@ -243,18 +294,19 @@ fn build_bibtex_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry
         }
     }
 
-    entry
+    (entry, splice)
 }
 
-fn build_citation_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_citation_entry(node: &Node) -> (Entry, EntrySplice) {
     let csl_type = node.props.get_str("type").unwrap_or("misc");
     let entry_type_name = csl_to_biblatex_type(csl_type);
     let cite_key = node.props.get_str(prop::ID).unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     if let Some(title) = node.props.get_str("title") {
         set_field(&mut entry, "title", title);
@@ -292,7 +344,7 @@ fn build_citation_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Ent
         }
     }
 
-    entry
+    (entry, splice)
 }
 
 fn csl_to_biblatex_type(csl: &str) -> &'static str {
@@ -311,7 +363,7 @@ fn csl_to_biblatex_type(csl: &str) -> &'static str {
     }
 }
 
-fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_typed_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.kind.as_str();
     let cite_key = node
         .props
@@ -319,10 +371,11 @@ fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry 
         .or(node.props.get_str(prop::ID))
         .unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     // BibLaTeX standard fields.
     let field_mappings = [
@@ -367,7 +420,7 @@ fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry 
         }
     }
 
-    entry
+    (entry, splice)
 }
 
 #[cfg(test)]
@@ -443,8 +496,13 @@ mod tests {
         assert!(output.contains("date = {2024},"));
     }
 
+    /// Custom/unrecognized entry types now round-trip: `biblatex::EntryType::new`
+    /// falls back to `Unknown(name)`, which `Entry::to_biblatex_string()`
+    /// would otherwise collapse to `misc`; `render_bibliography` splices the
+    /// original name back over the emitted `@misc{` header, so no fidelity
+    /// warning fires.
     #[test]
-    fn test_unknown_entry_type_warns_and_falls_back_to_misc() {
+    fn test_unknown_entry_type_round_trips_no_warning() {
         let entry = Node::new(NodeKind::from(BIBLATEX_ENTRY))
             .prop("biblatex:type", "frobnicate")
             .prop("biblatex:key", "x")
@@ -453,12 +511,48 @@ mod tests {
         let doc = Document::new().with_content(Node::new(NodeKind::from("document")).child(entry));
         let result = emit(&doc).unwrap();
         let output = String::from_utf8(result.value).unwrap();
-        assert!(output.contains("@misc{x,"));
+        assert!(output.contains("@frobnicate{x,"), "output was:\n{output}");
+        assert!(!output.contains("@misc{x,"), "output was:\n{output}");
         assert!(
-            result
-                .warnings
-                .iter()
-                .any(|w| w.message.contains("frobnicate"))
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
+        );
+    }
+
+    /// A recognized standard type (`misc` itself) never gets spliced.
+    #[test]
+    fn test_misc_entry_type_not_spliced() {
+        let entry = Node::new(NodeKind::from(BIBLATEX_ENTRY))
+            .prop("biblatex:type", "misc")
+            .prop("biblatex:key", "x")
+            .prop("biblatex:title", "T");
+        let doc = Document::new().with_content(Node::new(NodeKind::from("document")).child(entry));
+        let output = emit_str(&doc);
+        assert!(output.contains("@misc{x,"), "output was:\n{output}");
+    }
+
+    /// Two entries, only one with a custom type: proves the entry-type
+    /// splice is keyed per cite key and doesn't touch other entries'
+    /// `@misc{` headers.
+    #[test]
+    fn test_unknown_entry_type_does_not_bleed_into_other_entries() {
+        let entry1 = Node::new(NodeKind::from(BIBLATEX_ENTRY))
+            .prop("biblatex:type", "frobnicate")
+            .prop("biblatex:key", "custom_one");
+        let entry2 = Node::new(NodeKind::from(BIBLATEX_ENTRY))
+            .prop("biblatex:type", "misc")
+            .prop("biblatex:key", "real_misc_two");
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry1, entry2]));
+        let output = emit_str(&doc);
+        assert!(
+            output.contains("@frobnicate{custom_one,"),
+            "output was:\n{output}"
+        );
+        assert!(
+            output.contains("@misc{real_misc_two,"),
+            "output was:\n{output}"
         );
     }
 }

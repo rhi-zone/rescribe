@@ -38,7 +38,7 @@ pub fn emit_with_options(
 
     collect_nodes(&doc.content.children, &mut ctx);
 
-    let output = ctx.bibliography.to_bibtex_string();
+    let output = render_bibliography(&ctx)?;
 
     Ok(ConversionResult::with_warnings(
         output.into_bytes(),
@@ -46,9 +46,30 @@ pub fn emit_with_options(
     ))
 }
 
+/// Per-entry raw-preservation splices, applied to `Entry::to_bibtex_string()`'s
+/// own output after the fact (see `render_bibliography`). Both fields cover a
+/// gap where `biblatex`'s own BibTeX serializer silently discards information
+/// the IR still has, with no public API to opt out:
+///
+/// - `raw_entry_type`: the entry's original type name, when
+///   `EntryType::new()` didn't recognize it (`EntryType::Unknown(_)`).
+///   `Entry::to_bibtex_string()` collapses `Unknown` to `misc` internally.
+/// - `date_marker`: the EDTF `?`/`~`/`%` (uncertain/approximate/both) suffix
+///   to reinsert into the finest-grained emitted date field.
+///   `Entry::to_bibtex_string()` re-derives `year`/`month`/`day` from the
+///   date via `DateValue::to_fieldset()`, which drops the suffix
+///   unconditionally.
+#[derive(Default)]
+struct EntrySplice {
+    raw_entry_type: Option<String>,
+    date_marker: Option<(&'static str, String)>,
+}
+
 /// Emit context for tracking state during emission.
 struct EmitContext {
     bibliography: Bibliography,
+    /// Splice instructions keyed by cite key, applied in `render_bibliography`.
+    splices: HashMap<String, EntrySplice>,
     warnings: Vec<FidelityWarning>,
 }
 
@@ -56,16 +77,19 @@ impl EmitContext {
     fn new() -> Self {
         Self {
             bibliography: Bibliography::new(),
+            splices: HashMap::new(),
             warnings: Vec::new(),
         }
     }
 
-    /// Insert a finished entry, warning (rather than silently dropping) if
-    /// its cite key collides with one already present — BibTeX itself
-    /// requires unique keys, so a collision here reflects unrepresentable
-    /// source data, not an adapter bug.
-    fn insert(&mut self, entry: Entry) {
+    /// Insert a finished entry (with its raw-preservation splice info),
+    /// warning (rather than silently dropping) if its cite key collides with
+    /// one already present — BibTeX itself requires unique keys, so a
+    /// collision here reflects unrepresentable source data, not an adapter
+    /// bug.
+    fn insert(&mut self, entry: Entry, splice: EntrySplice) {
         let key = entry.key.clone();
+        self.splices.insert(key.clone(), splice);
         if self.bibliography.insert(entry).is_some() {
             self.warnings.push(FidelityWarning::new(
                 Severity::Minor,
@@ -78,25 +102,95 @@ impl EmitContext {
     }
 }
 
-/// Build an `EntryType` from a source-provided type name, warning when the
-/// name isn't part of `biblatex`'s known vocabulary: `Entry::to_bibtex_string`
-/// silently collapses any `EntryType::Unknown(_)` to `misc` (there is no
-/// public API to opt out of this), so a custom/unrecognized entry type name
-/// is lost on emission. This is a `biblatex`-crate limitation, not a design
-/// choice made here.
-fn entry_type_for(name: &str, warnings: &mut Vec<FidelityWarning>) -> EntryType {
-    let ty = EntryType::new(name);
-    if matches!(ty, EntryType::Unknown(_)) {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::UnsupportedNode(format!("bibtex:entry-type={name}")),
-            format!(
-                "Custom BibTeX entry type '{name}' is not recognized by the biblatex crate and \
-                 will be emitted as 'misc' (biblatex::EntryType::Unknown collapses to Misc on write)"
-            ),
-        ));
+/// Render every entry in `ctx.bibliography` to BibTeX and apply each entry's
+/// raw-preservation splice, joining with the exact same blank-line-between,
+/// trailing-newline convention `biblatex::Bibliography::write_bibtex` uses
+/// (verified against `biblatex` 0.11's source: no separator before the first
+/// entry, `"\n\n"` between entries, one trailing `"\n"`) — so output is
+/// byte-identical to the un-spliced path when no splice applies. Per-entry
+/// serialization itself is still entirely `Entry::to_bibtex_string()`; this
+/// function only joins strings and substitutes specific field values in the
+/// entry's own output, it does not build BibTeX syntax.
+fn render_bibliography(ctx: &EmitContext) -> Result<String, EmitError> {
+    let mut parts = Vec::new();
+    for entry in ctx.bibliography.iter() {
+        let mut text = entry
+            .to_bibtex_string()
+            .map_err(|e| EmitError::UnsupportedNode(format!("malformed BibTeX date: {e:?}")))?;
+        if let Some(splice) = ctx.splices.get(&entry.key) {
+            if let Some(raw_type) = &splice.raw_entry_type {
+                text = splice_entry_type(&text, raw_type);
+            }
+            if let Some((field, marker)) = &splice.date_marker {
+                text = splice_date_marker(&text, field, marker);
+            }
+        }
+        parts.push(text);
     }
-    ty
+    let mut out = parts.join("\n\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// Replace a `@misc{` entry header with `@{raw_type}{`. Only ever called when
+/// `raw_type` was the entry's real source type and `EntryType::new(raw_type)`
+/// produced `Unknown` (so `Entry::to_bibtex_string()` is guaranteed to have
+/// emitted `@misc{` — see `EntryType::to_bibtex`), and `raw_type` itself can
+/// never literally be `"misc"` (that string parses to the known `Misc`
+/// variant, not `Unknown`), so this never fires as a spurious no-op rename.
+fn splice_entry_type(entry_text: &str, raw_type: &str) -> String {
+    match entry_text.strip_prefix("@misc{") {
+        Some(rest) => format!("@{raw_type}{{{rest}"),
+        None => entry_text.to_string(),
+    }
+}
+
+/// Reinsert an EDTF uncertain/approximate marker into the exact field line
+/// `Entry::to_bibtex_string()` emitted for `field` (`"year"`, `"month"`, or
+/// `"day"`) in this entry's own serialization. Matches full lines only
+/// (`"{field} = {...},\n"`, the exact format `Entry::to_bibtex_string`
+/// always uses for every field — see `biblatex` 0.11's source), so this
+/// can't misfire on a substring appearing inside another field's escaped
+/// value.
+fn splice_date_marker(entry_text: &str, field: &str, marker: &str) -> String {
+    let prefix = format!("{field} = {{");
+    let mut out = String::with_capacity(entry_text.len() + marker.len());
+    let mut spliced = false;
+    for line in entry_text.split_inclusive('\n') {
+        if !spliced && line.starts_with(&prefix) && line.trim_end().ends_with("},") {
+            let trimmed = line.trim_end();
+            let (body, had_newline) = (&trimmed[..trimmed.len() - 2], line.ends_with('\n'));
+            out.push_str(body);
+            out.push_str(marker);
+            out.push_str("},");
+            if had_newline {
+                out.push('\n');
+            }
+            spliced = true;
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Build an `EntryType` from a source-provided type name. When the name
+/// isn't part of `biblatex`'s known vocabulary (`EntryType::Unknown`),
+/// `Entry::to_bibtex_string` would otherwise silently collapse it to `misc`
+/// (there is no public API to opt out) — the caller splices the original
+/// name back into the rendered output instead (see `splice_entry_type`), so
+/// this no longer needs to warn.
+fn entry_type_for(name: &str) -> EntryType {
+    EntryType::new(name)
+}
+
+/// The original entry type name, if `ty` came back `Unknown` — i.e. the
+/// value `splice_entry_type` needs, or `None` if `ty` is one `biblatex`
+/// recognizes and will round-trip on its own.
+fn raw_entry_type_if_unknown(ty: &EntryType, name: &str) -> Option<String> {
+    matches!(ty, EntryType::Unknown(_)).then(|| name.to_string())
 }
 
 /// Set a field to a single plain (non-verbatim) chunk if `value` is
@@ -120,23 +214,28 @@ fn set_field(entry: &mut Entry, name: &str, value: &str) {
 /// `year`/`month`/`day` fields from this internally and, in doing so,
 /// unconditionally discards the uncertain/approximate markers (BibTeX has no
 /// field-trio equivalent for them and the crate provides no way to opt out
-/// of that re-derivation) — a warning is emitted in that case. BibLaTeX
-/// output is unaffected: `Entry::to_biblatex_string` keeps a single `date`
-/// field with the `?`/`~`/`%` suffix intact.
+/// of that re-derivation). BibLaTeX output is unaffected: `Entry::to_biblatex_string`
+/// keeps a single `date` field with the `?`/`~`/`%` suffix intact, so this is
+/// BibTeX-only.
+///
+/// Returns the splice `render_bibliography` needs to reinsert the marker:
+/// the finest-grained field `biblatex` will emit (`day` > `month` > `year`,
+/// matching where EDTF puts the suffix — at the end of the full date string)
+/// and the marker itself, computed with the exact same
+/// `(approximate, uncertain) -> "%"/"~"/"?"` mapping `biblatex::Date::to_chunks`
+/// uses internally, so it's guaranteed invertible: the two booleans are the
+/// only source biblatex itself trusts, and they fully determine the marker.
 fn set_date(
     entry: &mut Entry,
     map: &HashMap<String, PropValue>,
     uncertain: bool,
     approximate: bool,
-    warnings: &mut Vec<FidelityWarning>,
-) {
+) -> Option<(&'static str, String)> {
     let as_int = |key: &str| match map.get(key) {
         Some(PropValue::Int(i)) => Some(*i),
         _ => None,
     };
-    let Some(year) = as_int("year") else {
-        return;
-    };
+    let year = as_int("year")?;
     let month = as_int("month");
     let day = as_int("day");
 
@@ -153,16 +252,23 @@ fn set_date(
     };
     entry.set_as::<Date>("date", &date);
 
-    if uncertain || approximate {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::UnsupportedNode("bibtex:date-uncertain".to_string()),
-            "BibTeX has no year/month/day representation for uncertain/approximate dates; \
-             the marker is dropped when biblatex::Entry::to_bibtex_string splits the date into \
-             separate fields (BibLaTeX output preserves it)"
-                .to_string(),
-        ));
+    if !uncertain && !approximate {
+        return None;
     }
+    let marker = match (approximate, uncertain) {
+        (true, true) => "%",
+        (true, false) => "~",
+        (false, true) => "?",
+        (false, false) => unreachable!("checked above"),
+    };
+    let field = if day.is_some() {
+        "day"
+    } else if month.is_some() {
+        "month"
+    } else {
+        "year"
+    };
+    Some((field, marker.to_string()))
 }
 
 /// Walk a sequence of nodes, converting recognized entry shapes into
@@ -178,25 +284,25 @@ fn collect_node(node: &Node, ctx: &mut EmitContext) {
         "document" | node::BIBLIOGRAPHY => collect_nodes(&node.children, ctx),
 
         node::BIBLIOGRAPHY_ENTRY => {
-            let entry = build_bibliography_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_bibliography_entry(node);
+            ctx.insert(entry, splice);
         }
 
         // Legacy shape, kept for backwards compatibility (see `BIBTEX_ENTRY`
         // doc comment above).
         BIBTEX_ENTRY => {
-            let entry = build_legacy_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_legacy_entry(node);
+            ctx.insert(entry, splice);
         }
         "citation_entry" => {
-            let entry = build_citation_entry(node, &mut ctx.warnings);
-            ctx.insert(entry);
+            let (entry, splice) = build_citation_entry(node);
+            ctx.insert(entry, splice);
         }
 
         _ => {
             if is_bibtex_type(node.kind.as_str()) {
-                let entry = build_typed_entry(node, &mut ctx.warnings);
-                ctx.insert(entry);
+                let (entry, splice) = build_typed_entry(node);
+                ctx.insert(entry, splice);
             } else {
                 ctx.warnings.push(FidelityWarning::new(
                     Severity::Minor,
@@ -241,17 +347,19 @@ fn is_bibtex_type(s: &str) -> bool {
 /// BibTeX). Repeated `author`/`editor` fields are rejoined with ` and `; a
 /// `page_first`/`page_last` pair recombines into one `pages` field;
 /// `prop::DATE` is handled by `set_date` above.
-fn build_bibliography_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_bibliography_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.props.get_str("bibtex:entry-type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let mut splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+        date_marker: None,
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
-        set_date(
+        splice.date_marker = set_date(
             &mut entry,
             date,
             node.props
@@ -260,7 +368,6 @@ fn build_bibliography_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) ->
             node.props
                 .get_bool("bibtex:date-approximate")
                 .unwrap_or(false),
-            warnings,
         );
     }
 
@@ -300,7 +407,7 @@ fn build_bibliography_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) ->
         set_field(&mut entry, "editor", &editors.join(" and "));
     }
 
-    entry
+    (entry, splice)
 }
 
 /// Join an `author`/`editor` field's direct `TEXT` children (given name,
@@ -344,14 +451,16 @@ fn flatten_field_text_into(node: &Node, out: &mut String) {
 
 /// Build a `biblatex::Entry` from a legacy flat `bibtex:entry` node (see
 /// `BIBTEX_ENTRY` doc comment).
-fn build_legacy_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_legacy_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.props.get_str("bibtex:type").unwrap_or("misc");
     let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+        date_marker: None,
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     let mut fields: Vec<(&str, String)> = Vec::new();
     for (key, value) in node.props.iter() {
@@ -368,12 +477,12 @@ fn build_legacy_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry
         set_field(&mut entry, name, &value);
     }
 
-    entry
+    (entry, splice)
 }
 
 /// Build a `biblatex::Entry` from a typed entry (where the node kind is the
 /// entry type).
-fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_typed_entry(node: &Node) -> (Entry, EntrySplice) {
     let entry_type_name = node.kind.as_str();
     let cite_key = node
         .props
@@ -381,10 +490,12 @@ fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry 
         .or(node.props.get_str(prop::ID))
         .unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+        date_marker: None,
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     let field_mappings = [
         ("author", "author"),
@@ -420,19 +531,21 @@ fn build_typed_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry 
         }
     }
 
-    entry
+    (entry, splice)
 }
 
 /// Build a `biblatex::Entry` from a citation entry with CSL-like properties.
-fn build_citation_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Entry {
+fn build_citation_entry(node: &Node) -> (Entry, EntrySplice) {
     let csl_type = node.props.get_str("type").unwrap_or("misc");
     let entry_type_name = csl_to_bibtex_type(csl_type);
     let cite_key = node.props.get_str(prop::ID).unwrap_or("unknown");
 
-    let mut entry = Entry::new(
-        cite_key.to_string(),
-        entry_type_for(entry_type_name, warnings),
-    );
+    let ty = entry_type_for(entry_type_name);
+    let splice = EntrySplice {
+        raw_entry_type: raw_entry_type_if_unknown(&ty, entry_type_name),
+        date_marker: None,
+    };
+    let mut entry = Entry::new(cite_key.to_string(), ty);
 
     if let Some(title) = node.props.get_str("title") {
         set_field(&mut entry, "title", title);
@@ -471,7 +584,7 @@ fn build_citation_entry(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Ent
         }
     }
 
-    entry
+    (entry, splice)
 }
 
 /// Map CSL types to BibTeX types.
@@ -568,8 +681,14 @@ mod tests {
         assert!(output.contains("month = {03},"));
     }
 
+    /// Uncertain/approximate BibTeX dates now round-trip: `set_date` derives
+    /// the EDTF marker from the `bibtex:date-uncertain`/`bibtex:date-approximate`
+    /// booleans (which fully determine it — see `set_date`'s doc comment) and
+    /// `render_bibliography` splices it back into whichever of `year`/`month`/`day`
+    /// `Entry::to_bibtex_string()` actually emitted, so no fidelity warning
+    /// fires and no `raw-date` property is needed for this case.
     #[test]
-    fn test_emit_date_uncertain_warns() {
+    fn test_emit_date_uncertain_round_trips_no_warning() {
         let mut map = HashMap::new();
         map.insert("year".to_string(), PropValue::Int(2020));
         let entry = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
@@ -580,12 +699,90 @@ mod tests {
         let doc = Document::new()
             .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
         let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        assert!(output.contains("year = {2020?},"), "output was:\n{output}");
         assert!(
-            result
-                .warnings
-                .iter()
-                .any(|w| w.message.contains("uncertain"))
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
         );
+    }
+
+    #[test]
+    fn test_emit_date_approximate_round_trips() {
+        let mut map = HashMap::new();
+        map.insert("year".to_string(), PropValue::Int(2020));
+        map.insert("month".to_string(), PropValue::Int(3));
+        let entry = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "article")
+            .prop("bibtex:key", "x")
+            .prop(prop::DATE, PropValue::Map(map))
+            .prop("bibtex:date-approximate", true);
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        // Marker lands on the finest-grained field present (month, since no day).
+        assert!(output.contains("month = {03~},"), "output was:\n{output}");
+        assert!(output.contains("year = {2020},"), "output was:\n{output}");
+        assert!(
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
+        );
+    }
+
+    #[test]
+    fn test_emit_date_uncertain_and_approximate_round_trips() {
+        let mut map = HashMap::new();
+        map.insert("year".to_string(), PropValue::Int(2020));
+        map.insert("month".to_string(), PropValue::Int(3));
+        map.insert("day".to_string(), PropValue::Int(15));
+        let entry = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "article")
+            .prop("bibtex:key", "x")
+            .prop(prop::DATE, PropValue::Map(map))
+            .prop("bibtex:date-uncertain", true)
+            .prop("bibtex:date-approximate", true);
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let result = emit(&doc).unwrap();
+        let output = String::from_utf8(result.value).unwrap();
+        // Marker lands on the finest-grained field present (day).
+        assert!(output.contains("day = {15%},"), "output was:\n{output}");
+        assert!(
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
+        );
+    }
+
+    /// Two entries in one document, only one with an uncertain date: proves
+    /// the per-entry splice in `render_bibliography` doesn't bleed across
+    /// entries (each is spliced from its own `Entry::to_bibtex_string()`
+    /// output, keyed by cite key).
+    #[test]
+    fn test_emit_date_uncertain_does_not_bleed_into_other_entries() {
+        let mut map1 = HashMap::new();
+        map1.insert("year".to_string(), PropValue::Int(2020));
+        let entry1 = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "article")
+            .prop("bibtex:key", "uncertain_one")
+            .prop(prop::DATE, PropValue::Map(map1))
+            .prop("bibtex:date-uncertain", true);
+
+        let mut map2 = HashMap::new();
+        map2.insert("year".to_string(), PropValue::Int(2020));
+        let entry2 = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "article")
+            .prop("bibtex:key", "certain_two")
+            .prop(prop::DATE, PropValue::Map(map2));
+
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry1, entry2]));
+        let output = emit_str(&doc);
+        assert!(output.contains("year = {2020?},"), "output was:\n{output}");
+        assert!(output.contains("year = {2020},"), "output was:\n{output}");
     }
 
     #[test]
@@ -643,19 +840,57 @@ mod tests {
         assert!(output.contains("@book{second,"));
     }
 
+    /// Custom/unrecognized entry types now round-trip: `biblatex::EntryType::new`
+    /// falls back to `Unknown(name)`, which `Entry::to_bibtex_string()` would
+    /// otherwise collapse to `misc`; `render_bibliography` splices the
+    /// original name back over the emitted `@misc{` header, so no fidelity
+    /// warning fires.
     #[test]
-    fn test_unknown_entry_type_warns_and_falls_back_to_misc() {
+    fn test_unknown_entry_type_round_trips_no_warning() {
         let entry = make_entry("frobnicate", "x", vec![make_field("title", "title", "T")]);
         let doc = Document::new()
             .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
         let result = emit(&doc).unwrap();
         let output = String::from_utf8(result.value).unwrap();
-        assert!(output.contains("@misc{x,"));
+        assert!(output.contains("@frobnicate{x,"), "output was:\n{output}");
+        assert!(!output.contains("@misc{x,"), "output was:\n{output}");
         assert!(
-            result
-                .warnings
-                .iter()
-                .any(|w| w.message.contains("frobnicate"))
+            result.warnings.is_empty(),
+            "warnings: {:?}",
+            result.warnings
+        );
+    }
+
+    /// A recognized standard type (`misc` itself) never gets spliced — the
+    /// splice only fires when `EntryType::new` returned `Unknown`, and
+    /// `"misc"` parses to the known `Misc` variant, so this is a genuine
+    /// `@misc{` entry, not a collapsed custom type.
+    #[test]
+    fn test_misc_entry_type_not_spliced() {
+        let entry = make_entry("misc", "x", vec![make_field("title", "title", "T")]);
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let output = emit_str(&doc);
+        assert!(output.contains("@misc{x,"), "output was:\n{output}");
+    }
+
+    /// Two entries, only one with a custom type: proves the entry-type
+    /// splice is keyed per cite key and doesn't touch other entries'
+    /// `@misc{` headers.
+    #[test]
+    fn test_unknown_entry_type_does_not_bleed_into_other_entries() {
+        let entry1 = make_entry("frobnicate", "custom_one", vec![]);
+        let entry2 = make_entry("misc", "real_misc_two", vec![]);
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry1, entry2]));
+        let output = emit_str(&doc);
+        assert!(
+            output.contains("@frobnicate{custom_one,"),
+            "output was:\n{output}"
+        );
+        assert!(
+            output.contains("@misc{real_misc_two,"),
+            "output was:\n{output}"
         );
     }
 }

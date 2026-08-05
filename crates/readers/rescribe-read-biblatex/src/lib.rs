@@ -21,7 +21,7 @@
 //! let doc = result.value;
 //! ```
 
-use biblatex::{Bibliography, ChunksExt};
+use biblatex::{Bibliography, ChunksExt, EntryType};
 use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
 use rescribe_std::{node, prop};
 
@@ -64,7 +64,7 @@ pub fn parse_with_options(
 
 fn convert_entry(entry: &biblatex::Entry, _warnings: &mut Vec<FidelityWarning>) -> Node {
     let key = entry.key.clone();
-    let entry_type = format!("{:?}", entry.entry_type).to_lowercase();
+    let entry_type = entry_type_string(&entry.entry_type);
 
     // Create the term (citation key)
     let term = Node::new(node::DEFINITION_TERM)
@@ -191,6 +191,20 @@ fn convert_entry(entry: &biblatex::Entry, _warnings: &mut Vec<FidelityWarning>) 
     Node::new("biblatex:entry").children(vec![term, desc])
 }
 
+/// `EntryType`'s `Display` impl (via `strum`) serializes every known variant
+/// to lowercase; `Unknown(name)` carries the original (already-lowercased by
+/// `biblatex::EntryType::new`) custom type name, which `Display` doesn't use
+/// — `format!("{:?}", ...)` (the previous implementation here) fell through
+/// to `Debug`, producing `"unknown(\"dataset\")"` instead of `"dataset"` for
+/// any custom entry type. Mirrors `rescribe-read-bibtex`'s
+/// `entry_type_string`.
+fn entry_type_string(entry_type: &EntryType) -> String {
+    match entry_type {
+        EntryType::Unknown(name) => name.to_lowercase(),
+        other => other.to_string(),
+    }
+}
+
 fn format_person(person: &biblatex::Person) -> String {
     let mut parts = Vec::new();
 
@@ -269,5 +283,27 @@ mod tests {
         let result = parse(biblatex).unwrap();
         let doc = result.value;
         assert!(doc.content.children.is_empty());
+    }
+
+    /// Custom/unrecognized entry types must round-trip as their literal
+    /// name (`"preprint"`), not `biblatex::EntryType`'s `Debug` rendering of
+    /// the `Unknown` variant (`"unknown(\"preprint\")"`, the previous, buggy
+    /// behavior here). `preprint` isn't one of `biblatex::EntryType`'s known
+    /// variants (unlike e.g. `dataset`/`software`/`online`, which are), so
+    /// it actually exercises the `Unknown` path.
+    #[test]
+    fn test_custom_entry_type_captured_verbatim() {
+        let biblatex = r#"
+@preprint{pp2024,
+  author = {A},
+  title = {A Preprint},
+  date = {2024},
+}
+"#;
+        let result = parse(biblatex).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        let desc = &entry.children[1];
+        assert_eq!(desc.props.get_str("biblatex:type"), Some("preprint"));
     }
 }

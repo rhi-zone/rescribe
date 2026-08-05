@@ -205,16 +205,33 @@ BibLaTeX syntax and escaping — both now build a `biblatex::Entry`/`Bibliograph
 serialization to the crate's own `to_bibtex_string()`/`to_biblatex_string()` (see the
 "Violating" table below for the updated per-format notes). The `W` scores above are left
 unchanged pending a fuller audit pass (fuzz/oracle-harness/fixture-coverage work wasn't part
-of this fix); only the hand-rolled-emission violation is resolved. Two `biblatex`-crate write
-API limitations surfaced and are flagged via `FidelityWarning` rather than worked around: (1)
-`Entry::to_bibtex_string()` unconditionally drops BibLaTeX's uncertain/approximate date
-markers (`?`/`~`/`%`) when splitting a date into `year`/`month`/`day` fields for BibTeX output
-— there is no public API to opt out (BibLaTeX output is unaffected); (2) both
-`to_bibtex_string()`/`to_biblatex_string()` collapse any entry type unrecognized by
-`biblatex::EntryType` (`Unknown(_)`) to `misc`, silently discarding the original custom type
-name — again no public opt-out. Neither is covered by an existing fixture. The reader-side `R`
+of this fix); only the hand-rolled-emission violation is resolved. The reader-side `R`
 violation (both readers still call `biblatex::Bibliography::parse` directly, no standalone
 `bibtex-fmt`/`biblatex-fmt` wrapper crate) is unchanged and tracked separately in TODO.md.
+
+**2026-08-05:** the two `biblatex`-crate write-API limitations flagged in the 2026-08-04 entry
+above are closed via raw preservation, not left as permanent warnings — full writeup in
+TODO.md's 2026-08-05 entry. Summary: (1) uncertain/approximate BibTeX date markers
+(`?`/`~`/`%`) now round-trip through `rescribe-write-bibtex` — the marker is derived from the
+existing `bibtex:date-uncertain`/`bibtex:date-approximate` properties (fully invertible,
+matching `biblatex::Date::to_chunks`'s own encoding) and spliced into the finest-grained
+emitted `year`/`month`/`day` field after `Entry::to_bibtex_string()` runs; `bibtex:raw-date`
+was also added to `rescribe-read-bibtex` for general raw preservation, though the splice
+doesn't depend on it. (2) custom/unrecognized entry types (`biblatex::EntryType::Unknown`) now
+round-trip through both `rescribe-write-bibtex` and `rescribe-write-biblatex` — the original
+type name (already captured by the existing `bibtex:entry-type`/`biblatex:type` properties) is
+spliced back over the `@misc{` header the crate emits for `Unknown` types; `rescribe-read-biblatex`
+had an independent bug here (Debug-formatted `Unknown` name, e.g. `"unknown(\"dataset\")"`
+instead of the literal name), fixed in the same pass. Neither writer's `FidelityWarning` fires
+for these two cases any more. **Found but not fixed, flagged in TODO.md:** (a) several known
+(non-`Unknown`) BibLaTeX-only entry types (`software`/`dataset`/`online`/`patent`/`reference`)
+still collapse to `misc` when `rescribe-write-bibtex` targets classic BibTeX, with no warning
+— arguably a legitimate cross-dialect downgrade rather than data loss, since there's no
+original string being discarded, but unverified either way; (b) `rescribe-read-biblatex`'s
+`definition_list`-shaped display output doesn't structurally feed `rescribe-write-biblatex`'s
+entry builder at all (pre-existing, unrelated to this fix — no fixture or code path in the
+repo currently rounds a document through both). New fixtures: `fixtures/bibtex/rare-uncertain-date`,
+`fixtures/bibtex/rare-custom-type`, `fixtures/biblatex/rare-custom-type`.
 | endnotexml | 3 | 3 | U | quick-xml (endnotexml-fmt) | fuzz (targets exist, compile-clean; not yet run — no `cargo-fuzz` binary in this session's sandbox) | fuzz (same caveat) |
 
 ### Data / interchange

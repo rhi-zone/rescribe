@@ -9,6 +9,93 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-05: both `biblatex`-crate write-API limitations from the 2026-08-04 entry below
+closed via raw preservation — a fidelity warning is not the end state when the loss is
+avoidable, per CLAUDE.md's raw-preservation convention.** Investigated both gaps concretely
+(reading `biblatex` 0.11's own source, not guessing) before implementing:
+
+1. **Uncertain/approximate BibTeX date markers.** `biblatex::Date`'s `uncertain`/`approximate`
+   booleans turned out to be the *only* signal `biblatex` itself trusts for the `?`/`~`/`%`
+   marker (`Date::to_chunks`'s `(approximate, uncertain) -> "%"/"~"/"?"` mapping is the sole
+   place the marker is derived, and it's fully invertible) — so no new reader-side raw string
+   was actually required to close this gap, the existing `bibtex:date-uncertain`/
+   `bibtex:date-approximate` booleans already carried everything needed. Added
+   `bibtex:raw-date` to `rescribe-read-bibtex` anyway (the literal `date` field text with
+   markers intact, when the source used one) as general raw preservation per CLAUDE.md,
+   useful to any consumer even though the writer fix doesn't depend on it. `rescribe-write-bibtex`
+   now: builds the `biblatex::Entry` exactly as before (`Entry::to_bibtex_string()` still does
+   all BibTeX escaping/field-syntax generation — no hand-rolled emission reintroduced), then
+   `render_bibliography` calls `to_bibtex_string()` per entry and does narrow post-processing —
+   finds the exact `"{field} = {...},\n"` line `biblatex` emitted for whichever of
+   `year`/`month`/`day` is finest-grained and splices the marker in before the closing brace.
+   Matched on full lines, so it can't misfire inside another field's escaped value; scoped to
+   one entry's own serialized text before the cross-entry join, so it can't bleed across
+   entries either. No `FidelityWarning` fires for this case any more — it's not a "known,
+   accepted, permanent" loss, it's closed. `rescribe-write-biblatex` needed no equivalent
+   change — `Entry::to_biblatex_string()` never re-derives `year`/`month`/`day`, so the
+   `date` field's marker was never dropped there in the first place (a pre-existing correct
+   behavior, not part of this fix).
+2. **Custom/unrecognized entry types.** `biblatex::EntryType::new(name)` falls back to
+   `Unknown(name)` for anything outside its vocabulary, and the *existing* `bibtex:entry-type`/
+   `biblatex:type` properties (set by the readers before this work even started) already carry
+   that exact original name string — no new reader property was needed for BibTeX. Both
+   writers now capture, per entry, whether the constructed `EntryType` came back `Unknown`
+   (and if so, the original name), and `render_bibliography` splices `@{raw_type}{` over the
+   `@misc{` header `Entry::to_bibtex_string()`/`Entry::to_biblatex_string()` emit for `Unknown`
+   (verified `Unknown` is the only variant that collapses to `misc` on write — matched only on
+   the literal `"@misc{"` prefix, and a real `misc` entry can never trigger this since `"misc"`
+   itself parses to the known `Misc` variant, not `Unknown`). No warning fires when the splice
+   applies. `rescribe-read-biblatex` had a real, independent bug on this axis, fixed in the
+   same pass: it built the type string via `format!("{:?}", entry.entry_type)` (Debug), which
+   for `Unknown` produces `"unknown(\"dataset\")"` instead of the literal `"dataset"` — fixed
+   to use the same `entry_type_string` approach `rescribe-read-bibtex` already had (match
+   `Unknown(name) => name.to_lowercase()`, else `Display`).
+
+   **Found but explicitly not fixed (flagging, not fixing, per the instruction to report
+   genuine remaining gaps rather than force something ill-fitting):** `EntryType::to_bibtex()`
+   also downgrades several *known* (non-`Unknown`) BibLaTeX-only types when targeting BibTeX —
+   e.g. `Software`/`Dataset`/`Online`/`Patent`/`Reference` all map to `Misc` too, not just
+   `Unknown`. This wasn't touched: it's arguably the *correct* dialect downgrade (classic
+   BibTeX genuinely has no `@software`/`@dataset`/`@online` — unlike the `Unknown` case, there
+   is no "original name" being discarded, `biblatex` is accurately reporting that the type
+   doesn't exist in the target dialect), as opposed to the `Unknown` case where a real
+   source-provided string is being thrown away. Distinguishing "legitimate cross-dialect
+   downgrade" from "data loss" for this class was out of scope here; if it's revisited, note
+   `rescribe-write-bibtex`'s `is_bibtex_type`/`is_biblatex_type` allow-lists currently accept
+   `online`/`software`/`dataset` as if they round-trip through BibTeX cleanly, which per this
+   finding they do not (no warning fires for them either, since `entry_type_for` only flags
+   `Unknown`).
+
+   **Also found, separate, pre-existing, not fixed:** `rescribe-read-biblatex` produces a
+   `definition_list`/`biblatex:entry` shape designed for *display* (formatted prose text nodes:
+   author list joined into one `strong` span, title in `emphasis`, etc.) with `biblatex:key`/
+   `biblatex:type` on the `definition_desc` child — structurally incompatible with
+   `rescribe-write-biblatex`'s `build_biblatex_entry`, which reads `biblatex:key`/`biblatex:type`
+   off the `biblatex:entry` node itself and expects flat `biblatex:*` string props for fields.
+   The two adapters do not round-trip through this shape at all today; this predates and is
+   unrelated to this fix (confirmed no code path or test in the repo ever feeds
+   `rescribe-read-biblatex`'s output into `rescribe-write-biblatex`). Fixing it would mean
+   restructuring `rescribe-read-biblatex`'s node shape to match the round-trippable
+   `bibliography_entry`/`bibliography_field` pattern `rescribe-read-bibtex` already uses (see
+   the 2026-01-08-ish "citation IR shape" entry elsewhere in this file) — out of scope here,
+   flagged for whoever picks up `rescribe-read-biblatex` next.
+
+   New tests added directly exercising the fixed round-trip (`test_emit_date_uncertain_round_trips_no_warning`,
+   `test_emit_date_approximate_round_trips`, `test_emit_date_uncertain_and_approximate_round_trips`,
+   `test_emit_date_uncertain_does_not_bleed_into_other_entries`, `test_unknown_entry_type_round_trips_no_warning`,
+   `test_misc_entry_type_not_spliced`, `test_unknown_entry_type_does_not_bleed_into_other_entries`
+   in both `rescribe-write-bibtex` and `rescribe-write-biblatex`; `test_date_uncertain_marker_and_raw_capture`
+   in `rescribe-read-bibtex`; `test_custom_entry_type_captured_verbatim` in `rescribe-read-biblatex`)
+   replace the old warning-only tests of the same shape. New fixtures:
+   `fixtures/bibtex/rare-uncertain-date`, `fixtures/bibtex/rare-custom-type`,
+   `fixtures/biblatex/rare-custom-type` (no `fixtures/biblatex/rare-uncertain-date` — the
+   `rescribe-read-biblatex` display shape has no structured place to assert the uncertain flag
+   against without pinning down its internal `Debug`-formatted text, which isn't a meaningful
+   raw-preservation fixture). `cargo test -q -p rescribe-write-bibtex -p rescribe-write-biblatex
+   -p rescribe-read-bibtex -p rescribe-read-biblatex`, `cargo clippy --all-targets --all-features`
+   on the same four crates with `-D warnings`, and `cargo fmt --check` on the same four crates
+   all pass clean.
+
 **2026-08-04: fb2-fmt's section-level `<section><annotation>` gap closed — the last remaining
 piece flagged (but deliberately deferred) in the `<title-info><annotation>` fix earlier this
 day.** `Section.annotation` (`Option<Annotation>`, distinct from `TitleInfo.annotation`) was

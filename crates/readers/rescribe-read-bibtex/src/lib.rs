@@ -124,6 +124,17 @@ fn convert_entry(entry: &biblatex::Entry, warnings: &mut Vec<FidelityWarning>) -
                 if date.approximate {
                     entry_node = entry_node.prop("bibtex:date-approximate", true);
                 }
+                // Raw preservation: the literal `date` field text (only
+                // present when the source used a single BibLaTeX-style
+                // `date` field rather than separate `year`/`month`/`day`
+                // fields), markers and all. Not required for the writer to
+                // round-trip `bibtex:date-uncertain`/`bibtex:date-approximate`
+                // (those two booleans already fully determine the `?`/`~`/`%`
+                // marker `rescribe-write-bibtex` re-emits), but kept for any
+                // consumer that wants the exact original text.
+                if let Some(chunks) = entry.get("date") {
+                    entry_node = entry_node.prop("bibtex:raw-date", chunks.format_verbatim());
+                }
             }
             // A date range (`After`/`Before`/`Between`) has no single
             // year/month/day to put in `prop::DATE` — keep it as text
@@ -351,5 +362,21 @@ mod tests {
         };
         assert_eq!(map.get("year"), Some(&rescribe_core::PropValue::Int(2020)));
         assert_eq!(map.get("month"), Some(&rescribe_core::PropValue::Int(3)));
+    }
+
+    #[test]
+    fn test_date_uncertain_marker_and_raw_capture() {
+        let bibtex = r#"
+@article{x,
+  author = {A},
+  title = {T},
+  date = {2020-03-15?},
+}
+"#;
+        let result = parse(bibtex).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        assert_eq!(entry.props.get_bool("bibtex:date-uncertain"), Some(true));
+        assert_eq!(entry.props.get_str("bibtex:raw-date"), Some("2020-03-15?"));
     }
 }

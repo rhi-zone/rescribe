@@ -73,6 +73,10 @@ BibTeX defines 14 standard entry types. Non-standard types are common in practic
 - [ ] url — (missing)
 - [ ] isbn — (missing)
 - [ ] issn — (missing)
+- [x] uncertain/approximate date markers (`?`/`~`/`%`) — `rare-uncertain-date` (captured as
+      `bibtex:date-uncertain`/`bibtex:date-approximate` + verbatim `bibtex:raw-date`;
+      `rescribe-write-bibtex` splices the marker back into the finest-grained emitted
+      `year`/`month`/`day` field — see 2026-08-05 TODO.md entry)
 
 ### Publication fields
 - [x] publisher — `book`
@@ -119,7 +123,10 @@ BibTeX defines 14 standard entry types. Non-standard types are common in practic
 - [x] empty file — `adv-empty`
 - [ ] missing required field — (missing)
 - [ ] malformed entry (unclosed brace) — (missing)
-- [ ] unknown entry type — (missing)
+- [x] unknown/custom entry type — `rare-custom-type` (valid syntax, not malformed — moved to
+      "rare" category; captured verbatim as `bibtex:entry-type`, spliced back over the
+      `@misc{` header `rescribe-write-bibtex` would otherwise emit — see 2026-08-05
+      TODO.md entry)
 - [ ] unknown field name — (missing)
 - [ ] entry with no key — (missing)
 - [ ] duplicate entry keys — (missing)
