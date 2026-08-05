@@ -266,15 +266,10 @@ pub struct Binary {
     pub data: Vec<u8>,
 }
 
-/// A diagnostic from parsing.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Warning,
-    Error,
-}
+// Shared with the rest of the `-fmt` crates via `rescribe-format-api` — see
+// that crate's docs for why. This crate never tracked a `Span` for its
+// diagnostics (no local `Span` type existed pre-migration) or a `code`; both
+// gain the shared defaults (`Span::NONE`, `""`) at their two construction
+// sites in `parse.rs`. `Severity::{Warning,Error}` map directly onto the
+// shared enum, which adds an unused `Info` variant.
+pub use rescribe_format_api::{Diagnostic, Severity, Span};

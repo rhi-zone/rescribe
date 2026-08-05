@@ -8,6 +8,7 @@ use fb2_fmt::{
     TableCell, TableRow, Title, TitleInfo, TitlePara,
 };
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document to FB2 XML.
@@ -21,7 +22,7 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let fb = doc_to_fb(doc);
-    let bytes = fb2_fmt::emit(&fb);
+    let bytes = fb.emit();
     Ok(ConversionResult::ok(bytes))
 }
 

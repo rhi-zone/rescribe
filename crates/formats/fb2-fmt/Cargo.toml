@@ -17,3 +17,4 @@ writer-builder = []
 [dependencies]
 quick-xml = "0.39"
 base64 = "0.22"
+rescribe-format-api = { workspace = true }

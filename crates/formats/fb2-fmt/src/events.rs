@@ -147,7 +147,7 @@ impl<'a> Iterator for EventIter<'a> {
 /// Create a pull iterator over FB2 semantic events from a byte slice.
 ///
 /// The iterator holds the XML reader; no AST is built upfront.
-pub fn events(input: &[u8]) -> EventIter<'_> {
+pub(crate) fn events(input: &[u8]) -> EventIter<'_> {
     EventIter {
         inner: XmlEventIter::new(input),
         done: false,
@@ -158,16 +158,13 @@ pub fn events(input: &[u8]) -> EventIter<'_> {
 // Handler trait + StreamingParser
 // ---------------------------------------------------------------------------
 
-/// Callback trait for chunk-driven FB2 parsing.
-pub trait Handler {
-    fn handle(&mut self, event: Event);
-}
-
-impl<F: FnMut(Event)> Handler for F {
-    fn handle(&mut self, event: Event) {
-        self(event);
-    }
-}
+/// Callback trait for chunk-driven FB2 parsing — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see that
+/// crate's docs for why bounding `H` by one shared trait (instead of each
+/// format crate declaring its own concrete `Handler`) is required for a
+/// common `StreamingParse` trait to exist at all. Implemented automatically
+/// for any `FnMut(Event)`.
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven FB2 parser delivering semantic events to a [`Handler`] as
 /// soon as they are provably complete.
@@ -186,7 +183,7 @@ impl<F: FnMut(Event)> Handler for F {
 /// dispatched. `byte_buf` therefore holds only the bytes of the
 /// longest in-progress token (or ambiguous trailing text run), not the
 /// whole document — memory is O(largest token), not O(full input).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<Event>> {
     handler: H,
     byte_buf: Vec<u8>,
     state: SemanticState,
@@ -211,7 +208,7 @@ pub struct StreamingParser<H: Handler> {
     failed: bool,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<Event>> StreamingParser<H> {
     /// Create a new `StreamingParser` delivering events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
@@ -2140,7 +2137,8 @@ fn collect_attrs(e: &quick_xml::events::BytesStart<'_>) -> AttrMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{emit, parse};
+    use crate::emit::emit;
+    use crate::parse::parse;
 
     const BASIC_FB2: &str = r#"<?xml version="1.0"?>
 <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
