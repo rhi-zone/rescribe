@@ -15,11 +15,71 @@ pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
 pub fn events(input: &str) -> events::EventIter<'_> {
     events::events(input)
+}
+
+// ── rescribe-format-api trait implementations ───────────────────────────────
+//
+// All five traits fit `HaddockDoc` cleanly: it's not lifetime-generic (owned
+// `String` fields throughout), `parse()` already returns the
+// `(Self, Vec<Diagnostic>)` shape `Parse` wants, and `EventIter<'a>` — despite
+// carrying a lifetime parameter — never actually borrows through it: `doc` is
+// owned and every event `expand_block`/`expand_inline` push is `Cow::Owned`.
+// That mirrors `zip-fmt`'s documented precedent of a GAT lifetime an impl
+// simply doesn't use. `Parse`/`Events` bridge `&[u8]` input via
+// `String::from_utf8_lossy`, matching what `batch::BatchParser::finish` and
+// `batch::StreamingParser::emit_block` already do internally; `Events::events`
+// goes through `events::events_owned` (an `EventIter<'static>`, coerced by
+// covariance to whatever lifetime `Self::EventIter<'_>` needs) instead of the
+// `&str`-taking `events::events` free function, because that function's
+// return type is tied to its `&str` argument's lifetime — and the local
+// `String` produced by a lossy conversion of arbitrary bytes does not
+// outlive this function call.
+
+impl Parse for HaddockDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        let s = String::from_utf8_lossy(input);
+        parse::parse(&s)
+    }
+}
+
+impl Emit for HaddockDoc {
+    fn emit(&self) -> Vec<u8> {
+        build(self).into_bytes()
+    }
+}
+
+impl Events for HaddockDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> Self::EventIter<'_> {
+        let s = String::from_utf8_lossy(input);
+        let (doc, _) = parse::parse(&s);
+        events::events_owned(doc)
+    }
+}
+
+impl StreamingParse for HaddockDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for HaddockDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

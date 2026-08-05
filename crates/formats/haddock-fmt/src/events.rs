@@ -103,6 +103,21 @@ pub struct EventIter<'a> {
 /// Create an event iterator from input text.
 pub fn events(input: &str) -> EventIter<'_> {
     let (doc, _) = crate::parse::parse(input);
+    events_owned(doc)
+}
+
+/// Create an event iterator from an already-parsed, fully owned document.
+///
+/// `EventIter<'a>` never actually borrows anything through `'a` — `doc` is
+/// owned and every `Event` variant `expand_block`/`expand_inline` push is
+/// `Cow::Owned` (see the module's `expand_*` methods). The lifetime
+/// parameter exists only because [`Events::events`](rescribe_format_api::Events)
+/// borrows raw `&[u8]` input, mirroring `zip-fmt`'s precedent of a GAT
+/// lifetime an impl simply doesn't use — so this constructor can hand back
+/// an `EventIter<'static>`, which coerces (by covariance) to whatever
+/// caller-supplied lifetime `Self::EventIter<'_>` needs, entirely detached
+/// from the `&str`/`&[u8]` that produced `doc`.
+pub(crate) fn events_owned(doc: HaddockDoc) -> EventIter<'static> {
     EventIter {
         doc,
         block_idx: 0,

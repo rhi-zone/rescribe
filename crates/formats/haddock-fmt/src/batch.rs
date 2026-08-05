@@ -51,21 +51,13 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming Haddock events.
-///
+/// Handler trait for streaming Haddock events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait.
 /// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+pub use rescribe_format_api::Handler;
 
 /// Chunked streaming Haddock parser that delivers events to a [`Handler`].
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -73,7 +65,7 @@ pub struct StreamingParser<H: Handler> {
     block_lines: Vec<String>,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
