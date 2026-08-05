@@ -3,10 +3,9 @@
 //! Thin adapter converting rescribe document model to textile-fmt AST and building output.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
-use textile_fmt::{
-    Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile,
-};
+use textile_fmt::{Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc};
 
 /// Emit a document as Textile markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -27,15 +26,15 @@ pub fn emit_with_options(
 
     let textile_doc = TextileDoc {
         blocks,
-        span: Span::dummy(),
+        span: Span::NONE,
     };
-    let output = emit_textile(&textile_doc);
+    let output = textile_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_node_to_block(node: &Node) -> Block {
-    let dummy = Span::dummy();
+    let dummy = Span::NONE;
     match node.kind.as_str() {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as u8;
@@ -170,7 +169,7 @@ fn convert_node_to_block(node: &Node) -> Block {
 }
 
 fn convert_node_to_inline(node: &Node) -> Inline {
-    let dummy = Span::dummy();
+    let dummy = Span::NONE;
     match node.kind.as_str() {
         node::TEXT => {
             let s = node

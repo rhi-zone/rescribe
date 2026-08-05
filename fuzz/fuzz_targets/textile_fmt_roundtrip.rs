@@ -21,6 +21,7 @@
 //! - Nested markup is excluded to avoid delimiter collision edge cases.
 
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit, Parse};
 use textile_fmt::{Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc};
 
 // ── Safe text generator ───────────────────────────────────────────────────────
@@ -79,16 +80,16 @@ impl<'a> Gen<'a> {
         // collision ambiguity.
         let kind = self.byte() % if depth > 0 { 2 } else { 4 };
         match kind {
-            0 => Inline::Text(safe_text(self.bytes(3)), Span::dummy()),
-            1 => Inline::Code(safe_text(self.bytes(3)), Span::dummy()),
-            2 => Inline::Bold(self.inlines(depth + 1, 1), Span::dummy()),
-            _ => Inline::Italic(self.inlines(depth + 1, 1), Span::dummy()),
+            0 => Inline::Text(safe_text(self.bytes(3)), Span::NONE),
+            1 => Inline::Code(safe_text(self.bytes(3)), Span::NONE),
+            2 => Inline::Bold(self.inlines(depth + 1, 1), Span::NONE),
+            _ => Inline::Italic(self.inlines(depth + 1, 1), Span::NONE),
         }
     }
 
     fn inlines(&mut self, depth: u8, min: usize) -> Vec<Inline> {
         if depth > 2 {
-            return vec![Inline::Text(safe_text(self.bytes(2)), Span::dummy())];
+            return vec![Inline::Text(safe_text(self.bytes(2)), Span::NONE)];
         }
         let count = (self.byte() as usize % 3) + min;
         let raw: Vec<Inline> = (0..count).map(|_| self.inline(depth)).collect();
@@ -101,10 +102,15 @@ impl<'a> Gen<'a> {
         // roundtrip failure, if any Bold/Italic appears with siblings, keep
         // only that formatted span (as the sole inline).
         let needs_isolation = merged.len() > 1
-            && merged.iter().any(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..)));
+            && merged
+                .iter()
+                .any(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..)));
         if needs_isolation {
             // Keep only the first Bold or Italic inline (guaranteed to exist by any()).
-            let fmt = merged.into_iter().find(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..))).unwrap();
+            let fmt = merged
+                .into_iter()
+                .find(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..)))
+                .unwrap();
             return vec![fmt];
         }
         merged
@@ -118,7 +124,7 @@ impl<'a> Gen<'a> {
                 inlines: self.inlines(0, 1),
                 align: None,
                 attrs: BlockAttrs::default(),
-                span: Span::dummy(),
+                span: Span::NONE,
             },
             1 => {
                 let level = (self.byte() % 6) + 1;
@@ -126,7 +132,7 @@ impl<'a> Gen<'a> {
                     level,
                     inlines: self.inlines(0, 1),
                     attrs: BlockAttrs::default(),
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 }
             }
             2 => {
@@ -137,20 +143,20 @@ impl<'a> Gen<'a> {
                             inlines: self.inlines(0, 1),
                             align: None,
                             attrs: BlockAttrs::default(),
-                            span: Span::dummy(),
+                            span: Span::NONE,
                         }]
                     })
                     .collect();
                 Block::List {
                     ordered: self.byte() % 2 == 0,
                     items,
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 }
             }
             3 => Block::CodeBlock {
                 content: safe_text(self.bytes(4)),
                 language: None,
-                span: Span::dummy(),
+                span: Span::NONE,
             },
             _ => {
                 // Table with 1 row and 2 cells
@@ -158,21 +164,21 @@ impl<'a> Gen<'a> {
                     is_header: false,
                     align: None,
                     inlines: self.inlines(0, 1),
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 };
                 let cell2 = TableCell {
                     is_header: false,
                     align: None,
                     inlines: self.inlines(0, 1),
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 };
                 Block::Table {
                     rows: vec![TableRow {
                         attrs: BlockAttrs::default(),
                         cells: vec![cell1, cell2],
-                        span: Span::dummy(),
+                        span: Span::NONE,
                     }],
-                    span: Span::dummy(),
+                    span: Span::NONE,
                 }
             }
         }
@@ -187,7 +193,7 @@ fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
                 if let Some(Inline::Text(prev, _)) = out.last_mut() {
                     prev.push_str(&content);
                 } else {
-                    out.push(Inline::Text(content, Span::dummy()));
+                    out.push(Inline::Text(content, Span::NONE));
                 }
             }
             other => out.push(other),
@@ -208,13 +214,17 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let blocks: Vec<Block> = (0..block_count).map(|_| g.block(0)).collect();
-    let doc = TextileDoc { blocks, span: Span::dummy() };
+    let doc = TextileDoc {
+        blocks,
+        span: Span::NONE,
+    };
 
     // Emit — must not panic.
-    let emitted = textile_fmt::emit(&doc);
+    let emitted_bytes = doc.emit();
+    let emitted = String::from_utf8(emitted_bytes).expect("textile emit output is UTF-8");
 
     // Parse back — must not panic.
-    let (doc2, _diags) = textile_fmt::parse(&emitted);
+    let (doc2, _diags) = TextileDoc::parse(emitted.as_bytes());
 
     // Structural equality after strip_spans.
     // parse(emit(doc)).strip_spans() == doc.strip_spans()

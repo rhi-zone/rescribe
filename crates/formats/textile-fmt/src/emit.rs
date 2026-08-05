@@ -3,7 +3,7 @@
 use crate::ast::{Block, BlockAttrs, Inline, TextileDoc};
 
 /// Build a Textile string from a [`TextileDoc`].
-pub fn emit(doc: &TextileDoc) -> String {
+pub(crate) fn emit(doc: &TextileDoc) -> String {
     let mut ctx = EmitContext::new();
     for block in &doc.blocks {
         emit_block(block, &mut ctx);

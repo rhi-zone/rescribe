@@ -3,8 +3,9 @@
 //! Thin adapter converting textile-fmt AST to rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
-use textile_fmt::{Block, BlockAttrs, Inline, parse as parse_textile};
+use textile_fmt::{Block, BlockAttrs, Inline, TextileDoc};
 
 /// Parse Textile markup.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -16,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (doc, _diags) = parse_textile(input);
+    let (doc, _diags) = TextileDoc::parse(input.as_bytes());
 
     let blocks = doc.blocks.iter().map(convert_block).collect::<Vec<_>>();
 
