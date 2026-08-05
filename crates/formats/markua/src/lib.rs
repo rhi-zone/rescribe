@@ -3,14 +3,27 @@
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-markua` and `rescribe-write-markua` as thin adapter layers.
 //!
-//! # API
+//! # API layers
+//!
+//! `MarkuaDoc` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
 //!
 //! ```rust
-//! use markua::{parse, emit};
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//! use markua::MarkuaDoc;
 //!
-//! let (doc, _diagnostics) = parse("# Hello\n\nWorld.\n");
-//! let output = emit(&doc);
+//! // AST reader
+//! let (doc, _diagnostics) = MarkuaDoc::parse(b"# Hello\n\nWorld.\n");
+//!
+//! // Builder writer — emit from AST
+//! let output: Vec<u8> = doc.emit();
 //! ```
+//!
+//! `parse_str`/`events_str` (take `&str`, skip the UTF-8 check) remain as
+//! separate, non-trait entry points: they have a materially different
+//! contract from the trait methods (`&str` input, not `&[u8]`), not a
+//! redundant duplicate of them, mirroring `commonmark-fmt`'s
+//! `parse_str`/`events_str`.
 
 pub mod ast;
 pub mod batch;
@@ -21,14 +34,65 @@ pub mod writer;
 
 pub use ast::{Block, Diagnostic, Inline, MarkuaDoc, Severity, Span, TableRow};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
-pub use emit::{build, collect_inline_text, emit};
-pub use events::{EventIter, MarkuaEvent, OwnedMarkuaEvent};
-pub use parse::parse;
+pub use emit::collect_inline_text;
+pub use events::{EventIter, MarkuaEvent, OwnedMarkuaEvent, events_str};
+pub use parse::parse_str;
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Parse `input` and return a streaming iterator of [`MarkuaEvent`] items.
-pub fn events(input: &str) -> events::EventIter<'_> {
-    events::events(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `MarkuaDoc` implements the five shared API-mode traits directly — there
+// are no parallel free functions (`markua::parse(..)`, `markua::emit(..)`,
+// `markua::build(..)`) alongside these; callers `use rescribe_format_api::
+// Parse;` (etc.) and call `MarkuaDoc::parse(bytes)` / `doc.emit()` /
+// `MarkuaDoc::events(bytes)`.
+
+impl Parse for MarkuaDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for MarkuaDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self).into_bytes()
+    }
+}
+
+impl Events for MarkuaDoc {
+    type Event<'a> = MarkuaEvent<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    /// Invalid UTF-8 input yields an empty iterator rather than panicking
+    /// — the trait's `events()` is infallible by contract and has no
+    /// diagnostic channel (unlike `Parse::parse`). Callers that need to
+    /// distinguish "empty document" from "invalid UTF-8" should use
+    /// [`parse::parse`](crate::parse::parse) directly, whose diagnostics
+    /// report the encoding problem.
+    fn events(input: &[u8]) -> EventIter<'_> {
+        match std::str::from_utf8(input) {
+            Ok(s) => EventIter::new(s),
+            Err(_) => EventIter::new(""),
+        }
+    }
+}
+
+impl StreamingParse for MarkuaDoc {
+    type Event = OwnedMarkuaEvent;
+    type Parser<H: Handler<OwnedMarkuaEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedMarkuaEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for MarkuaDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -36,6 +100,8 @@ pub fn events(input: &str) -> events::EventIter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emit::emit as build;
+    use crate::parse::parse_str as parse;
 
     #[test]
     fn test_parse_heading() {

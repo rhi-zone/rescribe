@@ -6,7 +6,7 @@
 //! Run with:
 //!   cargo test -q -p markua
 
-use markua::parse;
+use markua::parse_str as parse;
 
 /// Smoke test: parse a representative Markua sample without panicking.
 #[test]

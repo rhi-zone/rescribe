@@ -118,7 +118,13 @@ impl<'a> MarkuaEvent<'a> {
 pub use crate::parse::EventIter;
 
 /// Parse `input` and return a streaming iterator of [`MarkuaEvent`] items.
-pub fn events(input: &str) -> EventIter<'_> {
+///
+/// Takes `&str` directly (skipping the UTF-8 check
+/// [`rescribe_format_api::Events::events`]'s `&[u8]` contract requires) —
+/// a materially different signature from the trait method, not a redundant
+/// duplicate of it, so this stays a public, separately documented entry
+/// point (mirroring `commonmark_fmt::events::events_str`).
+pub fn events_str(input: &str) -> EventIter<'_> {
     EventIter::new(input)
 }
 
@@ -128,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_events_heading() {
-        let evs: Vec<_> = events("# Hello").collect();
+        let evs: Vec<_> = events_str("# Hello").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { level: 1 }))
@@ -141,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_events_paragraph() {
-        let evs: Vec<_> = events("Hello world").collect();
+        let evs: Vec<_> = events_str("Hello world").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph))
@@ -158,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_events_code_block() {
-        let evs: Vec<_> = events("```rust\nfn main() {}\n```").collect();
+        let evs: Vec<_> = events_str("```rust\nfn main() {}\n```").collect();
         assert!(evs.iter().any(
             |e| matches!(e, OwnedMarkuaEvent::CodeBlock { language: Some(l), .. } if l == "rust")
         ));
@@ -166,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_events_list() {
-        let evs: Vec<_> = events("- item 1\n- item 2").collect();
+        let evs: Vec<_> = events_str("- item 1\n- item 2").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartList { ordered: false }))
@@ -182,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_events_special_block() {
-        let evs: Vec<_> = events("W> Be careful!").collect();
+        let evs: Vec<_> = events_str("W> Be careful!").collect();
         assert!(evs.iter().any(
             |e| matches!(e, OwnedMarkuaEvent::StartSpecialBlock { kind } if kind == "warning")
         ));
@@ -194,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_events_horizontal_rule() {
-        let evs: Vec<_> = events("* * *").collect();
+        let evs: Vec<_> = events_str("* * *").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::HorizontalRule))
@@ -203,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_events_bold_italic() {
-        let evs: Vec<_> = events("**bold** *italic*").collect();
+        let evs: Vec<_> = events_str("**bold** *italic*").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartStrong))
@@ -221,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_events_link() {
-        let evs: Vec<_> = events("[click here](https://example.com)").collect();
+        let evs: Vec<_> = events_str("[click here](https://example.com)").collect();
         assert!(evs.iter().any(
             |e| matches!(e, OwnedMarkuaEvent::StartLink { url } if url == "https://example.com")
         ));
@@ -230,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_events_inline_code() {
-        let evs: Vec<_> = events("Some `verbatim` text").collect();
+        let evs: Vec<_> = events_str("Some `verbatim` text").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::InlineCode(s) if s == "verbatim"))
@@ -239,13 +245,13 @@ mod tests {
 
     #[test]
     fn test_events_page_break() {
-        let evs: Vec<_> = events("{pagebreak}").collect();
+        let evs: Vec<_> = events_str("{pagebreak}").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::PageBreak)));
     }
 
     #[test]
     fn test_events_math_inline() {
-        let evs: Vec<_> = events("Solve $x^2 + 1 = 0$.").collect();
+        let evs: Vec<_> = events_str("Solve $x^2 + 1 = 0$.").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::MathInline { .. }))
@@ -254,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_events_footnote_ref() {
-        let evs: Vec<_> = events("See ^[this note].").collect();
+        let evs: Vec<_> = events_str("See ^[this note].").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartFootnoteRef))
@@ -267,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_events_subscript_superscript() {
-        let evs: Vec<_> = events("H~2~O and x^2^").collect();
+        let evs: Vec<_> = events_str("H~2~O and x^2^").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::StartSubscript))
@@ -280,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_events_index_term() {
-        let evs: Vec<_> = events("See i[Markua] for details.").collect();
+        let evs: Vec<_> = events_str("See i[Markua] for details.").collect();
         assert!(
             evs.iter()
                 .any(|e| matches!(e, OwnedMarkuaEvent::IndexTerm { term } if term == "Markua"))

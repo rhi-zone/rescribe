@@ -8,5 +8,6 @@ description = "Markua (Leanpub) writer for rescribe"
 
 [dependencies]
 rescribe-core = { workspace = true }
+rescribe-format-api = { workspace = true }
 rescribe-std = { workspace = true }
 markua = { workspace = true }

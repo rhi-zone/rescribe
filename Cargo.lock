@@ -2143,6 +2143,7 @@ name = "markua"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-format-api",
 ]
 
 [[package]]
@@ -3625,6 +3626,7 @@ version = "0.1.0"
 dependencies = [
  "markua",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 
@@ -4197,6 +4199,7 @@ version = "0.1.0"
 dependencies = [
  "markua",
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
 ]
 

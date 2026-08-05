@@ -1,5 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use markua::{emit, parse};
+use markua::MarkuaDoc;
+use markua::parse_str as parse;
+use rescribe_format_api::{Emit, Parse};
 
 const SMALL: &str = r#"# Hello World
 
@@ -133,7 +135,7 @@ fn bench_markua_emit_medium(c: &mut Criterion) {
     c.bench_function("markua_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = emit(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }
@@ -142,8 +144,8 @@ fn bench_markua_roundtrip_small(c: &mut Criterion) {
     c.bench_function("markua_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = emit(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let _ = MarkuaDoc::parse(std::hint::black_box(&out));
         });
     });
 }
@@ -152,8 +154,8 @@ fn bench_markua_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("markua_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = emit(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let _ = MarkuaDoc::parse(std::hint::black_box(&out));
         });
     });
 }

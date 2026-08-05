@@ -3,6 +3,7 @@
 //! Thin adapter from rescribe document model to standalone markua format crate.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as Markua markup.
@@ -23,9 +24,9 @@ pub fn emit_with_options(
         author: None,
         description: None,
     };
-    let output = markua::build(&markua_doc);
+    let output = markua_doc.emit();
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::ok(output))
 }
 
 fn convert_blocks(nodes: &[Node]) -> Vec<markua::Block> {
