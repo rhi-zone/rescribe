@@ -13,3 +13,6 @@ reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = []
+
+[dependencies]
+rescribe-format-api = { workspace = true }

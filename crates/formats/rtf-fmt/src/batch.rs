@@ -206,18 +206,10 @@ impl<F: FnMut(TokenEvent)> BatchSink<F> {
     }
 }
 
-/// Handler trait for semantic RTF events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
+/// Handler trait for semantic RTF events — re-exported from
+/// [`rescribe_format_api`], which also supplies the blanket
+/// `impl<E, F: FnMut(E)> Handler<E> for F`.
+pub use rescribe_format_api::Handler;
 
 /// Internal state machine driving [`StreamingParser`]. See the module doc's
 /// "`StreamingParser`'s memory shape" section for the full picture.
@@ -295,12 +287,12 @@ fn strip_color_sentinel(mut colors: Vec<(u8, u8, u8)>) -> Vec<(u8, u8, u8)> {
 /// "`StreamingParser`'s memory shape" section for the full design and its
 /// one documented, structural divergence from [`crate::sem_events::events`]
 /// (`StartDocument`'s `fonts`/`colors` fields).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     phase: Phase,
     handler: H,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

@@ -3,7 +3,8 @@
 //! Usage:
 //!   cargo run -p rtf-fmt --example validate_corpus -- /path/to/rtf/files
 
-use rtf_fmt::parse;
+use rescribe_format_api::Parse;
+use rtf_fmt::RtfDoc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -45,7 +46,7 @@ fn main() {
                 continue;
             }
         };
-        let (doc, diags) = parse(&content);
+        let (doc, diags) = RtfDoc::parse(&content);
         total += 1;
         if !diags.is_empty() {
             with_diag += 1;

@@ -4,6 +4,7 @@
 //! then maps it to the rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_format_api::Parse as _;
 use rescribe_std::{node, prop};
 use rtf_fmt::{Align, Block, Inline, RtfDoc};
 
@@ -17,7 +18,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (rtf, _diagnostics) = rtf_fmt::parse(input.as_bytes());
+    let (rtf, _diagnostics) = RtfDoc::parse(input.as_bytes());
     let nodes = doc_to_nodes(&rtf);
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);

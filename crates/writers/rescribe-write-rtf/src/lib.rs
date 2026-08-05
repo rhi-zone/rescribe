@@ -4,6 +4,7 @@
 //! the `rtf_fmt` AST, then emits RTF output.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 use rtf_fmt::{Align, Block, Inline, RtfDoc, Span, TableRow};
 
@@ -18,8 +19,8 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let rtf = doc_to_rtf(doc);
-    let output = rtf_fmt::emit(&rtf);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    let output = rtf.emit();
+    Ok(ConversionResult::ok(output))
 }
 
 fn doc_to_rtf(doc: &Document) -> RtfDoc {

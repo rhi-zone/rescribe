@@ -21,7 +21,8 @@
 
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
-use rtf_fmt::{Align, Block, Inline, RtfDoc, Span, emit, parse};
+use rescribe_format_api::{Emit as _, Parse as _};
+use rtf_fmt::{Align, Block, Inline, RtfDoc, Span};
 
 // ── Char-level layout properties ──────────────────────────────────────────────
 
@@ -30,10 +31,10 @@ use rtf_fmt::{Align, Block, Inline, RtfDoc, Span, emit, parse};
 /// char-props accumulator are represented here to guarantee roundtrip stability.
 #[derive(Arbitrary, Debug)]
 enum FuzzCharProp {
-    Dn(u8),       // \dn<n>  (baseline down, half-points; 0 = off → skip)
-    Up(u8),       // \up<n>  (baseline up, half-points; 0 = off → skip)
-    Shad,         // \shad   (character shadow, binary flag)
-    Expnd(u8),    // \expnd<n> (letter spacing; 0 = off → skip)
+    Dn(u8),    // \dn<n>  (baseline down, half-points; 0 = off → skip)
+    Up(u8),    // \up<n>  (baseline up, half-points; 0 = off → skip)
+    Shad,      // \shad   (character shadow, binary flag)
+    Expnd(u8), // \expnd<n> (letter spacing; 0 = off → skip)
 }
 
 impl FuzzCharProp {
@@ -115,32 +116,63 @@ struct FuzzPara {
 fn to_inline(fi: &FuzzInline, color_table: &[(u8, u8, u8)]) -> Option<Inline> {
     match fi {
         FuzzInline::LineBreak => Some(Inline::LineBreak { span: Span::NONE }),
-        FuzzInline::Leaf { text, bold, italic, underline, strikethrough, vert, font_size, color, char_prop } => {
+        FuzzInline::Leaf {
+            text,
+            bold,
+            italic,
+            underline,
+            strikethrough,
+            vert,
+            font_size,
+            color,
+            char_prop,
+        } => {
             if text.is_empty() {
                 return None;
             }
             // Build in the same order as `make_inline` so the roundtrip is
             // stable: innermost first, then each wrapper applied in sequence,
             // Color second-to-last, CharSpan outermost.
-            let mut inline = Inline::Text { text: text.clone(), span: Span::NONE };
+            let mut inline = Inline::Text {
+                text: text.clone(),
+                span: Span::NONE,
+            };
             if *strikethrough {
-                inline = Inline::Strikethrough { children: vec![inline], span: Span::NONE };
+                inline = Inline::Strikethrough {
+                    children: vec![inline],
+                    span: Span::NONE,
+                };
             }
             if *underline {
-                inline = Inline::Underline { children: vec![inline], span: Span::NONE };
+                inline = Inline::Underline {
+                    children: vec![inline],
+                    span: Span::NONE,
+                };
             }
             if *italic {
-                inline = Inline::Italic { children: vec![inline], span: Span::NONE };
+                inline = Inline::Italic {
+                    children: vec![inline],
+                    span: Span::NONE,
+                };
             }
             if *bold {
-                inline = Inline::Bold { children: vec![inline], span: Span::NONE };
+                inline = Inline::Bold {
+                    children: vec![inline],
+                    span: Span::NONE,
+                };
             }
             match vert {
                 VertPos::Super => {
-                    inline = Inline::Superscript { children: vec![inline], span: Span::NONE };
+                    inline = Inline::Superscript {
+                        children: vec![inline],
+                        span: Span::NONE,
+                    };
                 }
                 VertPos::Sub => {
-                    inline = Inline::Subscript { children: vec![inline], span: Span::NONE };
+                    inline = Inline::Subscript {
+                        children: vec![inline],
+                        span: Span::NONE,
+                    };
                 }
                 VertPos::Neither => {}
             }
@@ -187,7 +219,12 @@ fuzz_target!(|paras: Vec<FuzzPara>| {
     let mut color_table: Vec<(u8, u8, u8)> = Vec::new();
     for para in &paras {
         for fi in &para.inlines {
-            if let FuzzInline::Leaf { color: Some(rgb), text, .. } = fi {
+            if let FuzzInline::Leaf {
+                color: Some(rgb),
+                text,
+                ..
+            } = fi
+            {
                 if !text.is_empty() && !color_table.contains(rgb) {
                     color_table.push(*rgb);
                 }
@@ -199,7 +236,8 @@ fuzz_target!(|paras: Vec<FuzzPara>| {
     let blocks: Vec<Block> = paras
         .iter()
         .filter_map(|fuzz_para| {
-            let inlines: Vec<Inline> = fuzz_para.inlines
+            let inlines: Vec<Inline> = fuzz_para
+                .inlines
                 .iter()
                 .filter_map(|fi| to_inline(fi, &color_table))
                 .collect();
@@ -223,9 +261,14 @@ fuzz_target!(|paras: Vec<FuzzPara>| {
     // normalize() merges adjacent Text siblings, putting the doc into the
     // canonical form the parser always produces.  Without this, two adjacent
     // Text nodes would emit as one continuous run and re-parse as one node.
-    let doc = RtfDoc { blocks, color_table, span: Span::NONE }.normalize();
-    let emitted = emit(&doc);
-    let (reparsed, _) = parse(emitted.as_bytes());
+    let doc = RtfDoc {
+        blocks,
+        color_table,
+        span: Span::NONE,
+    }
+    .normalize();
+    let emitted = doc.emit();
+    let (reparsed, _) = RtfDoc::parse(&emitted);
 
     assert_eq!(
         doc.strip_spans(),
