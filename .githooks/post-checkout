@@ -1,0 +1,37 @@
+#!/bin/sh
+# Keep this worktree's target/ symlinked (unix/mac) or junctioned (windows)
+# to the shared main checkout's target/ directory. Fires automatically on
+# every checkout, including `git worktree add` -- confirmed empirically
+# (2026-08-05) that git runs post-checkout on worktree creation, with args
+# <prev-HEAD> <new-HEAD> <branch-checkout-flag>. This is what makes the
+# shared-target-dir setup "zero setup": no one has to remember to run
+# scripts/setup-worktree-target.sh (or .ps1) by hand anymore.
+#
+# Idempotent and non-destructive: if this worktree's target/ is already a
+# real (non-link) directory with content -- e.g. a worktree that built its
+# own local cache before this mechanism existed -- the underlying script
+# refuses to touch it and exits non-zero. That failure is swallowed here
+# (`|| true`) so a routine `git checkout` never fails because of this
+# hook; the underlying script's error message (printed to stderr) still
+# tells the user what to do about it.
+#
+# core.hooksPath is repo-wide (set once in the main checkout's .git/config,
+# shared by every worktree), so this hook also fires inside existing
+# worktrees whenever they do their own checkout. That's intentional and
+# safe given the non-destructive behavior above -- it does not touch
+# worktrees that already have a real target/ directory.
+
+set -e
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*)
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts/setup-worktree-target.ps1" || true
+    ;;
+  *)
+    "$repo_root/scripts/setup-worktree-target.sh" || true
+    ;;
+esac
+
+exit 0
