@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use tei_fmt::{Node as TNode, Span as TSpan, TeiDoc, XmlDecl};
 
 use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document to TEI XML.
@@ -212,7 +213,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         nodes: vec![root],
     };
 
-    let bytes = tei_fmt::emit(&doc_ast);
+    let bytes = doc_ast.emit();
     Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 

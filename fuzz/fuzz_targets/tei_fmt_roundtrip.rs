@@ -12,6 +12,7 @@
 //! what generic XML can express, regardless of TEI-specific IR modeling.
 
 use libfuzzer_sys::fuzz_target;
+use rescribe_format_api::{Emit as _, Parse as _};
 use tei_fmt::{Node, TeiDoc};
 
 struct Gen<'a> {
@@ -164,10 +165,10 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // Emit — must not panic.
-    let emitted = tei_fmt::emit(&doc);
+    let emitted = doc.emit();
 
     // Parse back — must not panic.
-    let (doc2, diags) = tei_fmt::parse(&emitted);
+    let (doc2, diags) = TeiDoc::parse(&emitted);
     assert!(
         diags.is_empty(),
         "unexpected diagnostics reparsing generated document: {diags:?}\nemitted: {}",

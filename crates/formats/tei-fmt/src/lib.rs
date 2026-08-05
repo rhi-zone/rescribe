@@ -11,26 +11,36 @@
 //!
 //! # API layers
 //!
+//! `TeiDoc` implements the five shared `rescribe-format-api` traits — no
+//! parallel free functions exist alongside them:
+//!
 //! ```text
+//! use rescribe_format_api::{Emit, Events, Parse, StreamingParse, StreamingWrite};
+//!
 //! // AST reader
-//! pub fn parse(input: &[u8]) -> (TeiDoc, Vec<Diagnostic>);
+//! let (doc, diags): (TeiDoc, Vec<Diagnostic>) = TeiDoc::parse(input);
 //!
 //! // Streaming reader — true SAX-style pull iterator, no tree built
-//! pub fn events(input: &[u8]) -> EventIter;
+//! let it: EventIter = TeiDoc::events(input);
 //!
 //! // Batch reader — chunk-driven, dispatches events as soon as provably complete
-//! let mut p = StreamingParser::new(|ev| ...);
+//! let mut p = TeiDoc::streaming_parser(|ev| ...);
 //! p.feed(chunk); // repeat
 //! p.finish();
 //!
 //! // Builder writer — emit from AST
-//! pub fn emit(doc: &TeiDoc) -> Vec<u8>;
+//! let bytes: Vec<u8> = doc.emit();
 //!
 //! // Streaming writer — emit from events
-//! let mut w = Writer::new(sink);
+//! let mut w = TeiDoc::writer(sink);
 //! w.write_event(event); // repeat
 //! w.finish(); // flushes to sink
 //! ```
+//!
+//! `emit_fragment` (emits a `Node` subtree rather than a whole `TeiDoc`)
+//! stays as a separate, documented entry point alongside `Emit::emit` — a
+//! materially different contract (different input type), not a redundant
+//! duplicate.
 //!
 //! # Why XML can stream where HTML can't
 //!
@@ -57,17 +67,56 @@ pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
-pub use ast::{Diagnostic, Node, Span, TeiDoc, XmlDecl};
-pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::{emit, emit_fragment};
+pub use ast::{Diagnostic, Node, Severity, Span, TeiDoc, XmlDecl};
+pub use batch::{BatchParser, StreamingParser};
+pub use emit::emit_fragment;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use parse::parse;
+pub use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, StreamingWrite};
 pub use writer::Writer;
 
-/// Return a true streaming event iterator over the document, without
-/// building a `TeiDoc`.
-pub fn events(input: &[u8]) -> EventIter<'_> {
-    EventIter::new(input)
+// ── Trait implementations ───────────────────────────────────────────────────
+//
+// `TeiDoc` implements the shared API-mode traits directly — no parallel
+// free functions (`tei_fmt::parse(..)`, `tei_fmt::emit(..)`,
+// `tei_fmt::events(..)`, ...) exist alongside them. `emit_fragment` stays
+// public (materially different contract: `&[Node]`, not `&TeiDoc`).
+
+impl Parse for TeiDoc {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parse::parse(input)
+    }
+}
+
+impl Emit for TeiDoc {
+    fn emit(&self) -> Vec<u8> {
+        emit::emit(self)
+    }
+}
+
+impl Events for TeiDoc {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        EventIter::new(input)
+    }
+}
+
+impl StreamingParse for TeiDoc {
+    type Event = OwnedEvent;
+    type Parser<H: Handler<OwnedEvent>> = StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OwnedEvent>>(handler: H) -> StreamingParser<H> {
+        StreamingParser::new(handler)
+    }
+}
+
+impl StreamingWrite for TeiDoc {
+    type Writer<W: std::io::Write> = Writer<W>;
+
+    fn writer<W: std::io::Write>(sink: W) -> Writer<W> {
+        Writer::new(sink)
+    }
 }
 
 #[cfg(test)]
@@ -78,7 +127,7 @@ mod smoke {
     fn smoke_parse_document() {
         let input =
             br#"<?xml version="1.0"?><TEI><teiHeader/><text><body><p>Body</p></body></text></TEI>"#;
-        let (doc, diags) = parse(input);
+        let (doc, diags) = TeiDoc::parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
         assert!(doc.root().is_some());
     }
@@ -87,9 +136,9 @@ mod smoke {
     fn smoke_roundtrip() {
         let input =
             br#"<?xml version="1.0"?><TEI><text><body><p>A &amp; B</p></body></text></TEI>"#;
-        let (doc1, _) = parse(input);
-        let emitted = emit(&doc1);
-        let (doc2, diags) = parse(&emitted);
+        let (doc1, _) = TeiDoc::parse(input);
+        let emitted = doc1.emit();
+        let (doc2, diags) = TeiDoc::parse(&emitted);
         assert!(diags.is_empty());
         assert_eq!(doc1.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
     }
@@ -97,7 +146,7 @@ mod smoke {
     #[test]
     fn smoke_events() {
         let input = b"<p>Hello <hi rend=\"italic\">world</hi></p>";
-        let evts: Vec<_> = events(input).collect();
+        let evts: Vec<_> = TeiDoc::events(input).collect();
         assert!(!evts.is_empty());
         assert!(
             evts.iter()
@@ -108,7 +157,7 @@ mod smoke {
     #[test]
     fn smoke_event_roundtrip() {
         let input = br#"<?xml version="1.0"?><TEI><text><body><p>Body</p></body></text></TEI>"#;
-        let (doc1, _) = parse(input);
+        let (doc1, _) = TeiDoc::parse(input);
         let evts = events::events_from_doc(&doc1);
         let doc2 = events::collect_doc(evts);
         assert_eq!(
@@ -200,8 +249,8 @@ mod smoke {
     #[test]
     fn smoke_escape() {
         let input = b"<p>&amp; &lt; &gt;</p>";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
+        let (doc, _) = TeiDoc::parse(input);
+        let emitted = doc.emit();
         let xml = String::from_utf8(emitted).unwrap();
         assert!(xml.contains("&amp;"));
         assert!(xml.contains("&lt;"));
@@ -211,8 +260,8 @@ mod smoke {
     #[test]
     fn smoke_self_closing() {
         let input = b"<p>Hello<lb/>World</p>";
-        let (doc, _) = parse(input);
-        let emitted = emit(&doc);
+        let (doc, _) = TeiDoc::parse(input);
+        let emitted = doc.emit();
         let xml = String::from_utf8(emitted).unwrap();
         assert!(xml.contains("<lb/>"));
     }

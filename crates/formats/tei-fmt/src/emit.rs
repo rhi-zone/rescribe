@@ -11,7 +11,7 @@ use quick_xml::events::{
 use crate::ast::*;
 
 /// Emit a `TeiDoc` as XML bytes.
-pub fn emit(doc: &TeiDoc) -> Vec<u8> {
+pub(crate) fn emit(doc: &TeiDoc) -> Vec<u8> {
     let mut writer = XmlWriter::new(Cursor::new(Vec::new()));
 
     if let Some(decl) = &doc.xml_decl {

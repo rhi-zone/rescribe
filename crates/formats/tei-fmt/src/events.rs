@@ -162,6 +162,8 @@ impl<'a> EventIter<'a> {
         self.done = true;
         while let Some(name) = self.open_stack.pop() {
             self.diagnostics.push(crate::ast::Diagnostic {
+                severity: crate::ast::Severity::Warning,
+                code: "",
                 message: format!("unclosed element <{name}>"),
                 span: crate::ast::Span::NONE,
             });
@@ -254,6 +256,8 @@ impl<'a> Iterator for EventIter<'a> {
                     let (declared, entity_diagnostics) = DtdEntities::parse_doctype(&content);
                     for d in entity_diagnostics {
                         self.diagnostics.push(crate::ast::Diagnostic {
+                            severity: crate::ast::Severity::Warning,
+                            code: "",
                             message: format!("DOCTYPE internal subset: {d}"),
                             span: crate::ast::Span {
                                 start: pos,
@@ -349,6 +353,8 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 Err(e) => {
                     self.diagnostics.push(crate::ast::Diagnostic {
+                        severity: crate::ast::Severity::Warning,
+                        code: "",
                         message: format!("XML parse error: {e}"),
                         span: crate::ast::Span {
                             start: pos,

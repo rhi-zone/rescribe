@@ -3769,6 +3769,7 @@ name = "rescribe-read-tei"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-std",
  "tei-fmt",
 ]
@@ -4368,6 +4369,7 @@ name = "rescribe-write-tei"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-format-api",
  "rescribe-read-tei",
  "rescribe-std",
  "tei-fmt",
@@ -4944,6 +4946,7 @@ name = "tei-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "xml-entities",
 ]
 
