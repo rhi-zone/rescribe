@@ -49,6 +49,8 @@
 use crate::ast::{Diagnostic, OrgDoc};
 use crate::events::OwnedEvent;
 
+pub use rescribe_format_api::Handler;
+
 /// Chunk-driven Org-mode parser that returns the full AST on finish.
 #[derive(Default)]
 pub struct BatchParser {
@@ -68,20 +70,7 @@ impl BatchParser {
     /// Finish parsing and return the AST.
     pub fn finish(self) -> (OrgDoc, Vec<Diagnostic>) {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse::parse(&s)
-    }
-}
-
-/// Handler trait for streaming Org-mode events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
+        crate::parse::parse_str(&s)
     }
 }
 
@@ -110,7 +99,7 @@ enum BlockState {
 ///
 /// Memory: O(largest block). See the [module-level docs](self) for details
 /// and known limitations.
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     /// Bytes of the current incomplete line (not yet terminated by `\n`).
     line_buf: Vec<u8>,
@@ -119,7 +108,7 @@ pub struct StreamingParser<H: Handler> {
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {

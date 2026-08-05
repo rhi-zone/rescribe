@@ -1120,7 +1120,7 @@ mod tests {
         let input = synthetic_source(5000);
 
         let events: Vec<Event<'static>> = crate::events(&input).map(Event::into_owned).collect();
-        let (doc, _diags) = crate::parse::parse(&input);
+        let (doc, _diags) = crate::parse::parse_str(&input);
 
         let baseline = CURRENT.with(|c| c.get());
         PEAK.with(|p| p.set(baseline));
@@ -1201,8 +1201,8 @@ mod tests {
         }
         let bytes = w.finish();
         let emitted_text = String::from_utf8(bytes).unwrap();
-        let (doc_orig, _) = crate::parse::parse(input);
-        let (doc_emit, _) = crate::parse::parse(&emitted_text);
+        let (doc_orig, _) = crate::parse::parse_str(input);
+        let (doc_emit, _) = crate::parse::parse_str(&emitted_text);
         assert_eq!(
             doc_orig.blocks.len(),
             doc_emit.blocks.len(),
@@ -1231,7 +1231,7 @@ mod tests {
             "- [ ] todo item\n- [X] done item\n",
         ];
         for input in inputs {
-            let (doc, _) = crate::parse::parse(input);
+            let (doc, _) = crate::parse::parse_str(input);
             let built = crate::emit::build(&doc);
 
             let mut w = Writer::new(Vec::<u8>::new());

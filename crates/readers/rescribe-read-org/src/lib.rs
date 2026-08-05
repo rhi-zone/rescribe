@@ -23,7 +23,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (ast, diagnostics) = org_fmt::parse(input);
+    let (ast, diagnostics) = org_fmt::parse::parse_str(input);
 
     let mut warnings: Vec<FidelityWarning> = diagnostics
         .iter()

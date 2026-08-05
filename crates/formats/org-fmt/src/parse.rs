@@ -12,7 +12,13 @@ use crate::events::Event;
 ///
 /// Parsing is infallible — unknown constructs produce [`Diagnostic`]s instead
 /// of hard errors.
-pub fn parse(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
+///
+/// Takes `&str` (not `&[u8]`) — a materially different contract from
+/// [`rescribe_format_api::Parse::parse`], which this crate also implements
+/// for `OrgDoc` (see `lib.rs`). Kept as a public, documented separate entry
+/// point (mirroring `commonmark-fmt`'s `parse_str`) for callers that already
+/// have a `&str` and want to skip the UTF-8 check the trait method performs.
+pub fn parse_str(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
     let mut p = EventIter::new(input);
     let mut blocks = Vec::new();
     loop {
@@ -554,7 +560,7 @@ impl<'a> EventIter<'a> {
             "QUOTE" => {
                 // Recursively parse the body as blocks so that nested
                 // #+BEGIN_QUOTE … #+END_QUOTE blocks are handled correctly.
-                let (sub_doc, _sub_diags) = parse(&content_str);
+                let (sub_doc, _sub_diags) = parse_str(&content_str);
                 Some(Block::Blockquote {
                     children: sub_doc.blocks,
                     span: Span::NONE,

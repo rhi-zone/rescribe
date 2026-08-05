@@ -174,7 +174,7 @@ pub use crate::parse::EventIter;
 /// Collect a complete `OrgDoc` from an `EventIter`.
 ///
 /// Useful for callers that drive [`EventIter`] as an iterator and want a
-/// complete [`crate::ast::OrgDoc`] at the end.  `parse::parse()` no longer
+/// complete [`crate::ast::OrgDoc`] at the end.  `parse::parse_str()` no longer
 /// calls this; it uses direct recursive descent instead.
 pub fn collect_doc_from_iter(
     iter: &mut EventIter<'_>,

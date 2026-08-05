@@ -1,5 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use org_fmt::{build, parse};
+use org_fmt::parse::parse_str as parse;
+use rescribe_format_api::Emit as _;
 
 const SMALL: &str = r#"
 * Hello World
@@ -142,8 +143,9 @@ fn bench_org_roundtrip_small(c: &mut Criterion) {
     c.bench_function("org_roundtrip_small", |b| {
         let (doc, _) = parse(SMALL);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let out_str = String::from_utf8(out).expect("org-fmt emits valid UTF-8");
+            let _ = parse(std::hint::black_box(&out_str));
         });
     });
 }
@@ -152,8 +154,9 @@ fn bench_org_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("org_roundtrip_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let out = build(std::hint::black_box(&doc));
-            let _ = parse(std::hint::black_box(&out));
+            let out = std::hint::black_box(&doc).emit();
+            let out_str = String::from_utf8(out).expect("org-fmt emits valid UTF-8");
+            let _ = parse(std::hint::black_box(&out_str));
         });
     });
 }
@@ -162,7 +165,7 @@ fn bench_org_emit_medium(c: &mut Criterion) {
     c.bench_function("org_emit_medium", |b| {
         let (doc, _) = parse(MEDIUM);
         b.iter(|| {
-            let _ = build(std::hint::black_box(&doc));
+            let _ = std::hint::black_box(&doc).emit();
         });
     });
 }

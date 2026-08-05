@@ -611,6 +611,7 @@ fn rst_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 mod org_events_check {
     use super::{find_input, fixtures_root};
     use org_fmt::{Block, Inline, ListItemContent, OrgDoc, OwnedEvent};
+    use rescribe_format_api::Parse;
     use std::borrow::Cow;
 
     /// Reconstruct the exact `OwnedEvent` sequence `events()` must produce for
@@ -892,7 +893,7 @@ mod org_events_check {
                 continue;
             };
             let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-            let (doc, _diags) = org_fmt::parse(&input);
+            let (doc, _diags) = org_fmt::OrgDoc::parse(input.as_bytes());
             let expected = org_ast_to_events(&doc);
             let actual: Vec<OwnedEvent> = org_fmt::events(&input)
                 .map(org_fmt::Event::into_owned)
@@ -1016,8 +1017,8 @@ fn org_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _) = org_fmt::parse(&input);
-        let built = org_fmt::build(&doc);
+        let (doc, _) = org_fmt::OrgDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("org-fmt emits valid UTF-8");
 
         let mut w = org_fmt::Writer::new(Vec::<u8>::new());
         for e in org_fmt::events(&input) {
@@ -9889,7 +9890,7 @@ fn t2t_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = t2t::parse::parse(&input);
+        let (doc, _diags) = t2t::T2tDoc::parse(input.as_bytes());
         let expected = t2t_ast_to_events(&doc);
         let actual: Vec<_> = t2t::events(&input).collect();
         assert_eq!(
@@ -9976,8 +9977,8 @@ fn t2t_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read_to_string(&input_path).expect("read fixture input");
-        let (doc, _diags) = t2t::parse::parse(&input);
-        let built = t2t::emit::emit(&doc);
+        let (doc, _diags) = t2t::T2tDoc::parse(input.as_bytes());
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = t2t::writer::Writer::new(Vec::<u8>::new());
         for e in t2t::events(&input) {
@@ -11596,9 +11597,9 @@ fn rtf_events_equals_ast_projection_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = rtf_fmt::parse(&input);
+        let (doc, _diags) = rtf_fmt::RtfDoc::parse(&input);
         let expected = rtf_ast_to_events(&doc);
-        let actual: Vec<_> = rtf_fmt::events(&input).collect();
+        let actual: Vec<_> = rtf_fmt::RtfDoc::events(&input).collect();
         assert_eq!(
             expected,
             actual,
@@ -11634,7 +11635,7 @@ fn rtf_streaming_parser_matches_events_under_adversarial_chunking() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<rtf_fmt::OwnedEvent> = rtf_fmt::events(&input).collect();
+        let bulk: Vec<rtf_fmt::OwnedEvent> = rtf_fmt::RtfDoc::events(&input).collect();
         checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
@@ -11686,11 +11687,11 @@ fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
             continue;
         };
         let input = std::fs::read(&input_path).expect("read fixture input");
-        let (doc, _diags) = rtf_fmt::parse(&input);
-        let built = rtf_fmt::emit(&doc);
+        let (doc, _diags) = rtf_fmt::RtfDoc::parse(&input);
+        let built = String::from_utf8(doc.emit()).expect("emit output is UTF-8");
 
         let mut w = rtf_fmt::sem_writer::Writer::new(Vec::<u8>::new());
-        for e in rtf_fmt::events(&input) {
+        for e in rtf_fmt::RtfDoc::events(&input) {
             w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
