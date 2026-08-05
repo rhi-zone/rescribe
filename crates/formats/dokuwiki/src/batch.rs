@@ -5,6 +5,7 @@
 
 use crate::ast::{Diagnostic, DokuwikiDoc};
 use crate::events::OwnedEvent;
+pub use rescribe_format_api::Handler;
 
 /// Chunk-driven DokuWiki parser that returns the full AST on finish.
 #[derive(Default)]
@@ -29,19 +30,6 @@ impl BatchParser {
     }
 }
 
-/// Handler trait for streaming DokuWiki events.
-///
-/// Implemented automatically for any `FnMut(OwnedEvent)`.
-pub trait Handler {
-    fn handle(&mut self, event: OwnedEvent);
-}
-
-impl<F: FnMut(OwnedEvent)> Handler for F {
-    fn handle(&mut self, event: OwnedEvent) {
-        self(event);
-    }
-}
-
 /// Block accumulation state for the streaming parser.
 enum BlockState {
     /// Between blocks -- waiting for the first non-blank line.
@@ -55,14 +43,14 @@ enum BlockState {
 /// Chunked streaming DokuWiki parser that delivers events to a [`Handler`].
 ///
 /// Memory: O(largest block).
-pub struct StreamingParser<H: Handler> {
+pub struct StreamingParser<H: Handler<OwnedEvent>> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
     state: BlockState,
 }
 
-impl<H: Handler> StreamingParser<H> {
+impl<H: Handler<OwnedEvent>> StreamingParser<H> {
     pub fn new(handler: H) -> Self {
         StreamingParser {
             handler,

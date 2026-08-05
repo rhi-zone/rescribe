@@ -3,11 +3,12 @@
 //! Emits documents as DokuWiki markup.
 //! Thin adapter over the standalone `dokuwiki` crate.
 
-use dokuwiki::{Block as FmtBlock, DokuwikiDoc, Inline as FmtInline, build as fmt_build};
+use dokuwiki::{Block as FmtBlock, DokuwikiDoc, Inline as FmtInline};
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
+use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
 
 /// Emit a document as DokuWiki.
@@ -23,12 +24,9 @@ pub fn emit_with_options(
     let mut warnings = Vec::new();
     let blocks = convert_nodes(&doc.content.children, &mut warnings);
     let fmt_doc = DokuwikiDoc { blocks };
-    let output = fmt_build(&fmt_doc);
+    let output = fmt_doc.emit();
 
-    Ok(ConversionResult::with_warnings(
-        output.into_bytes(),
-        warnings,
-    ))
+    Ok(ConversionResult::with_warnings(output, warnings))
 }
 
 fn convert_nodes(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<FmtBlock> {
