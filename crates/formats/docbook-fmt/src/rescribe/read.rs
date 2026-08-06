@@ -1,17 +1,17 @@
-//! DocBook reader for rescribe.
+//! DocBook → rescribe reader.
 //!
-//! Translates `docbook_fmt::DocBookDoc` (the standalone DocBook/XML AST from
-//! the `docbook-fmt` crate) into rescribe's document IR. Supports DocBook 5
-//! and DocBook 4 elements.
+//! Translates `crate::DocBookDoc` (the standalone DocBook/XML AST from this
+//! crate) into rescribe's document IR. Supports DocBook 5 and DocBook 4
+//! elements.
 //!
-//! All XML tokenizing/parsing lives in `docbook-fmt` — this crate is a thin
-//! AST↔IR translator only (per CLAUDE.md's "adapter layer must never
-//! contain parsing or writing logic" rule).
+//! All XML tokenizing/parsing lives in the rest of `docbook-fmt` — this
+//! module is a thin AST↔IR translator only (per CLAUDE.md's "adapter layer
+//! must never contain parsing or writing logic" rule).
 //!
 //! # Example
 //!
 //! ```
-//! use rescribe_read_docbook::parse;
+//! use docbook_fmt::rescribe::parse;
 //!
 //! let docbook = r#"<?xml version="1.0"?>
 //! <article xmlns="http://docbook.org/ns/docbook">
@@ -25,7 +25,7 @@
 
 use std::collections::HashMap;
 
-use docbook_fmt::{DocBookDoc, Node as DbNode};
+use crate::{DocBookDoc, Node as DbNode};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
@@ -149,9 +149,8 @@ fn convert_children(
                     "equation" | "informalequation" | "inlineequation"
                 ) && is_mathml_root(name)
                 {
-                    let raw =
-                        String::from_utf8(docbook_fmt::emit_fragment(std::slice::from_ref(child)))
-                            .unwrap_or_default();
+                    let raw = String::from_utf8(crate::emit_fragment(std::slice::from_ref(child)))
+                        .unwrap_or_default();
                     out.push(
                         Node::new(node::SPAN)
                             .prop("docbook:tag", "mathml-raw")
@@ -219,8 +218,7 @@ fn convert_children(
                     && let Some(node) = converted.take()
                 {
                     let raw =
-                        String::from_utf8(docbook_fmt::emit_fragment(std::slice::from_ref(child)))
-                            .ok();
+                        String::from_utf8(crate::emit_fragment(std::slice::from_ref(child))).ok();
                     converted = Some(match raw {
                         Some(raw) => node.prop("docbook:raw", raw),
                         None => node,

@@ -1,7 +1,9 @@
 //! FictionBook 2 (FB2) tokenizer, AST, and builder.
 //!
-//! A standalone crate with **no rescribe dependency**.
-//! The `rescribe-read-fb2` and `rescribe-write-fb2` crates are thin adapters.
+//! A standalone crate with **no rescribe dependency by default**. The
+//! optional `rescribe` feature (default off) adds `crate::rescribe::{parse,
+//! emit}`, a thin adapter that translates `fb2_fmt::FictionBook` to and
+//! from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -42,6 +44,8 @@ pub mod ast;
 mod emit;
 mod events;
 mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 pub use ast::*;

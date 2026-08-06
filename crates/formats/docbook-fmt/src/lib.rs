@@ -1,11 +1,12 @@
 //! DocBook (and generic XML) parser, AST, and emitter.
 //!
-//! A standalone crate wrapping `quick-xml` with **no rescribe dependency**
-//! — usable as a general Rust DocBook/XML library. `rescribe-read-docbook`
-//! and `rescribe-write-docbook` are thin adapter layers on top that
-//! translate `docbook_fmt::Node` to and from rescribe's IR; DocBook-specific
-//! *meaning* (which element names map to which document semantics) lives in
-//! those adapters, not here — this crate only knows XML structure.
+//! A standalone crate wrapping `quick-xml` with **no rescribe dependency by
+//! default** — usable as a general Rust DocBook/XML library. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`,
+//! a thin adapter that translates `docbook_fmt::Node` to and from
+//! rescribe's `Document` IR; DocBook-specific *meaning* (which element
+//! names map to which document semantics) lives in that adapter, not here
+//! — this crate only knows XML structure by default.
 //!
 //! # API layers
 //!
@@ -56,6 +57,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

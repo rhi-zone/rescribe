@@ -1,8 +1,9 @@
 //! Djot tokenizer, AST, and builder.
 //!
-//! A standalone crate with **no rescribe dependency** — usable as a general
-//! Rust Djot library. The `rescribe-read-djot` and `rescribe-write-djot` crates
-//! are thin adapter layers on top.
+//! A standalone crate with **no rescribe dependency by default** — usable
+//! as a general Rust Djot library. The optional `rescribe` feature (default
+//! off) adds `crate::rescribe::{parse, emit}`, a thin adapter that
+//! translates `DjotDoc` to and from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -49,6 +50,8 @@ pub mod batch;
 mod emit;
 mod events;
 mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

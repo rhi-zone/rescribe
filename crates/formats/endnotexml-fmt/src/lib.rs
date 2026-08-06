@@ -1,13 +1,14 @@
 //! EndNote XML bibliography parser, AST, and emitter.
 //!
-//! A standalone crate wrapping `quick-xml` with **no rescribe dependency**
-//! — usable as a general Rust EndNote XML library by anything that needs to
-//! read or write EndNote's export format: a reference-manager import tool,
-//! a citation indexer, a bibliography deduplication utility, a metadata
-//! extraction pipeline. `rescribe-read-endnotexml` and
-//! `rescribe-write-endnotexml` are thin adapter layers on top that
-//! translate `endnotexml_fmt::EndNoteDoc` to and from rescribe's
-//! `bibliography`/`bibliography_entry`/`bibliography_field` IR (ADR 0005).
+//! A standalone crate wrapping `quick-xml` with **no rescribe dependency by
+//! default** — usable as a general Rust EndNote XML library by anything
+//! that needs to read or write EndNote's export format: a
+//! reference-manager import tool, a citation indexer, a bibliography
+//! deduplication utility, a metadata extraction pipeline. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`,
+//! a thin adapter that translates `endnotexml_fmt::EndNoteDoc` to and from
+//! rescribe's `bibliography`/`bibliography_entry`/`bibliography_field` IR
+//! (ADR 0005).
 //!
 //! # API layers
 //!
@@ -59,6 +60,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

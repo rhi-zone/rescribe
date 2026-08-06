@@ -1,15 +1,15 @@
-//! DocBook writer for rescribe.
+//! rescribe → DocBook writer.
 //!
-//! Translates rescribe's document IR into `docbook_fmt::DocBookDoc` (the
-//! standalone DocBook/XML AST from the `docbook-fmt` crate) and serializes
-//! it via `docbook_fmt::emit`. All XML writing lives in `docbook-fmt` —
-//! this crate is a thin IR↔AST translator only (per CLAUDE.md's "adapter
+//! Translates rescribe's document IR into `crate::DocBookDoc` (the
+//! standalone DocBook/XML AST from this crate) and serializes it via
+//! `crate::emit`. All XML writing lives in the rest of `docbook-fmt` —
+//! this module is a thin IR↔AST translator only (per CLAUDE.md's "adapter
 //! layer must never contain parsing or writing logic" rule).
 //!
 //! # Example
 //!
 //! ```
-//! use rescribe_write_docbook::emit;
+//! use docbook_fmt::rescribe::emit;
 //! use rescribe_core::{Document, Node, Properties};
 //!
 //! let doc = Document {
@@ -25,7 +25,7 @@
 
 use std::collections::HashMap;
 
-use docbook_fmt::{DocBookDoc, Node as DbNode, XmlDecl};
+use crate::{DocBookDoc, Node as DbNode, XmlDecl};
 use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
 use rescribe_format_api::Emit as _;
 use rescribe_std::{node, prop};
@@ -36,8 +36,8 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
 
     let mut root_children = Vec::new();
     // Any metadata key ending in `_raw` is a whole-subtree verbatim capture
-    // of an unmodeled `<info>` front-matter element (see
-    // `rescribe-read-docbook`'s `convert_children`/`extract_metadata` —
+    // of an unmodeled `<info>` front-matter element (see the `read`
+    // sibling module's `convert_children`/`extract_metadata` —
     // `{tag}_raw`, e.g. `author_raw` or `revhistory_raw`). Collected once
     // here so both the "do we even need an `<info>`" check and the
     // splice-back loop below share one scan.
@@ -58,7 +58,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
             info_children.push(db_element("title", vec![], vec![db_text(title)]));
         }
         // Splice back every raw-captured `<info>` subtree byte-for-byte
-        // (see `rescribe-read-docbook`'s `convert_children`/
+        // (see the `read` sibling module's `convert_children`/
         // `extract_metadata` — any `{tag}_raw` metadata field, e.g.
         // `author_raw` or `revhistory_raw`). This is lossless where
         // reconstructing the element from its flattened text would not be;
@@ -67,7 +67,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         for (_, raw) in &info_raw_fields {
             info_children.push(DbNode::Raw {
                 content: (*raw).to_string(),
-                span: docbook_fmt::Span::NONE,
+                span: crate::Span::NONE,
             });
         }
         info = Some(db_element("info", vec![], info_children));
@@ -83,7 +83,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
 
     // If the document's content is exactly one structural sectioning
     // container (see `is_structural_sectioning_tag`) — the overwhelmingly
-    // common case, since `rescribe-read-docbook`'s `parse` wraps a whole
+    // common case, since the `read` sibling module's `parse` wraps a whole
     // parsed file in exactly one such `DIV` — reuse *its* tag as the XML
     // root instead of always hardcoding `<article>`. Before `docbook:tag`
     // was added to these DIVs, hardcoding `<article>` was the only
@@ -139,21 +139,21 @@ fn db_element(name: &str, attrs: Vec<(String, String)>, children: Vec<DbNode>) -
         // always wrote `<foo/>` for an empty element regardless of this
         // field, which didn't exist yet).
         self_closing: true,
-        span: docbook_fmt::Span::NONE,
+        span: crate::Span::NONE,
     }
 }
 
 fn db_text(content: impl Into<String>) -> DbNode {
     DbNode::Text {
         content: content.into(),
-        span: docbook_fmt::Span::NONE,
+        span: crate::Span::NONE,
     }
 }
 
 /// Build the generic `id`/`role` attributes for a node, if the IR node
-/// carries the corresponding raw-preserved properties (see
-/// `rescribe-read-docbook`'s `attach_generic_attrs` for the reader side of
-/// this round trip).
+/// carries the corresponding raw-preserved properties (see the `read`
+/// sibling module's `attach_generic_attrs` for the reader side of this
+/// round trip).
 fn generic_attrs(node: &Node) -> Vec<(String, String)> {
     let mut attrs = Vec::new();
     if let Some(id) = node.props.get_str(prop::ID) {
@@ -168,8 +168,8 @@ fn generic_attrs(node: &Node) -> Vec<(String, String)> {
 /// Build a `<equation>`/`<informalequation>`/`<inlineequation>`'s children
 /// from a `math_display`/`math_inline` node, per the DocBook 5.2 content
 /// model (`alt?, (mediaobject+ | mathphrase+ | mml:*+)`, optionally preceded
-/// by a title — see `rescribe-read-docbook::build_math_node`'s doc comment
-/// for the full reader-side rationale this mirrors):
+/// by a title — see the `read` sibling module's `build_math_node`'s doc
+/// comment for the full reader-side rationale this mirrors):
 /// - A `CAPTION` child (the equation's own `<title>`) re-emits via
 ///   `write_node` regardless of position — a title is always block-shaped
 ///   even inside an inline equation (which in practice won't have one).
@@ -198,7 +198,7 @@ fn equation_children(node: &Node, write_child: fn(&Node) -> Vec<DbNode>) -> Vec<
     {
         out.push(DbNode::Raw {
             content: source.to_string(),
-            span: docbook_fmt::Span::NONE,
+            span: crate::Span::NONE,
         });
     }
     if !mathphrase_kids.is_empty() {
@@ -211,11 +211,11 @@ fn equation_children(node: &Node, write_child: fn(&Node) -> Vec<DbNode>) -> Vec<
     out
 }
 
-/// Splice a `code_block`'s `docbook:callout-markers` (see
-/// rescribe-read-docbook's `extract_verbatim_text`) back into its flat
-/// `content` string as alternating text/`<co/>` DocBook AST nodes, ordered
-/// by each marker's recorded character offset. Falls back to a single text
-/// node (the previous, marker-less behavior) when the property is absent or
+/// Splice a `code_block`'s `docbook:callout-markers` (see the `read`
+/// sibling module's `extract_verbatim_text`) back into its flat `content`
+/// string as alternating text/`<co/>` DocBook AST nodes, ordered by each
+/// marker's recorded character offset. Falls back to a single text node
+/// (the previous, marker-less behavior) when the property is absent or
 /// malformed.
 fn write_verbatim_children(content: &str, markers_prop: Option<&PropValue>) -> Vec<DbNode> {
     let Some(PropValue::List(markers)) = markers_prop else {
@@ -272,7 +272,7 @@ fn write_verbatim_children(content: &str, markers_prop: Option<&PropValue>) -> V
 }
 
 /// Re-emit a `<programlistingco>`'s `<areaspec>` sibling from a
-/// `code_block`'s `docbook:areaspec` map (see rescribe-read-docbook's
+/// `code_block`'s `docbook:areaspec` map (see the `read` sibling module's
 /// "areaspec" arm) — `id`/`units`/`otherunits` are `<areaspec>`'s own
 /// attributes (DocBook 5.2 reference: it has no `label` of its own), and
 /// `areas` is the ordered list of `<area>`/`<areaset>` children.
@@ -291,7 +291,7 @@ fn write_areaspec(map: &HashMap<String, PropValue>) -> DbNode {
 }
 
 /// Re-emit one `<area>` or `<areaset>` from its `docbook:area`-shaped map
-/// (see rescribe-read-docbook's "area"/"areaset" arms) — `kind` selects
+/// (see the `read` sibling module's "area"/"areaset" arms) — `kind` selects
 /// which; an `<areaset>` recurses into its own nested `areas` list of plain
 /// `<area>` entries.
 fn write_area_entry(entry: &PropValue) -> Option<DbNode> {
@@ -333,7 +333,7 @@ fn write_area(map: &HashMap<String, PropValue>) -> DbNode {
 /// Convert one rescribe IR (block-level) node into zero or more DocBook AST
 /// nodes.
 /// Whether `tag` is one of the DocBook structural sectioning containers
-/// that `rescribe-read-docbook` tags a `DIV` with via `docbook:tag`
+/// that the `read` sibling module tags a `DIV` with via `docbook:tag`
 /// (article/book/chapter/part/appendix/section/sect1-5/simplesect — see
 /// that reader's "Document level"/"Sections" `convert_element` arms).
 /// These need [`write_sectioning_container`]'s title-extraction treatment
@@ -413,16 +413,16 @@ fn write_node(node: &Node) -> Vec<DbNode> {
 
         // A `div` tagged `docbook:tag` is either a structural sectioning
         // container (article/book/chapter/part/appendix/section/sect1-5/
-        // simplesect — see `rescribe-read-docbook::convert_element`'s
+        // simplesect — see the `read` sibling module's `convert_element`'s
         // "Document level"/"Sections" arms) or a `generic_div` (an
         // unrecognized block-level element raw-preserved by the reader's
-        // catch-all, see `rescribe-read-docbook::generic_div`) — either way
+        // catch-all, see that module's `generic_div`) — either way
         // re-emit its original tag name. A `div` with no `docbook:tag` at
         // all (pre-existing content from before every DIV carried one, or a
         // synthetic wrapper) just flattens into its children, same as
         // `DOCUMENT`.
         node::DIV => match node.props.get_str("docbook:tag") {
-            // `<programlistingco>` (see rescribe-read-docbook's
+            // `<programlistingco>` (see the `read` sibling module's
             // "programlistingco" arm): content model `areaspec?,
             // programlisting`. Its (possibly areaspec-augmented) `code_block`
             // child carries `docbook:areaspec` if the source had an
@@ -455,8 +455,9 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             }
             Some(tag) => {
                 let mut attrs = generic_attrs(node);
-                // `docbook:qanda-defaultlabel` (see rescribe-read-docbook's
-                // "qandaset" arm) is only meaningful on `<qandaset>` itself.
+                // `docbook:qanda-defaultlabel` (see the `read` sibling
+                // module's "qandaset" arm) is only meaningful on
+                // `<qandaset>` itself.
                 if tag == "qandaset"
                     && let Some(label) = node.props.get_str("docbook:qanda-defaultlabel")
                 {
@@ -468,7 +469,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                     node.children.iter().flat_map(write_node).collect(),
                 )]
             }
-            // `html:class == "abstract"` (see rescribe-read-docbook's
+            // `html:class == "abstract"` (see the `read` sibling module's
             // "abstract" arm, the one dedicated DIV mapping that doesn't
             // use `docbook:tag`) still needs to round-trip back to
             // `<abstract>` — falling through to the untagged case below
@@ -482,7 +483,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             None => node.children.iter().flat_map(write_node).collect(),
         },
 
-        // A container's caption (see rescribe-read-docbook's
+        // A container's caption (see the `read` sibling module's
         // `heading_level_for_parent` — any `<title>` whose parent isn't a
         // genuine sectioning container maps here instead of to `HEADING`)
         // — re-emit as `<title>` in place, not wrapped in a spurious
@@ -498,7 +499,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_inline).collect(),
         )],
 
-        // `docbook:tag == "bridgehead"` (see rescribe-read-docbook's
+        // `docbook:tag == "bridgehead"` (see the `read` sibling module's
         // "bridgehead" arm): a bridgehead is explicitly *not* tied to the
         // section hierarchy, so it must not get the `<sectN><title>`
         // wrapper below — re-emit as a bare `<bridgehead renderas="sectN">`
@@ -558,8 +559,8 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             )]
         }
 
-        // <attribution> (see rescribe-read-docbook's "attribution" arm) —
-        // phrase-level content, so re-emitted via write_inline like
+        // <attribution> (see the `read` sibling module's "attribution" arm)
+        // — phrase-level content, so re-emitted via write_inline like
         // CAPTION, not write_node.
         "docbook:attribution" => vec![db_element(
             "attribution",
@@ -568,8 +569,8 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         )],
 
         node::LIST => {
-            // `docbook:tag` = "procedure"/"substeps"/"calloutlist" (see
-            // rescribe-read-docbook's "procedure"|"substeps"|"calloutlist"
+            // `docbook:tag` = "procedure"/"substeps"/"calloutlist" (see the
+            // `read` sibling module's "procedure"|"substeps"|"calloutlist"
             // arms) re-emits the original element instead of
             // `<orderedlist>`.
             let tag = match node.props.get_str("docbook:tag") {
@@ -592,8 +593,9 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         node::LIST_ITEM => {
             let tag = node.props.get_str("docbook:tag").unwrap_or("listitem");
             let mut attrs = Vec::new();
-            // `arearefs` (see rescribe-read-docbook's "callout" arm) only
-            // applies to `<callout>`, the `calloutlist`-flavored `LIST_ITEM`.
+            // `arearefs` (see the `read` sibling module's "callout" arm)
+            // only applies to `<callout>`, the `calloutlist`-flavored
+            // `LIST_ITEM`.
             if tag == "callout"
                 && let Some(arearefs) = node.props.get_str("docbook:arearefs")
             {
@@ -627,7 +629,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             }
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
             // `docbook:tag` remembers which verbatim element this came from
-            // (see rescribe-read-docbook's "programlisting"|"screen"|
+            // (see the `read` sibling module's "programlisting"|"screen"|
             // "literallayout"|"synopsis"|"address" arm) — defaults to
             // `programlisting` for CODE_BLOCK nodes built directly by
             // non-DocBook producers.
@@ -635,7 +637,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                 .props
                 .get_str("docbook:tag")
                 .unwrap_or("programlisting");
-            // `docbook:callout-markers` (see rescribe-read-docbook's
+            // `docbook:callout-markers` (see the `read` sibling module's
             // "programlisting"|... arm / `extract_verbatim_text`) splices
             // `<co/>` markers back into the text at their recorded offsets;
             // absent it, this is exactly the previous single-text-node
@@ -646,10 +648,10 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         }
 
         node::TABLE => {
-            // Split children back into <colspec> siblings (see
-            // rescribe-read-docbook's dedicated "colspec" arm — a
-            // structured "docbook:colspec"-kind child, not a table row)
-            // and actual row children.
+            // Split children back into <colspec> siblings (see the `read`
+            // sibling module's dedicated "colspec" arm — a structured
+            // "docbook:colspec"-kind child, not a table row) and actual
+            // row children.
             let mut colspecs = Vec::new();
             let mut rows = Vec::new();
             for child in &node.children {
@@ -677,7 +679,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
 
             // A `title` property means this was a formal <table> (DocBook
             // 5.2: table requires a title, informaltable must not have
-            // one) — see rescribe-read-docbook's `"title" if parent ==
+            // one) — see the `read` sibling module's `"title" if parent ==
             // Some("table")` arm.
             let tag = if node.props.get_str(prop::TITLE).is_some() {
                 "table"
@@ -712,7 +714,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         node::TABLE_CELL | node::TABLE_HEADER => {
             let mut attrs = Vec::new();
             // `rowspan` (total rows spanned) round-trips back to `morerows`
-            // (additional rows spanned) — see rescribe-read-docbook's
+            // (additional rows spanned) — see the `read` sibling module's
             // "entry"|"td" arm for the inverse `+1` conversion.
             if let Some(rowspan) = node.props.get_int(prop::ROWSPAN)
                 && rowspan > 1
@@ -755,11 +757,12 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             )],
         )],
 
-        // See `rescribe-read-docbook::build_math_node`'s doc comment for the
-        // full DocBook 5.2 content-model rationale this mirrors on write.
-        // `<equation>` (has a `CAPTION` child, from an original `<title>`)
-        // vs `<informalequation>` (doesn't) — same title-presence tag
-        // selection convention as the `TABLE`/`informaltable` arm above.
+        // See the `read` sibling module's `build_math_node`'s doc comment
+        // for the full DocBook 5.2 content-model rationale this mirrors on
+        // write. `<equation>` (has a `CAPTION` child, from an original
+        // `<title>`) vs `<informalequation>` (doesn't) — same
+        // title-presence tag selection convention as the
+        // `TABLE`/`informaltable` arm above.
         "math_display" => {
             let has_caption = node
                 .children
@@ -811,8 +814,8 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             vec![db_element("para", vec![], write_inline(node))]
         }
 
-        // A `generic_span` (see rescribe-read-docbook's `generic_span` — an
-        // unrecognized inline element, e.g. `<arg>` inside
+        // A `generic_span` (see the `read` sibling module's `generic_span`
+        // — an unrecognized inline element, e.g. `<arg>` inside
         // `<cmdsynopsis>`, raw-preserved with its tag under `docbook:tag`)
         // that ends up as a direct child of a raw-preserved block
         // container (e.g. `<cmdsynopsis>`'s mixed inline content model, not
@@ -833,7 +836,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
 }
 
 /// Write a `definition_list`'s flat, run-grouped children back to their
-/// DocBook shape. Per rescribe-read-docbook's convention (see its
+/// DocBook shape. Per the `read` sibling module's convention (see its
 /// `"variablelist"`/`"varlistentry"`/`"qandaset"`/`"qandaentry"` doc
 /// comments — the same flat shape `rescribe-read-markdown`/
 /// `rescribe-read-html` already use for `definition_list`), a group is
@@ -919,13 +922,13 @@ fn write_definition_list(node: &Node) -> Vec<DbNode> {
 }
 
 /// Write a `bibliography_entry` node back to `<biblioentry>`/`<bibliomixed>`/
-/// `<biblioset>`/`<bibliomset>` (see rescribe-read-docbook's
+/// `<biblioset>`/`<bibliomset>` (see the `read` sibling module's
 /// `build_bibliography_entry` — `docbook:tag` remembers which one the
 /// original element was; defaults to `<biblioentry>` for an entry built by a
 /// non-DocBook producer). `prop::DATE` (a structured year/month/day map, see
 /// its own doc comment) becomes a leading `<date>` child; a `page_first` +
 /// `page_last` pair of sibling fields recombines into one `<pagenums>`
-/// (see rescribe-read-docbook's `convert_pagenums` for the reader-side
+/// (see the `read` sibling module's `convert_pagenums` for the reader-side
 /// split); a nested `BIBLIOGRAPHY_ENTRY` child (from `<biblioset>` nesting)
 /// recurses through this same function.
 fn write_bibliography_entry(node: &Node) -> DbNode {
@@ -948,7 +951,7 @@ fn write_bibliography_entry(node: &Node) -> DbNode {
             continue;
         }
         // `<bibliomixed>`'s mixed content model interleaves free text
-        // directly between fields (see rescribe-read-docbook's
+        // directly between fields (see the `read` sibling module's
         // `convert_children` — a `bibliomixed` entry's non-element
         // children, e.g. plain running text between citation parts, are
         // ordinary inline nodes, not `bibliography_field`s). Re-emit them
@@ -981,7 +984,7 @@ fn write_bibliography_entry(node: &Node) -> DbNode {
 }
 
 /// Write one `bibliography_field` node back to its originating DocBook
-/// element. `docbook:tag` (set by every arm of rescribe-read-docbook's
+/// element. `docbook:tag` (set by every arm of the `read` sibling module's
 /// `convert_biblio_field`) takes priority when present, since it names the
 /// exact source element (e.g. `<publishername>` vs. a bare `<publisher>`,
 /// or the original tag behind a raw-preserved `misc` field); `prop::
@@ -1091,9 +1094,9 @@ fn flatten_field_text_into(node: &Node, out: &mut String) {
 }
 
 /// Format `prop::DATE`'s `year`/`month`/`day` map (see the property's own
-/// doc comment) back into an ISO 8601 string — the inverse of
-/// rescribe-read-docbook's `parse_bibliographic_date`. Zero-padded to two
-/// digits for month/day per ISO 8601 (`2020-03-05`, not `2020-3-5`).
+/// doc comment) back into an ISO 8601 string — the inverse of the `read`
+/// sibling module's `parse_bibliographic_date`. Zero-padded to two digits
+/// for month/day per ISO 8601 (`2020-03-05`, not `2020-3-5`).
 fn format_bibliographic_date(map: &HashMap<String, PropValue>) -> String {
     let as_int = |key: &str| match map.get(key) {
         Some(PropValue::Int(i)) => Some(*i),
@@ -1206,7 +1209,7 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
         )],
 
         // Same content-model handling as the block `"math_display"` arm
-        // above (see `rescribe-read-docbook::build_math_node`'s doc
+        // above (see the `read` sibling module's `build_math_node`'s doc
         // comment), using `write_inline` throughout so an `IMAGE` child
         // becomes `<inlinemediaobject>` (not `<mediaobject>`) per
         // `<inlineequation>`'s content model.
@@ -1220,15 +1223,15 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
         node::RAW_INLINE => match node.props.get_str("docbook:entity") {
             Some(name) => vec![DbNode::EntityRef {
                 name: name.to_string(),
-                span: docbook_fmt::Span::NONE,
+                span: crate::Span::NONE,
             }],
             None => node.children.iter().flat_map(write_inline).collect(),
         },
 
         // A `span` tagged `docbook:tag` is a `generic_span` (an
         // unrecognized inline-level element raw-preserved by the reader's
-        // catch-all, see `rescribe-read-docbook::generic_span`) — re-emit
-        // its original tag name.
+        // catch-all, see the `read` sibling module's `generic_span`) —
+        // re-emit its original tag name.
         node::SPAN => match node.props.get_str("docbook:tag") {
             Some(tag) => vec![db_element(
                 tag,
@@ -1323,7 +1326,7 @@ mod tests {
     fn test_roundtrip_through_reader() {
         let docbook = r#"<?xml version="1.0"?>
 <article><title>T</title><para>Hello <emphasis>world</emphasis></para></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(xml.contains("<para>Hello <emphasis>world</emphasis></para>"));
@@ -1331,7 +1334,7 @@ mod tests {
 
     /// An `<equation>` with embedded `<mml:math>` MathML must round-trip
     /// byte-for-byte through parse -> emit -> reparse: the `mml:math`
-    /// subtree is raw-preserved (see `rescribe-read-docbook`'s
+    /// subtree is raw-preserved (see the `read` sibling module's
     /// `mathml-raw` sentinel / `split_mathml`) and re-spliced verbatim on
     /// write (see `equation_children`'s `DbNode::Raw` branch), so a second
     /// parse must recover the exact same `math:source`.
@@ -1339,7 +1342,7 @@ mod tests {
     fn test_roundtrip_mathml_equation() {
         let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"><equation><title>T</title><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></equation></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1351,7 +1354,7 @@ mod tests {
             "expected <equation> (has title): {xml}"
         );
 
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         let formula = &reparsed.value.content.children[0].children[0];
         assert_eq!(formula.kind.as_str(), "math_display");
         assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
@@ -1365,13 +1368,13 @@ mod tests {
 
     /// An `<informalequation>` with a `<mathphrase>` must round-trip its
     /// nested inline markup (e.g. `<superscript>`) as real child nodes, not
-    /// flattened text — see `rescribe-read-docbook::build_math_node`'s doc
-    /// comment.
+    /// flattened text — see the `read` sibling module's `build_math_node`'s
+    /// doc comment.
     #[test]
     fn test_roundtrip_mathphrase() {
         let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"><informalequation><mathphrase>x<superscript>n</superscript></mathphrase></informalequation></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1387,7 +1390,7 @@ mod tests {
     fn test_roundtrip_mathml_inlineequation() {
         let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"><para>x is <inlineequation><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></inlineequation>.</para></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1395,7 +1398,7 @@ mod tests {
             "emitted XML missing raw mml:math: {xml}"
         );
 
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         let para = &reparsed.value.content.children[0].children[0];
         let formula = &para.children[1];
         assert_eq!(formula.kind.as_str(), "math_inline");
@@ -1410,8 +1413,8 @@ mod tests {
     /// reader actually nested each entry inside a `docbook:varlistentry`
     /// wrapper node the writer had no arm for (silently dropped by the
     /// generic catch-all). Both sides now agree on the flat, run-grouped
-    /// shape (see `rescribe-read-docbook`'s `"varlistentry"` doc comment and
-    /// `write_definition_list`) — this asserts a full
+    /// shape (see the `read` sibling module's `"varlistentry"` doc comment
+    /// and `write_definition_list`) — this asserts a full
     /// parse -> emit -> reparse round trip is lossless for 2+ entries.
     #[test]
     fn test_roundtrip_multi_entry_variablelist() {
@@ -1428,7 +1431,7 @@ mod tests {
     </varlistentry>
   </variablelist>
 </article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1437,7 +1440,7 @@ mod tests {
             ),
             "entries bled together or were dropped: {xml}"
         );
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 
@@ -1458,7 +1461,7 @@ mod tests {
     </varlistentry>
   </variablelist>
 </article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1467,7 +1470,7 @@ mod tests {
             ),
             "unexpected emitted XML: {xml}"
         );
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 
@@ -1491,7 +1494,7 @@ mod tests {
     </qandaentry>
   </qandaset>
 </article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1510,7 +1513,7 @@ mod tests {
             ),
             "unanswered question not preserved: {xml}"
         );
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 
@@ -1539,7 +1542,7 @@ mod tests {
     </qandadiv>
   </qandaset>
 </article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(
@@ -1548,12 +1551,12 @@ mod tests {
             ),
             "unexpected emitted XML: {xml}"
         );
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 
-    /// Inline-marker flavor of the callout composition (see
-    /// rescribe-read-docbook's `"co"`/`extract_verbatim_text` doc comments):
+    /// Inline-marker flavor of the callout composition (see the `read`
+    /// sibling module's `"co"`/`extract_verbatim_text` doc comments):
     /// `<co/>` markers embedded directly in a bare `<programlisting>`
     /// (no `<programlistingco>`/`<areaspec>` wrapper needed — DocBook 5.2
     /// permits `<co>` wherever `%co.class;` appears in the verbatim
@@ -1563,7 +1566,7 @@ mod tests {
     fn test_roundtrip_inline_co_markers() {
         let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"><example><programlisting>a<co xml:id="co.1"/>b<co xml:id="co.2" label="2"/>c</programlisting><calloutlist><callout arearefs="co.1"><para>one</para></callout><callout arearefs="co.2"><para>two</para></callout></calloutlist></example></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
 
         let example = &parsed.value.content.children[0].children[0];
         let code_block = &example.children[0];
@@ -1612,11 +1615,11 @@ mod tests {
             "unexpected emitted calloutlist: {xml}"
         );
 
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 
-    /// External-coordinates flavor (see rescribe-read-docbook's
+    /// External-coordinates flavor (see the `read` sibling module's
     /// `"programlistingco"`/`"areaspec"`/`"area"` doc comments):
     /// `<programlistingco>` wraps an `<areaspec>` (holding `<area>`
     /// coordinate records, no inline `<co/>` markers in the listing itself)
@@ -1628,7 +1631,7 @@ mod tests {
 <article xmlns="http://docbook.org/ns/docbook"><example><programlistingco><areaspec units="linecolumn"><area xml:id="area.1" coords="1 1"/><area xml:id="area.2" coords="2 1" label="2"/></areaspec><programlisting>fn main() {
     print();
 }</programlisting></programlistingco><calloutlist><callout arearefs="area.1"><para>Function definition.</para></callout><callout arearefs="area.2"><para>The call.</para></callout></calloutlist></example></article>"#;
-        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let parsed = super::super::read::parse(docbook).unwrap();
 
         let example = &parsed.value.content.children[0].children[0];
         let wrapper = &example.children[0];
@@ -1679,7 +1682,7 @@ mod tests {
             "unexpected emitted areaspec: {xml}"
         );
 
-        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let reparsed = super::super::read::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }
 }
