@@ -22,16 +22,16 @@ query = ["rescribe-core/serde", "dep:jaq-core", "dep:jaq-std", "dep:jaq-json", "
 
 # Granular read/write features, one per format.
 # Use format-{fmt} to enable both directions at once.
-read-ansi = ["dep:rescribe-read-ansi"]
-write-ansi = ["dep:rescribe-write-ansi"]
+read-ansi = ["dep:ansi-fmt", "ansi-fmt/rescribe", "ansi-fmt/read"]
+write-ansi = ["dep:ansi-fmt", "ansi-fmt/rescribe", "ansi-fmt/write"]
 format-ansi = ["read-ansi", "write-ansi"]
 
-read-asciidoc = ["dep:rescribe-read-asciidoc"]
-write-asciidoc = ["dep:rescribe-write-asciidoc"]
+read-asciidoc = ["dep:asciidoc", "asciidoc/rescribe", "asciidoc/read"]
+write-asciidoc = ["dep:asciidoc", "asciidoc/rescribe", "asciidoc/write"]
 format-asciidoc = ["read-asciidoc", "write-asciidoc"]
 
-read-bbcode = ["dep:rescribe-read-bbcode"]
-write-bbcode = ["dep:rescribe-write-bbcode"]
+read-bbcode = ["dep:bbcode-fmt", "bbcode-fmt/rescribe", "bbcode-fmt/read"]
+write-bbcode = ["dep:bbcode-fmt", "bbcode-fmt/rescribe", "bbcode-fmt/write"]
 format-bbcode = ["read-bbcode", "write-bbcode"]
 
 read-biblatex = ["dep:rescribe-fmt-biblatex"]
@@ -55,59 +55,59 @@ format-commonmark = ["read-commonmark", "write-commonmark"]
 write-context = ["dep:rescribe-write-context"]
 format-context = ["write-context"]
 
-read-creole = ["dep:rescribe-read-creole"]
-write-creole = ["dep:rescribe-write-creole"]
+read-creole = ["dep:creole", "creole/rescribe", "creole/read"]
+write-creole = ["dep:creole", "creole/rescribe", "creole/write"]
 format-creole = ["read-creole", "write-creole"]
 
 read-csl-json = ["dep:rescribe-fmt-csl-json"]
 write-csl-json = ["dep:rescribe-fmt-csl-json"]
 format-csl-json = ["read-csl-json", "write-csl-json"]
 
-read-csv = ["dep:rescribe-read-csv"]
-write-csv = ["dep:rescribe-write-csv"]
+read-csv = ["dep:csv-fmt", "csv-fmt/rescribe"]
+write-csv = ["dep:csv-fmt", "csv-fmt/rescribe"]
 format-csv = ["read-csv", "write-csv"]
 
-read-djot = ["dep:rescribe-read-djot"]
-write-djot = ["dep:rescribe-write-djot"]
+read-djot = ["dep:djot-fmt", "djot-fmt/rescribe", "djot-fmt/read"]
+write-djot = ["dep:djot-fmt", "djot-fmt/rescribe", "djot-fmt/write"]
 format-djot = ["read-djot", "write-djot"]
 
-read-docbook = ["dep:rescribe-read-docbook"]
-write-docbook = ["dep:rescribe-write-docbook"]
+read-docbook = ["dep:docbook-fmt", "docbook-fmt/rescribe", "docbook-fmt/read"]
+write-docbook = ["dep:docbook-fmt", "docbook-fmt/rescribe", "docbook-fmt/write"]
 format-docbook = ["read-docbook", "write-docbook"]
 
-read-docx = ["dep:rescribe-read-docx"]
-write-docx = ["dep:rescribe-write-docx"]
+read-docx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/docx"]
+write-docx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/docx"]
 format-docx = ["read-docx", "write-docx"]
 
-read-dokuwiki = ["dep:rescribe-read-dokuwiki"]
-write-dokuwiki = ["dep:rescribe-write-dokuwiki"]
+read-dokuwiki = ["dep:dokuwiki", "dokuwiki/rescribe", "dokuwiki/read"]
+write-dokuwiki = ["dep:dokuwiki", "dokuwiki/rescribe", "dokuwiki/write"]
 format-dokuwiki = ["read-dokuwiki", "write-dokuwiki"]
 
 write-dzslides = ["dep:rescribe-write-dzslides"]
 format-dzslides = ["write-dzslides"]
 
-read-endnotexml = ["dep:rescribe-read-endnotexml"]
-write-endnotexml = ["dep:rescribe-write-endnotexml"]
+read-endnotexml = ["dep:endnotexml-fmt", "endnotexml-fmt/rescribe", "endnotexml-fmt/read"]
+write-endnotexml = ["dep:endnotexml-fmt", "endnotexml-fmt/rescribe", "endnotexml-fmt/write"]
 format-endnotexml = ["read-endnotexml", "write-endnotexml"]
 
 read-epub = ["dep:rescribe-read-epub"]
 write-epub = ["dep:rescribe-write-epub"]
 format-epub = ["read-epub", "write-epub"]
 
-read-fb2 = ["dep:rescribe-read-fb2"]
-write-fb2 = ["dep:rescribe-write-fb2"]
+read-fb2 = ["dep:fb2-fmt", "fb2-fmt/rescribe", "fb2-fmt/read"]
+write-fb2 = ["dep:fb2-fmt", "fb2-fmt/rescribe", "fb2-fmt/write"]
 format-fb2 = ["read-fb2", "write-fb2"]
 
-read-fountain = ["dep:rescribe-read-fountain"]
-write-fountain = ["dep:rescribe-write-fountain"]
+read-fountain = ["dep:fountain-fmt", "fountain-fmt/rescribe", "fountain-fmt/read"]
+write-fountain = ["dep:fountain-fmt", "fountain-fmt/rescribe", "fountain-fmt/write"]
 format-fountain = ["read-fountain", "write-fountain"]
 
 read-gfm = ["dep:rescribe-read-gfm"]
 write-gfm = ["dep:rescribe-write-gfm"]
 format-gfm = ["read-gfm", "write-gfm"]
 
-read-haddock = ["dep:rescribe-read-haddock"]
-write-haddock = ["dep:rescribe-write-haddock"]
+read-haddock = ["dep:haddock-fmt", "haddock-fmt/rescribe", "haddock-fmt/read"]
+write-haddock = ["dep:haddock-fmt", "haddock-fmt/rescribe", "haddock-fmt/write"]
 format-haddock = ["read-haddock", "write-haddock"]
 
 read-html = ["dep:rescribe-read-html"]
@@ -121,20 +121,20 @@ read-ipynb = ["dep:rescribe-fmt-ipynb"]
 write-ipynb = ["dep:rescribe-fmt-ipynb"]
 format-ipynb = ["read-ipynb", "write-ipynb"]
 
-read-jats = ["dep:rescribe-read-jats"]
-write-jats = ["dep:rescribe-write-jats"]
+read-jats = ["dep:jats-fmt", "jats-fmt/rescribe", "jats-fmt/read"]
+write-jats = ["dep:jats-fmt", "jats-fmt/rescribe", "jats-fmt/write"]
 format-jats = ["read-jats", "write-jats"]
 
-read-jira = ["dep:rescribe-read-jira"]
-write-jira = ["dep:rescribe-write-jira"]
+read-jira = ["dep:jira-fmt", "jira-fmt/rescribe", "jira-fmt/read"]
+write-jira = ["dep:jira-fmt", "jira-fmt/rescribe", "jira-fmt/write"]
 format-jira = ["read-jira", "write-jira"]
 
 read-latex = ["dep:rescribe-read-latex"]
 write-latex = ["dep:rescribe-write-latex"]
 format-latex = ["read-latex", "write-latex"]
 
-read-man = ["dep:rescribe-read-man"]
-write-man = ["dep:rescribe-write-man"]
+read-man = ["dep:man-fmt", "man-fmt/rescribe", "man-fmt/read"]
+write-man = ["dep:man-fmt", "man-fmt/rescribe", "man-fmt/write"]
 format-man = ["read-man", "write-man"]
 
 read-markdown = ["dep:rescribe-read-markdown"]
@@ -145,39 +145,39 @@ read-markdown-strict = ["dep:rescribe-read-markdown-strict"]
 write-markdown-strict = ["dep:rescribe-write-markdown-strict"]
 format-markdown-strict = ["read-markdown-strict", "write-markdown-strict"]
 
-read-markua = ["dep:rescribe-read-markua"]
-write-markua = ["dep:rescribe-write-markua"]
+read-markua = ["dep:markua", "markua/rescribe"]
+write-markua = ["dep:markua", "markua/rescribe"]
 format-markua = ["read-markua", "write-markua"]
 
-read-mediawiki = ["dep:rescribe-read-mediawiki"]
-write-mediawiki = ["dep:rescribe-write-mediawiki"]
+read-mediawiki = ["dep:mediawiki-fmt", "mediawiki-fmt/rescribe", "mediawiki-fmt/read"]
+write-mediawiki = ["dep:mediawiki-fmt", "mediawiki-fmt/rescribe", "mediawiki-fmt/write"]
 format-mediawiki = ["read-mediawiki", "write-mediawiki"]
 
 write-ms = ["dep:rescribe-write-ms"]
 format-ms = ["write-ms"]
 
-read-multimarkdown = ["dep:rescribe-read-multimarkdown"]
-write-multimarkdown = ["dep:rescribe-write-multimarkdown"]
+read-multimarkdown = ["dep:multimarkdown-fmt", "multimarkdown-fmt/rescribe", "multimarkdown-fmt/read"]
+write-multimarkdown = ["dep:multimarkdown-fmt", "multimarkdown-fmt/rescribe", "multimarkdown-fmt/write"]
 format-multimarkdown = ["read-multimarkdown", "write-multimarkdown"]
 
-read-muse = ["dep:rescribe-read-muse"]
-write-muse = ["dep:rescribe-write-muse"]
+read-muse = ["dep:muse-fmt", "muse-fmt/rescribe", "muse-fmt/read"]
+write-muse = ["dep:muse-fmt", "muse-fmt/rescribe", "muse-fmt/write"]
 format-muse = ["read-muse", "write-muse"]
 
-read-native = ["dep:rescribe-read-native"]
-write-native = ["dep:rescribe-write-native"]
+read-native = ["dep:native", "native/rescribe"]
+write-native = ["dep:native", "native/rescribe"]
 format-native = ["read-native", "write-native"]
 
-read-odt = ["dep:rescribe-read-odt"]
-write-odt = ["dep:rescribe-write-odt"]
+read-odt = ["dep:odf-fmt", "odf-fmt/rescribe", "odf-fmt/read"]
+write-odt = ["dep:odf-fmt", "odf-fmt/rescribe", "odf-fmt/write"]
 format-odt = ["read-odt", "write-odt"]
 
 read-opml = ["dep:opml-fmt", "opml-fmt/rescribe", "opml-fmt/read"]
 write-opml = ["dep:opml-fmt", "opml-fmt/rescribe", "opml-fmt/write"]
 format-opml = ["read-opml", "write-opml"]
 
-read-org = ["dep:rescribe-read-org"]
-write-org = ["dep:rescribe-write-org"]
+read-org = ["dep:org-fmt", "org-fmt/rescribe", "org-fmt/read"]
+write-org = ["dep:org-fmt", "org-fmt/rescribe", "org-fmt/write"]
 format-org = ["read-org", "write-org"]
 
 read-pandoc-json = ["dep:rescribe-fmt-pandoc-json"]
@@ -190,27 +190,27 @@ format-pdf = ["read-pdf"]
 write-plaintext = ["dep:rescribe-write-plaintext"]
 format-plaintext = ["write-plaintext"]
 
-read-pod = ["dep:rescribe-read-pod"]
-write-pod = ["dep:rescribe-write-pod"]
+read-pod = ["dep:pod-fmt", "pod-fmt/rescribe", "pod-fmt/read"]
+write-pod = ["dep:pod-fmt", "pod-fmt/rescribe", "pod-fmt/write"]
 format-pod = ["read-pod", "write-pod"]
 
-read-pptx = ["dep:rescribe-read-pptx"]
-write-pptx = ["dep:rescribe-write-pptx"]
+read-pptx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/pptx"]
+write-pptx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/pptx"]
 format-pptx = ["read-pptx", "write-pptx"]
 
 write-revealjs = ["dep:rescribe-write-revealjs"]
 format-revealjs = ["write-revealjs"]
 
-read-ris = ["dep:rescribe-read-ris"]
-write-ris = ["dep:rescribe-write-ris"]
+read-ris = ["dep:ris", "ris/rescribe"]
+write-ris = ["dep:ris", "ris/rescribe"]
 format-ris = ["read-ris", "write-ris"]
 
-read-rst = ["dep:rescribe-read-rst"]
-write-rst = ["dep:rescribe-write-rst"]
+read-rst = ["dep:rst-fmt", "rst-fmt/rescribe", "rst-fmt/read"]
+write-rst = ["dep:rst-fmt", "rst-fmt/rescribe", "rst-fmt/write"]
 format-rst = ["read-rst", "write-rst"]
 
-read-rtf = ["dep:rescribe-read-rtf"]
-write-rtf = ["dep:rescribe-write-rtf"]
+read-rtf = ["dep:rtf-fmt", "rtf-fmt/rescribe", "rtf-fmt/read"]
+write-rtf = ["dep:rtf-fmt", "rtf-fmt/rescribe", "rtf-fmt/write"]
 format-rtf = ["read-rtf", "write-rtf"]
 
 write-s5 = ["dep:rescribe-write-s5"]
@@ -222,52 +222,52 @@ format-slidy = ["write-slidy"]
 write-slideous = ["dep:rescribe-write-slideous"]
 format-slideous = ["write-slideous"]
 
-read-t2t = ["dep:rescribe-read-t2t"]
-write-t2t = ["dep:rescribe-write-t2t"]
+read-t2t = ["dep:t2t", "t2t/rescribe", "t2t/read"]
+write-t2t = ["dep:t2t", "t2t/rescribe", "t2t/write"]
 format-t2t = ["read-t2t", "write-t2t"]
 
-read-tei = ["dep:rescribe-read-tei"]
-write-tei = ["dep:rescribe-write-tei"]
+read-tei = ["dep:tei-fmt", "tei-fmt/rescribe", "tei-fmt/read"]
+write-tei = ["dep:tei-fmt", "tei-fmt/rescribe", "tei-fmt/write"]
 format-tei = ["read-tei", "write-tei"]
 
-read-texinfo = ["dep:rescribe-read-texinfo"]
-write-texinfo = ["dep:rescribe-write-texinfo"]
+read-texinfo = ["dep:texinfo", "texinfo/rescribe", "texinfo/read"]
+write-texinfo = ["dep:texinfo", "texinfo/rescribe", "texinfo/write"]
 format-texinfo = ["read-texinfo", "write-texinfo"]
 
-read-textile = ["dep:rescribe-read-textile"]
-write-textile = ["dep:rescribe-write-textile"]
+read-textile = ["dep:textile-fmt", "textile-fmt/rescribe", "textile-fmt/read"]
+write-textile = ["dep:textile-fmt", "textile-fmt/rescribe", "textile-fmt/write"]
 format-textile = ["read-textile", "write-textile"]
 
-read-tikiwiki = ["dep:rescribe-read-tikiwiki"]
-write-tikiwiki = ["dep:rescribe-write-tikiwiki"]
+read-tikiwiki = ["dep:tikiwiki", "tikiwiki/rescribe", "tikiwiki/read"]
+write-tikiwiki = ["dep:tikiwiki", "tikiwiki/rescribe", "tikiwiki/write"]
 format-tikiwiki = ["read-tikiwiki", "write-tikiwiki"]
 
-read-tsv = ["dep:rescribe-read-tsv"]
-write-tsv = ["dep:rescribe-write-tsv"]
+read-tsv = ["dep:tsv-fmt", "tsv-fmt/rescribe", "tsv-fmt/read"]
+write-tsv = ["dep:tsv-fmt", "tsv-fmt/rescribe", "tsv-fmt/write"]
 format-tsv = ["read-tsv", "write-tsv"]
 
-read-twiki = ["dep:rescribe-read-twiki"]
-write-twiki = ["dep:rescribe-write-twiki"]
+read-twiki = ["dep:twiki", "twiki/rescribe", "twiki/read"]
+write-twiki = ["dep:twiki", "twiki/rescribe", "twiki/write"]
 format-twiki = ["read-twiki", "write-twiki"]
 
-read-typst = ["dep:rescribe-read-typst"]
-write-typst = ["dep:rescribe-write-typst"]
+read-typst = ["dep:typst-fmt", "typst-fmt/rescribe", "typst-fmt/read"]
+write-typst = ["dep:typst-fmt", "typst-fmt/rescribe", "typst-fmt/write"]
 format-typst = ["read-typst", "write-typst"]
 
-read-vimwiki = ["dep:rescribe-read-vimwiki"]
-write-vimwiki = ["dep:rescribe-write-vimwiki"]
+read-vimwiki = ["dep:vimwiki-fmt", "vimwiki-fmt/rescribe", "vimwiki-fmt/read"]
+write-vimwiki = ["dep:vimwiki-fmt", "vimwiki-fmt/rescribe", "vimwiki-fmt/write"]
 format-vimwiki = ["read-vimwiki", "write-vimwiki"]
 
-read-xlsx = ["dep:rescribe-read-xlsx"]
-write-xlsx = ["dep:rescribe-write-xlsx"]
+read-xlsx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/xlsx"]
+write-xlsx = ["dep:rescribe-fmt-ooxml", "rescribe-fmt-ooxml/xlsx"]
 format-xlsx = ["read-xlsx", "write-xlsx"]
 
-read-xwiki = ["dep:rescribe-read-xwiki"]
-write-xwiki = ["dep:rescribe-write-xwiki"]
+read-xwiki = ["dep:xwiki", "xwiki/rescribe", "xwiki/read"]
+write-xwiki = ["dep:xwiki", "xwiki/rescribe", "xwiki/write"]
 format-xwiki = ["read-xwiki", "write-xwiki"]
 
-read-zimwiki = ["dep:rescribe-read-zimwiki"]
-write-zimwiki = ["dep:rescribe-write-zimwiki"]
+read-zimwiki = ["dep:zimwiki", "zimwiki/rescribe", "zimwiki/read"]
+write-zimwiki = ["dep:zimwiki", "zimwiki/rescribe", "zimwiki/write"]
 format-zimwiki = ["read-zimwiki", "write-zimwiki"]
 
 # Format groups — non-disjoint; a format may appear in multiple groups.
@@ -351,117 +351,80 @@ rescribe-math = { workspace = true, optional = true }
 rescribe-read-markdown = { workspace = true, optional = true }
 rescribe-read-html = { workspace = true, optional = true }
 rescribe-read-latex = { workspace = true, optional = true }
-rescribe-read-org = { workspace = true, optional = true }
+org-fmt = { workspace = true, optional = true }
 rescribe-fmt-pdf = { workspace = true, optional = true }
-rescribe-read-docx = { workspace = true, optional = true }
 rescribe-fmt-ipynb = { workspace = true, optional = true }
-rescribe-read-xlsx = { workspace = true, optional = true }
 rescribe-read-epub = { workspace = true, optional = true }
-rescribe-read-djot = { workspace = true, optional = true }
+djot-fmt = { workspace = true, optional = true }
 opml-fmt = { workspace = true, optional = true }
-rescribe-read-mediawiki = { workspace = true, optional = true }
+# Covers docx/pptx/xlsx reading AND writing — see the single dep entry below
+# (rescribe-fmt-ooxml consolidates what were rescribe-read-docx,
+# rescribe-write-docx, rescribe-read-pptx, rescribe-write-pptx,
+# rescribe-read-xlsx, rescribe-write-xlsx into one crate with a Cargo
+# feature per format).
+rescribe-fmt-ooxml = { workspace = true, optional = true }
+mediawiki-fmt = { workspace = true, optional = true }
 rescribe-fmt-bibtex = { workspace = true, optional = true }
 rescribe-fmt-csl-json = { workspace = true, optional = true }
-rescribe-read-docbook = { workspace = true, optional = true }
-rescribe-read-rst = { workspace = true, optional = true }
-rescribe-read-asciidoc = { workspace = true, optional = true }
-rescribe-read-typst = { workspace = true, optional = true }
-rescribe-read-dokuwiki = { workspace = true, optional = true }
-rescribe-read-jats = { workspace = true, optional = true }
-rescribe-read-tei = { workspace = true, optional = true }
-rescribe-read-man = { workspace = true, optional = true }
-rescribe-read-jira = { workspace = true, optional = true }
-rescribe-read-creole = { workspace = true, optional = true }
-rescribe-read-textile = { workspace = true, optional = true }
-rescribe-read-haddock = { workspace = true, optional = true }
-rescribe-read-muse = { workspace = true, optional = true }
-rescribe-read-t2t = { workspace = true, optional = true }
-rescribe-read-rtf = { workspace = true, optional = true }
-rescribe-read-vimwiki = { workspace = true, optional = true }
-rescribe-read-zimwiki = { workspace = true, optional = true }
-rescribe-read-pod = { workspace = true, optional = true }
-rescribe-read-markua = { workspace = true, optional = true }
-rescribe-read-fb2 = { workspace = true, optional = true }
-rescribe-read-texinfo = { workspace = true, optional = true }
-rescribe-read-tikiwiki = { workspace = true, optional = true }
-rescribe-read-twiki = { workspace = true, optional = true }
-rescribe-read-xwiki = { workspace = true, optional = true }
-rescribe-read-bbcode = { workspace = true, optional = true }
-rescribe-read-ansi = { workspace = true, optional = true }
-rescribe-read-csv = { workspace = true, optional = true }
-rescribe-read-tsv = { workspace = true, optional = true }
-rescribe-read-native = { workspace = true, optional = true }
-rescribe-read-odt = { workspace = true, optional = true }
-rescribe-read-pptx = { workspace = true, optional = true }
+docbook-fmt = { workspace = true, optional = true }
+rst-fmt = { workspace = true, optional = true }
+asciidoc = { workspace = true, optional = true }
+typst-fmt = { workspace = true, optional = true }
+dokuwiki = { workspace = true, optional = true }
+jats-fmt = { workspace = true, optional = true }
+tei-fmt = { workspace = true, optional = true }
+man-fmt = { workspace = true, optional = true }
+jira-fmt = { workspace = true, optional = true }
+creole = { workspace = true, optional = true }
+textile-fmt = { workspace = true, optional = true }
+haddock-fmt = { workspace = true, optional = true }
+muse-fmt = { workspace = true, optional = true }
+t2t = { workspace = true, optional = true }
+rtf-fmt = { workspace = true, optional = true }
+vimwiki-fmt = { workspace = true, optional = true }
+zimwiki = { workspace = true, optional = true }
+pod-fmt = { workspace = true, optional = true }
+markua = { workspace = true, optional = true }
+fb2-fmt = { workspace = true, optional = true }
+texinfo = { workspace = true, optional = true }
+tikiwiki = { workspace = true, optional = true }
+twiki = { workspace = true, optional = true }
+xwiki = { workspace = true, optional = true }
+bbcode-fmt = { workspace = true, optional = true }
+ansi-fmt = { workspace = true, optional = true }
+csv-fmt = { workspace = true, optional = true }
+tsv-fmt = { workspace = true, optional = true }
+native = { workspace = true, optional = true }
+odf-fmt = { workspace = true, optional = true }
 rescribe-read-commonmark = { workspace = true, optional = true }
 rescribe-read-gfm = { workspace = true, optional = true }
-rescribe-read-ris = { workspace = true, optional = true }
-rescribe-read-endnotexml = { workspace = true, optional = true }
+ris = { workspace = true, optional = true }
+endnotexml-fmt = { workspace = true, optional = true }
 rescribe-fmt-biblatex = { workspace = true, optional = true }
 rescribe-read-markdown-strict = { workspace = true, optional = true }
-rescribe-read-multimarkdown = { workspace = true, optional = true }
-rescribe-read-fountain = { workspace = true, optional = true }
+multimarkdown-fmt = { workspace = true, optional = true }
+fountain-fmt = { workspace = true, optional = true }
 rescribe-fmt-pandoc-json = { workspace = true, optional = true }
 
 # Writers (optional)
 rescribe-write-markdown = { workspace = true, optional = true }
 rescribe-write-html = { workspace = true, optional = true }
 rescribe-write-latex = { workspace = true, optional = true }
-rescribe-write-org = { workspace = true, optional = true }
 rescribe-write-plaintext = { workspace = true, optional = true }
-rescribe-write-docx = { workspace = true, optional = true }
 rescribe-write-epub = { workspace = true, optional = true }
-rescribe-write-djot = { workspace = true, optional = true }
-rescribe-write-mediawiki = { workspace = true, optional = true }
-rescribe-write-docbook = { workspace = true, optional = true }
-rescribe-write-rst = { workspace = true, optional = true }
-rescribe-write-asciidoc = { workspace = true, optional = true }
-rescribe-write-typst = { workspace = true, optional = true }
-rescribe-write-ansi = { workspace = true, optional = true }
-rescribe-write-dokuwiki = { workspace = true, optional = true }
-rescribe-write-jats = { workspace = true, optional = true }
-rescribe-write-tei = { workspace = true, optional = true }
-rescribe-write-man = { workspace = true, optional = true }
-rescribe-write-jira = { workspace = true, optional = true }
-rescribe-write-creole = { workspace = true, optional = true }
-rescribe-write-textile = { workspace = true, optional = true }
-rescribe-write-haddock = { workspace = true, optional = true }
-rescribe-write-muse = { workspace = true, optional = true }
-rescribe-write-t2t = { workspace = true, optional = true }
-rescribe-write-rtf = { workspace = true, optional = true }
-rescribe-write-vimwiki = { workspace = true, optional = true }
-rescribe-write-zimwiki = { workspace = true, optional = true }
-rescribe-write-pod = { workspace = true, optional = true }
-rescribe-write-markua = { workspace = true, optional = true }
-rescribe-write-fb2 = { workspace = true, optional = true }
-rescribe-write-texinfo = { workspace = true, optional = true }
-rescribe-write-tikiwiki = { workspace = true, optional = true }
-rescribe-write-twiki = { workspace = true, optional = true }
-rescribe-write-xwiki = { workspace = true, optional = true }
 rescribe-write-revealjs = { workspace = true, optional = true }
 rescribe-write-slidy = { workspace = true, optional = true }
 rescribe-write-s5 = { workspace = true, optional = true }
 rescribe-write-dzslides = { workspace = true, optional = true }
-rescribe-write-bbcode = { workspace = true, optional = true }
 rescribe-write-beamer = { workspace = true, optional = true }
-rescribe-write-csv = { workspace = true, optional = true }
 rescribe-write-context = { workspace = true, optional = true }
 rescribe-write-ms = { workspace = true, optional = true }
 rescribe-write-chunkedhtml = { workspace = true, optional = true }
-rescribe-write-tsv = { workspace = true, optional = true }
 rescribe-write-icml = { workspace = true, optional = true }
 rescribe-write-slideous = { workspace = true, optional = true }
-rescribe-write-odt = { workspace = true, optional = true }
-rescribe-write-native = { workspace = true, optional = true }
-rescribe-write-pptx = { workspace = true, optional = true }
 rescribe-write-commonmark = { workspace = true, optional = true }
 rescribe-write-gfm = { workspace = true, optional = true }
-rescribe-write-ris = { workspace = true, optional = true }
-rescribe-write-xlsx = { workspace = true, optional = true }
-rescribe-write-endnotexml = { workspace = true, optional = true }
 rescribe-write-markdown-strict = { workspace = true, optional = true }
-rescribe-write-multimarkdown = { workspace = true, optional = true }
-rescribe-write-fountain = { workspace = true, optional = true }
 
 [dev-dependencies]
 rescribe-read-markdown = { workspace = true }

@@ -57,23 +57,8 @@ path = "../crates/readers/rescribe-read-rtf"
 [dependencies.rescribe-write-rtf]
 path = "../crates/writers/rescribe-write-rtf"
 
-[dependencies.rescribe-read-docx]
-path = "../crates/readers/rescribe-read-docx"
-
-[dependencies.rescribe-write-docx]
-path = "../crates/writers/rescribe-write-docx"
-
-[dependencies.rescribe-read-xlsx]
-path = "../crates/readers/rescribe-read-xlsx"
-
-[dependencies.rescribe-write-xlsx]
-path = "../crates/writers/rescribe-write-xlsx"
-
-[dependencies.rescribe-read-pptx]
-path = "../crates/readers/rescribe-read-pptx"
-
-[dependencies.rescribe-write-pptx]
-path = "../crates/writers/rescribe-write-pptx"
+[dependencies.rescribe-fmt-ooxml]
+path = "../crates/bridges/rescribe-fmt-ooxml"
 
 [dependencies.rescribe-read-man]
 path = "../crates/readers/rescribe-read-man"

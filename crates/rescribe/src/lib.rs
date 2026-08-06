@@ -65,40 +65,40 @@ pub mod query;
 /// ANSI terminal format support.
 #[cfg(any(feature = "read-ansi", feature = "write-ansi"))]
 pub mod ansi {
-    #[cfg(feature = "read-ansi")]
-    pub use rescribe_read_ansi::parse;
-    #[cfg(feature = "read-ansi")]
-    pub use rescribe_read_ansi::parse_with_options;
     #[cfg(feature = "write-ansi")]
-    pub use rescribe_write_ansi::emit;
+    pub use ansi_fmt::rescribe::emit;
     #[cfg(feature = "write-ansi")]
-    pub use rescribe_write_ansi::emit_with_options;
+    pub use ansi_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-ansi")]
+    pub use ansi_fmt::rescribe::parse;
+    #[cfg(feature = "read-ansi")]
+    pub use ansi_fmt::rescribe::parse_with_options;
 }
 
 /// AsciiDoc format support.
 #[cfg(any(feature = "read-asciidoc", feature = "write-asciidoc"))]
 pub mod asciidoc {
-    #[cfg(feature = "read-asciidoc")]
-    pub use rescribe_read_asciidoc::parse;
-    #[cfg(feature = "read-asciidoc")]
-    pub use rescribe_read_asciidoc::parse_with_options;
     #[cfg(feature = "write-asciidoc")]
-    pub use rescribe_write_asciidoc::emit;
+    pub use asciidoc::rescribe::emit;
     #[cfg(feature = "write-asciidoc")]
-    pub use rescribe_write_asciidoc::emit_with_options;
+    pub use asciidoc::rescribe::emit_with_options;
+    #[cfg(feature = "read-asciidoc")]
+    pub use asciidoc::rescribe::parse;
+    #[cfg(feature = "read-asciidoc")]
+    pub use asciidoc::rescribe::parse_with_options;
 }
 
 /// BBCode forum markup format support.
 #[cfg(any(feature = "read-bbcode", feature = "write-bbcode"))]
 pub mod bbcode {
-    #[cfg(feature = "read-bbcode")]
-    pub use rescribe_read_bbcode::parse;
-    #[cfg(feature = "read-bbcode")]
-    pub use rescribe_read_bbcode::parse_with_options;
     #[cfg(feature = "write-bbcode")]
-    pub use rescribe_write_bbcode::emit;
+    pub use bbcode_fmt::rescribe::emit;
     #[cfg(feature = "write-bbcode")]
-    pub use rescribe_write_bbcode::emit_with_options;
+    pub use bbcode_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-bbcode")]
+    pub use bbcode_fmt::rescribe::parse;
+    #[cfg(feature = "read-bbcode")]
+    pub use bbcode_fmt::rescribe::parse_with_options;
 }
 
 /// Beamer (LaTeX presentation) format support (writer only).
@@ -111,14 +111,14 @@ pub mod beamer {
 /// BibLaTeX bibliographic format support.
 #[cfg(any(feature = "read-biblatex", feature = "write-biblatex"))]
 pub mod biblatex {
-    #[cfg(feature = "read-biblatex")]
-    pub use rescribe_fmt_biblatex::parse;
-    #[cfg(feature = "read-biblatex")]
-    pub use rescribe_fmt_biblatex::parse_with_options;
     #[cfg(feature = "write-biblatex")]
     pub use rescribe_fmt_biblatex::emit;
     #[cfg(feature = "write-biblatex")]
     pub use rescribe_fmt_biblatex::emit_with_options;
+    #[cfg(feature = "read-biblatex")]
+    pub use rescribe_fmt_biblatex::parse;
+    #[cfg(feature = "read-biblatex")]
+    pub use rescribe_fmt_biblatex::parse_with_options;
 }
 
 /// BibTeX format support.
@@ -163,80 +163,80 @@ pub mod context {
 /// Creole wiki markup format support.
 #[cfg(any(feature = "read-creole", feature = "write-creole"))]
 pub mod creole {
-    #[cfg(feature = "read-creole")]
-    pub use rescribe_read_creole::parse;
-    #[cfg(feature = "read-creole")]
-    pub use rescribe_read_creole::parse_with_options;
     #[cfg(feature = "write-creole")]
-    pub use rescribe_write_creole::emit;
+    pub use creole::rescribe::emit;
     #[cfg(feature = "write-creole")]
-    pub use rescribe_write_creole::emit_with_options;
+    pub use creole::rescribe::emit_with_options;
+    #[cfg(feature = "read-creole")]
+    pub use creole::rescribe::parse;
+    #[cfg(feature = "read-creole")]
+    pub use creole::rescribe::parse_with_options;
 }
 
 /// CSL JSON format support.
 #[cfg(any(feature = "read-csl-json", feature = "write-csl-json"))]
 pub mod csl_json {
-    #[cfg(feature = "read-csl-json")]
-    pub use rescribe_fmt_csl_json::parse;
     #[cfg(feature = "write-csl-json")]
     pub use rescribe_fmt_csl_json::emit;
+    #[cfg(feature = "read-csl-json")]
+    pub use rescribe_fmt_csl_json::parse;
 }
 
 /// CSV (Comma-Separated Values) format support.
 #[cfg(any(feature = "read-csv", feature = "write-csv"))]
 pub mod csv {
-    #[cfg(feature = "read-csv")]
-    pub use rescribe_read_csv::parse;
-    #[cfg(feature = "read-csv")]
-    pub use rescribe_read_csv::parse_with_options;
     #[cfg(feature = "write-csv")]
-    pub use rescribe_write_csv::emit;
+    pub use csv_fmt::rescribe::emit;
     #[cfg(feature = "write-csv")]
-    pub use rescribe_write_csv::emit_with_options;
+    pub use csv_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-csv")]
+    pub use csv_fmt::rescribe::parse;
+    #[cfg(feature = "read-csv")]
+    pub use csv_fmt::rescribe::parse_with_options;
 }
 
 /// Djot format support.
 #[cfg(any(feature = "read-djot", feature = "write-djot"))]
 pub mod djot {
-    #[cfg(feature = "read-djot")]
-    pub use rescribe_read_djot::parse;
     #[cfg(feature = "write-djot")]
-    pub use rescribe_write_djot::emit;
+    pub use djot_fmt::rescribe::emit;
+    #[cfg(feature = "read-djot")]
+    pub use djot_fmt::rescribe::parse;
 }
 
 /// DocBook format support.
 #[cfg(any(feature = "read-docbook", feature = "write-docbook"))]
 pub mod docbook {
-    #[cfg(feature = "read-docbook")]
-    pub use rescribe_read_docbook::parse;
     #[cfg(feature = "write-docbook")]
-    pub use rescribe_write_docbook::emit;
+    pub use docbook_fmt::rescribe::emit;
+    #[cfg(feature = "read-docbook")]
+    pub use docbook_fmt::rescribe::parse;
 }
 
 /// DOCX (Word) format support.
 #[cfg(any(feature = "read-docx", feature = "write-docx"))]
 pub mod docx {
-    #[cfg(feature = "read-docx")]
-    pub use rescribe_read_docx::parse;
-    #[cfg(feature = "read-docx")]
-    pub use rescribe_read_docx::parse_bytes;
-    #[cfg(feature = "read-docx")]
-    pub use rescribe_read_docx::parse_file;
     #[cfg(feature = "write-docx")]
-    pub use rescribe_write_docx::emit;
+    pub use rescribe_fmt_ooxml::docx::emit;
+    #[cfg(feature = "read-docx")]
+    pub use rescribe_fmt_ooxml::docx::parse;
+    #[cfg(feature = "read-docx")]
+    pub use rescribe_fmt_ooxml::docx::parse_bytes;
+    #[cfg(feature = "read-docx")]
+    pub use rescribe_fmt_ooxml::docx::parse_file;
 }
 
 /// DokuWiki format support.
 #[cfg(any(feature = "read-dokuwiki", feature = "write-dokuwiki"))]
 pub mod dokuwiki {
-    #[cfg(feature = "read-dokuwiki")]
-    pub use rescribe_read_dokuwiki::parse;
-    #[cfg(feature = "read-dokuwiki")]
-    pub use rescribe_read_dokuwiki::parse_with_options;
     #[cfg(feature = "write-dokuwiki")]
-    pub use rescribe_write_dokuwiki::emit;
+    pub use dokuwiki::rescribe::emit;
     #[cfg(feature = "write-dokuwiki")]
-    pub use rescribe_write_dokuwiki::emit_with_options;
+    pub use dokuwiki::rescribe::emit_with_options;
+    #[cfg(feature = "read-dokuwiki")]
+    pub use dokuwiki::rescribe::parse;
+    #[cfg(feature = "read-dokuwiki")]
+    pub use dokuwiki::rescribe::parse_with_options;
 }
 
 /// DZSlides HTML presentation format support (writer only).
@@ -249,14 +249,14 @@ pub mod dzslides {
 /// EndNote XML bibliographic format support.
 #[cfg(any(feature = "read-endnotexml", feature = "write-endnotexml"))]
 pub mod endnotexml {
-    #[cfg(feature = "read-endnotexml")]
-    pub use rescribe_read_endnotexml::parse;
-    #[cfg(feature = "read-endnotexml")]
-    pub use rescribe_read_endnotexml::parse_with_options;
     #[cfg(feature = "write-endnotexml")]
-    pub use rescribe_write_endnotexml::emit;
+    pub use endnotexml_fmt::rescribe::emit;
     #[cfg(feature = "write-endnotexml")]
-    pub use rescribe_write_endnotexml::emit_with_options;
+    pub use endnotexml_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-endnotexml")]
+    pub use endnotexml_fmt::rescribe::parse;
+    #[cfg(feature = "read-endnotexml")]
+    pub use endnotexml_fmt::rescribe::parse_with_options;
 }
 
 /// EPUB format support.
@@ -275,27 +275,27 @@ pub mod epub {
 /// FictionBook 2 (FB2) format support.
 #[cfg(any(feature = "read-fb2", feature = "write-fb2"))]
 pub mod fb2 {
-    #[cfg(feature = "read-fb2")]
-    pub use rescribe_read_fb2::parse;
-    #[cfg(feature = "read-fb2")]
-    pub use rescribe_read_fb2::parse_with_options;
     #[cfg(feature = "write-fb2")]
-    pub use rescribe_write_fb2::emit;
+    pub use fb2_fmt::rescribe::emit;
     #[cfg(feature = "write-fb2")]
-    pub use rescribe_write_fb2::emit_with_options;
+    pub use fb2_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-fb2")]
+    pub use fb2_fmt::rescribe::parse;
+    #[cfg(feature = "read-fb2")]
+    pub use fb2_fmt::rescribe::parse_with_options;
 }
 
 /// Fountain screenplay format support.
 #[cfg(any(feature = "read-fountain", feature = "write-fountain"))]
 pub mod fountain {
-    #[cfg(feature = "read-fountain")]
-    pub use rescribe_read_fountain::parse;
-    #[cfg(feature = "read-fountain")]
-    pub use rescribe_read_fountain::parse_with_options;
     #[cfg(feature = "write-fountain")]
-    pub use rescribe_write_fountain::emit;
+    pub use fountain_fmt::rescribe::emit;
     #[cfg(feature = "write-fountain")]
-    pub use rescribe_write_fountain::emit_with_options;
+    pub use fountain_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-fountain")]
+    pub use fountain_fmt::rescribe::parse;
+    #[cfg(feature = "read-fountain")]
+    pub use fountain_fmt::rescribe::parse_with_options;
 }
 
 /// GitHub Flavored Markdown (GFM) format support.
@@ -314,14 +314,14 @@ pub mod gfm {
 /// Haddock (Haskell documentation) format support.
 #[cfg(any(feature = "read-haddock", feature = "write-haddock"))]
 pub mod haddock {
-    #[cfg(feature = "read-haddock")]
-    pub use rescribe_read_haddock::parse;
-    #[cfg(feature = "read-haddock")]
-    pub use rescribe_read_haddock::parse_with_options;
     #[cfg(feature = "write-haddock")]
-    pub use rescribe_write_haddock::emit;
+    pub use haddock_fmt::rescribe::emit;
     #[cfg(feature = "write-haddock")]
-    pub use rescribe_write_haddock::emit_with_options;
+    pub use haddock_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-haddock")]
+    pub use haddock_fmt::rescribe::parse;
+    #[cfg(feature = "read-haddock")]
+    pub use haddock_fmt::rescribe::parse_with_options;
 }
 
 /// HTML format support.
@@ -349,34 +349,34 @@ pub mod icml {
 /// Jupyter notebook (ipynb) format support.
 #[cfg(any(feature = "read-ipynb", feature = "write-ipynb"))]
 pub mod ipynb {
+    #[cfg(feature = "write-ipynb")]
+    pub use rescribe_fmt_ipynb::emit;
     #[cfg(feature = "read-ipynb")]
     pub use rescribe_fmt_ipynb::parse;
     #[cfg(feature = "read-ipynb")]
     pub use rescribe_fmt_ipynb::parse_bytes;
-    #[cfg(feature = "write-ipynb")]
-    pub use rescribe_fmt_ipynb::emit;
 }
 
 /// JATS (Journal Article Tag Suite) format support.
 #[cfg(any(feature = "read-jats", feature = "write-jats"))]
 pub mod jats {
-    #[cfg(feature = "read-jats")]
-    pub use rescribe_read_jats::parse;
     #[cfg(feature = "write-jats")]
-    pub use rescribe_write_jats::emit;
+    pub use jats_fmt::rescribe::emit;
+    #[cfg(feature = "read-jats")]
+    pub use jats_fmt::rescribe::parse;
 }
 
 /// Jira/Confluence markup format support.
 #[cfg(any(feature = "read-jira", feature = "write-jira"))]
 pub mod jira {
-    #[cfg(feature = "read-jira")]
-    pub use rescribe_read_jira::parse;
-    #[cfg(feature = "read-jira")]
-    pub use rescribe_read_jira::parse_with_options;
     #[cfg(feature = "write-jira")]
-    pub use rescribe_write_jira::emit;
+    pub use jira_fmt::rescribe::emit;
     #[cfg(feature = "write-jira")]
-    pub use rescribe_write_jira::emit_with_options;
+    pub use jira_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-jira")]
+    pub use jira_fmt::rescribe::parse;
+    #[cfg(feature = "read-jira")]
+    pub use jira_fmt::rescribe::parse_with_options;
 }
 
 /// LaTeX format support.
@@ -397,12 +397,12 @@ pub mod latex {
 /// Man page (roff/troff) format support.
 #[cfg(any(feature = "read-man", feature = "write-man"))]
 pub mod man {
+    #[cfg(feature = "write-man")]
+    pub use man_fmt::rescribe::emit;
+    #[cfg(feature = "write-man")]
+    pub use man_fmt::rescribe::emit_with_options;
     #[cfg(feature = "read-man")]
-    pub use rescribe_read_man::parse;
-    #[cfg(feature = "write-man")]
-    pub use rescribe_write_man::emit;
-    #[cfg(feature = "write-man")]
-    pub use rescribe_write_man::emit_with_options;
+    pub use man_fmt::rescribe::parse;
 }
 
 /// Markdown format support.
@@ -434,23 +434,23 @@ pub mod markdown_strict {
 /// Markua (Leanpub) format support.
 #[cfg(any(feature = "read-markua", feature = "write-markua"))]
 pub mod markua {
-    #[cfg(feature = "read-markua")]
-    pub use rescribe_read_markua::parse;
-    #[cfg(feature = "read-markua")]
-    pub use rescribe_read_markua::parse_with_options;
     #[cfg(feature = "write-markua")]
-    pub use rescribe_write_markua::emit;
+    pub use markua::rescribe::emit;
     #[cfg(feature = "write-markua")]
-    pub use rescribe_write_markua::emit_with_options;
+    pub use markua::rescribe::emit_with_options;
+    #[cfg(feature = "read-markua")]
+    pub use markua::rescribe::parse;
+    #[cfg(feature = "read-markua")]
+    pub use markua::rescribe::parse_with_options;
 }
 
 /// MediaWiki format support.
 #[cfg(any(feature = "read-mediawiki", feature = "write-mediawiki"))]
 pub mod mediawiki {
-    #[cfg(feature = "read-mediawiki")]
-    pub use rescribe_read_mediawiki::parse;
     #[cfg(feature = "write-mediawiki")]
-    pub use rescribe_write_mediawiki::emit;
+    pub use mediawiki_fmt::rescribe::emit;
+    #[cfg(feature = "read-mediawiki")]
+    pub use mediawiki_fmt::rescribe::parse;
 }
 
 /// Groff ms macro format support (writer only).
@@ -463,53 +463,53 @@ pub mod ms {
 /// MultiMarkdown format support.
 #[cfg(any(feature = "read-multimarkdown", feature = "write-multimarkdown"))]
 pub mod multimarkdown {
-    #[cfg(feature = "read-multimarkdown")]
-    pub use rescribe_read_multimarkdown::parse;
-    #[cfg(feature = "read-multimarkdown")]
-    pub use rescribe_read_multimarkdown::parse_with_options;
     #[cfg(feature = "write-multimarkdown")]
-    pub use rescribe_write_multimarkdown::emit;
+    pub use multimarkdown_fmt::rescribe::emit;
     #[cfg(feature = "write-multimarkdown")]
-    pub use rescribe_write_multimarkdown::emit_with_options;
+    pub use multimarkdown_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-multimarkdown")]
+    pub use multimarkdown_fmt::rescribe::parse;
+    #[cfg(feature = "read-multimarkdown")]
+    pub use multimarkdown_fmt::rescribe::parse_with_options;
 }
 
 /// Muse (Emacs Muse) format support.
 #[cfg(any(feature = "read-muse", feature = "write-muse"))]
 pub mod muse {
-    #[cfg(feature = "read-muse")]
-    pub use rescribe_read_muse::parse;
-    #[cfg(feature = "read-muse")]
-    pub use rescribe_read_muse::parse_with_options;
     #[cfg(feature = "write-muse")]
-    pub use rescribe_write_muse::emit;
+    pub use muse_fmt::rescribe::emit;
     #[cfg(feature = "write-muse")]
-    pub use rescribe_write_muse::emit_with_options;
+    pub use muse_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-muse")]
+    pub use muse_fmt::rescribe::parse;
+    #[cfg(feature = "read-muse")]
+    pub use muse_fmt::rescribe::parse_with_options;
 }
 
 /// Native debug format support.
 #[cfg(any(feature = "read-native", feature = "write-native"))]
 pub mod native {
-    #[cfg(feature = "read-native")]
-    pub use rescribe_read_native::parse;
-    #[cfg(feature = "read-native")]
-    pub use rescribe_read_native::parse_with_options;
     #[cfg(feature = "write-native")]
-    pub use rescribe_write_native::emit;
+    pub use native::rescribe::emit;
     #[cfg(feature = "write-native")]
-    pub use rescribe_write_native::emit_with_options;
+    pub use native::rescribe::emit_with_options;
+    #[cfg(feature = "read-native")]
+    pub use native::rescribe::parse;
+    #[cfg(feature = "read-native")]
+    pub use native::rescribe::parse_with_options;
 }
 
 /// ODT (OpenDocument Text) format support.
 #[cfg(any(feature = "read-odt", feature = "write-odt"))]
 pub mod odt {
-    #[cfg(feature = "read-odt")]
-    pub use rescribe_read_odt::parse;
-    #[cfg(feature = "read-odt")]
-    pub use rescribe_read_odt::parse_with_options;
     #[cfg(feature = "write-odt")]
-    pub use rescribe_write_odt::emit;
+    pub use odf_fmt::rescribe::emit;
     #[cfg(feature = "write-odt")]
-    pub use rescribe_write_odt::emit_with_options;
+    pub use odf_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-odt")]
+    pub use odf_fmt::rescribe::parse;
+    #[cfg(feature = "read-odt")]
+    pub use odf_fmt::rescribe::parse_with_options;
 }
 
 /// OPML format support.
@@ -524,27 +524,27 @@ pub mod opml {
 /// Org-mode format support.
 #[cfg(any(feature = "read-org", feature = "write-org"))]
 pub mod org {
-    #[cfg(feature = "read-org")]
-    pub use rescribe_read_org::parse;
-    #[cfg(feature = "read-org")]
-    pub use rescribe_read_org::parse_with_options;
     #[cfg(feature = "write-org")]
-    pub use rescribe_write_org::emit;
+    pub use org_fmt::rescribe::emit;
     #[cfg(feature = "write-org")]
-    pub use rescribe_write_org::emit_with_options;
+    pub use org_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-org")]
+    pub use org_fmt::rescribe::parse;
+    #[cfg(feature = "read-org")]
+    pub use org_fmt::rescribe::parse_with_options;
 }
 
 /// Pandoc JSON format support.
 #[cfg(any(feature = "read-pandoc-json", feature = "write-pandoc-json"))]
 pub mod pandoc_json {
-    #[cfg(feature = "read-pandoc-json")]
-    pub use rescribe_fmt_pandoc_json::parse;
-    #[cfg(feature = "read-pandoc-json")]
-    pub use rescribe_fmt_pandoc_json::parse_with_options;
     #[cfg(feature = "write-pandoc-json")]
     pub use rescribe_fmt_pandoc_json::emit;
     #[cfg(feature = "write-pandoc-json")]
     pub use rescribe_fmt_pandoc_json::emit_with_options;
+    #[cfg(feature = "read-pandoc-json")]
+    pub use rescribe_fmt_pandoc_json::parse;
+    #[cfg(feature = "read-pandoc-json")]
+    pub use rescribe_fmt_pandoc_json::parse_with_options;
 }
 
 /// PDF format support (reader only).
@@ -564,27 +564,27 @@ pub mod plaintext {
 /// POD (Plain Old Documentation) format support.
 #[cfg(any(feature = "read-pod", feature = "write-pod"))]
 pub mod pod {
-    #[cfg(feature = "read-pod")]
-    pub use rescribe_read_pod::parse;
-    #[cfg(feature = "read-pod")]
-    pub use rescribe_read_pod::parse_with_options;
     #[cfg(feature = "write-pod")]
-    pub use rescribe_write_pod::emit;
+    pub use pod_fmt::rescribe::emit;
     #[cfg(feature = "write-pod")]
-    pub use rescribe_write_pod::emit_with_options;
+    pub use pod_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-pod")]
+    pub use pod_fmt::rescribe::parse;
+    #[cfg(feature = "read-pod")]
+    pub use pod_fmt::rescribe::parse_with_options;
 }
 
 /// PPTX (PowerPoint) format support.
 #[cfg(any(feature = "read-pptx", feature = "write-pptx"))]
 pub mod pptx {
-    #[cfg(feature = "read-pptx")]
-    pub use rescribe_read_pptx::parse;
-    #[cfg(feature = "read-pptx")]
-    pub use rescribe_read_pptx::parse_with_options;
     #[cfg(feature = "write-pptx")]
-    pub use rescribe_write_pptx::emit;
+    pub use rescribe_fmt_ooxml::pptx::emit;
     #[cfg(feature = "write-pptx")]
-    pub use rescribe_write_pptx::emit_with_options;
+    pub use rescribe_fmt_ooxml::pptx::emit_with_options;
+    #[cfg(feature = "read-pptx")]
+    pub use rescribe_fmt_ooxml::pptx::parse;
+    #[cfg(feature = "read-pptx")]
+    pub use rescribe_fmt_ooxml::pptx::parse_with_options;
 }
 
 /// reveal.js HTML presentation format support (writer only).
@@ -597,40 +597,40 @@ pub mod revealjs {
 /// RIS (Research Information Systems) bibliographic format support.
 #[cfg(any(feature = "read-ris", feature = "write-ris"))]
 pub mod ris {
-    #[cfg(feature = "read-ris")]
-    pub use rescribe_read_ris::parse;
-    #[cfg(feature = "read-ris")]
-    pub use rescribe_read_ris::parse_with_options;
     #[cfg(feature = "write-ris")]
-    pub use rescribe_write_ris::emit;
+    pub use ris::rescribe::emit;
     #[cfg(feature = "write-ris")]
-    pub use rescribe_write_ris::emit_with_options;
+    pub use ris::rescribe::emit_with_options;
+    #[cfg(feature = "read-ris")]
+    pub use ris::rescribe::parse;
+    #[cfg(feature = "read-ris")]
+    pub use ris::rescribe::parse_with_options;
 }
 
 /// reStructuredText format support.
 #[cfg(any(feature = "read-rst", feature = "write-rst"))]
 pub mod rst {
-    #[cfg(feature = "read-rst")]
-    pub use rescribe_read_rst::parse;
-    #[cfg(feature = "read-rst")]
-    pub use rescribe_read_rst::parse_with_options;
     #[cfg(feature = "write-rst")]
-    pub use rescribe_write_rst::emit;
+    pub use rst_fmt::rescribe::emit;
     #[cfg(feature = "write-rst")]
-    pub use rescribe_write_rst::emit_with_options;
+    pub use rst_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-rst")]
+    pub use rst_fmt::rescribe::parse;
+    #[cfg(feature = "read-rst")]
+    pub use rst_fmt::rescribe::parse_with_options;
 }
 
 /// RTF (Rich Text Format) support.
 #[cfg(any(feature = "read-rtf", feature = "write-rtf"))]
 pub mod rtf {
-    #[cfg(feature = "read-rtf")]
-    pub use rescribe_read_rtf::parse;
-    #[cfg(feature = "read-rtf")]
-    pub use rescribe_read_rtf::parse_with_options;
     #[cfg(feature = "write-rtf")]
-    pub use rescribe_write_rtf::emit;
+    pub use rtf_fmt::rescribe::emit;
     #[cfg(feature = "write-rtf")]
-    pub use rescribe_write_rtf::emit_with_options;
+    pub use rtf_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-rtf")]
+    pub use rtf_fmt::rescribe::parse;
+    #[cfg(feature = "read-rtf")]
+    pub use rtf_fmt::rescribe::parse_with_options;
 }
 
 /// S5 HTML presentation format support (writer only).
@@ -657,155 +657,155 @@ pub mod slidy {
 /// txt2tags (t2t) format support.
 #[cfg(any(feature = "read-t2t", feature = "write-t2t"))]
 pub mod t2t {
-    #[cfg(feature = "read-t2t")]
-    pub use rescribe_read_t2t::parse;
-    #[cfg(feature = "read-t2t")]
-    pub use rescribe_read_t2t::parse_with_options;
     #[cfg(feature = "write-t2t")]
-    pub use rescribe_write_t2t::emit;
+    pub use t2t::rescribe::emit;
     #[cfg(feature = "write-t2t")]
-    pub use rescribe_write_t2t::emit_with_options;
+    pub use t2t::rescribe::emit_with_options;
+    #[cfg(feature = "read-t2t")]
+    pub use t2t::rescribe::parse;
+    #[cfg(feature = "read-t2t")]
+    pub use t2t::rescribe::parse_with_options;
 }
 
 /// TEI (Text Encoding Initiative) format support.
 #[cfg(any(feature = "read-tei", feature = "write-tei"))]
 pub mod tei {
-    #[cfg(feature = "read-tei")]
-    pub use rescribe_read_tei::parse;
     #[cfg(feature = "write-tei")]
-    pub use rescribe_write_tei::emit;
+    pub use tei_fmt::rescribe::emit;
+    #[cfg(feature = "read-tei")]
+    pub use tei_fmt::rescribe::parse;
 }
 
 /// Texinfo (GNU documentation) format support.
 #[cfg(any(feature = "read-texinfo", feature = "write-texinfo"))]
 pub mod texinfo {
-    #[cfg(feature = "read-texinfo")]
-    pub use rescribe_read_texinfo::parse;
-    #[cfg(feature = "read-texinfo")]
-    pub use rescribe_read_texinfo::parse_with_options;
     #[cfg(feature = "write-texinfo")]
-    pub use rescribe_write_texinfo::emit;
+    pub use texinfo::rescribe::emit;
     #[cfg(feature = "write-texinfo")]
-    pub use rescribe_write_texinfo::emit_with_options;
+    pub use texinfo::rescribe::emit_with_options;
+    #[cfg(feature = "read-texinfo")]
+    pub use texinfo::rescribe::parse;
+    #[cfg(feature = "read-texinfo")]
+    pub use texinfo::rescribe::parse_with_options;
 }
 
 /// Textile markup format support.
 #[cfg(any(feature = "read-textile", feature = "write-textile"))]
 pub mod textile {
-    #[cfg(feature = "read-textile")]
-    pub use rescribe_read_textile::parse;
-    #[cfg(feature = "read-textile")]
-    pub use rescribe_read_textile::parse_with_options;
     #[cfg(feature = "write-textile")]
-    pub use rescribe_write_textile::emit;
+    pub use textile_fmt::rescribe::emit;
     #[cfg(feature = "write-textile")]
-    pub use rescribe_write_textile::emit_with_options;
+    pub use textile_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-textile")]
+    pub use textile_fmt::rescribe::parse;
+    #[cfg(feature = "read-textile")]
+    pub use textile_fmt::rescribe::parse_with_options;
 }
 
 /// TikiWiki format support.
 #[cfg(any(feature = "read-tikiwiki", feature = "write-tikiwiki"))]
 pub mod tikiwiki {
-    #[cfg(feature = "read-tikiwiki")]
-    pub use rescribe_read_tikiwiki::parse;
-    #[cfg(feature = "read-tikiwiki")]
-    pub use rescribe_read_tikiwiki::parse_with_options;
     #[cfg(feature = "write-tikiwiki")]
-    pub use rescribe_write_tikiwiki::emit;
+    pub use tikiwiki::rescribe::emit;
     #[cfg(feature = "write-tikiwiki")]
-    pub use rescribe_write_tikiwiki::emit_with_options;
+    pub use tikiwiki::rescribe::emit_with_options;
+    #[cfg(feature = "read-tikiwiki")]
+    pub use tikiwiki::rescribe::parse;
+    #[cfg(feature = "read-tikiwiki")]
+    pub use tikiwiki::rescribe::parse_with_options;
 }
 
 /// TSV (Tab-Separated Values) format support.
 #[cfg(any(feature = "read-tsv", feature = "write-tsv"))]
 pub mod tsv {
-    #[cfg(feature = "read-tsv")]
-    pub use rescribe_read_tsv::parse;
-    #[cfg(feature = "read-tsv")]
-    pub use rescribe_read_tsv::parse_with_options;
     #[cfg(feature = "write-tsv")]
-    pub use rescribe_write_tsv::emit;
+    pub use tsv_fmt::rescribe::emit;
     #[cfg(feature = "write-tsv")]
-    pub use rescribe_write_tsv::emit_with_options;
+    pub use tsv_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-tsv")]
+    pub use tsv_fmt::rescribe::parse;
+    #[cfg(feature = "read-tsv")]
+    pub use tsv_fmt::rescribe::parse_with_options;
 }
 
 /// TWiki format support.
 #[cfg(any(feature = "read-twiki", feature = "write-twiki"))]
 pub mod twiki {
-    #[cfg(feature = "read-twiki")]
-    pub use rescribe_read_twiki::parse;
-    #[cfg(feature = "read-twiki")]
-    pub use rescribe_read_twiki::parse_with_options;
     #[cfg(feature = "write-twiki")]
-    pub use rescribe_write_twiki::emit;
+    pub use twiki::rescribe::emit;
     #[cfg(feature = "write-twiki")]
-    pub use rescribe_write_twiki::emit_with_options;
+    pub use twiki::rescribe::emit_with_options;
+    #[cfg(feature = "read-twiki")]
+    pub use twiki::rescribe::parse;
+    #[cfg(feature = "read-twiki")]
+    pub use twiki::rescribe::parse_with_options;
 }
 
 /// Typst format support.
 #[cfg(any(feature = "read-typst", feature = "write-typst"))]
 pub mod typst {
-    #[cfg(feature = "read-typst")]
-    pub use rescribe_read_typst::parse;
-    #[cfg(feature = "read-typst")]
-    pub use rescribe_read_typst::parse_with_options;
     #[cfg(feature = "write-typst")]
-    pub use rescribe_write_typst::emit;
+    pub use typst_fmt::rescribe::emit;
     #[cfg(feature = "write-typst")]
-    pub use rescribe_write_typst::emit_with_options;
+    pub use typst_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-typst")]
+    pub use typst_fmt::rescribe::parse;
+    #[cfg(feature = "read-typst")]
+    pub use typst_fmt::rescribe::parse_with_options;
 }
 
 /// VimWiki format support.
 #[cfg(any(feature = "read-vimwiki", feature = "write-vimwiki"))]
 pub mod vimwiki {
-    #[cfg(feature = "read-vimwiki")]
-    pub use rescribe_read_vimwiki::parse;
-    #[cfg(feature = "read-vimwiki")]
-    pub use rescribe_read_vimwiki::parse_with_options;
     #[cfg(feature = "write-vimwiki")]
-    pub use rescribe_write_vimwiki::emit;
+    pub use vimwiki_fmt::rescribe::emit;
     #[cfg(feature = "write-vimwiki")]
-    pub use rescribe_write_vimwiki::emit_with_options;
+    pub use vimwiki_fmt::rescribe::emit_with_options;
+    #[cfg(feature = "read-vimwiki")]
+    pub use vimwiki_fmt::rescribe::parse;
+    #[cfg(feature = "read-vimwiki")]
+    pub use vimwiki_fmt::rescribe::parse_with_options;
 }
 
 /// XLSX (Excel) format support.
 #[cfg(any(feature = "read-xlsx", feature = "write-xlsx"))]
 pub mod xlsx {
-    #[cfg(feature = "read-xlsx")]
-    pub use rescribe_read_xlsx::parse;
-    #[cfg(feature = "read-xlsx")]
-    pub use rescribe_read_xlsx::parse_bytes;
-    #[cfg(feature = "read-xlsx")]
-    pub use rescribe_read_xlsx::parse_file;
     #[cfg(feature = "write-xlsx")]
-    pub use rescribe_write_xlsx::emit;
+    pub use rescribe_fmt_ooxml::xlsx::emit;
     #[cfg(feature = "write-xlsx")]
-    pub use rescribe_write_xlsx::emit_with_options;
+    pub use rescribe_fmt_ooxml::xlsx::emit_with_options;
+    #[cfg(feature = "read-xlsx")]
+    pub use rescribe_fmt_ooxml::xlsx::parse;
+    #[cfg(feature = "read-xlsx")]
+    pub use rescribe_fmt_ooxml::xlsx::parse_bytes;
+    #[cfg(feature = "read-xlsx")]
+    pub use rescribe_fmt_ooxml::xlsx::parse_file;
 }
 
 /// XWiki format support.
 #[cfg(any(feature = "read-xwiki", feature = "write-xwiki"))]
 pub mod xwiki {
-    #[cfg(feature = "read-xwiki")]
-    pub use rescribe_read_xwiki::parse;
-    #[cfg(feature = "read-xwiki")]
-    pub use rescribe_read_xwiki::parse_with_options;
     #[cfg(feature = "write-xwiki")]
-    pub use rescribe_write_xwiki::emit;
+    pub use xwiki::rescribe::emit;
     #[cfg(feature = "write-xwiki")]
-    pub use rescribe_write_xwiki::emit_with_options;
+    pub use xwiki::rescribe::emit_with_options;
+    #[cfg(feature = "read-xwiki")]
+    pub use xwiki::rescribe::parse;
+    #[cfg(feature = "read-xwiki")]
+    pub use xwiki::rescribe::parse_with_options;
 }
 
 /// ZimWiki (Zim Desktop Wiki) format support.
 #[cfg(any(feature = "read-zimwiki", feature = "write-zimwiki"))]
 pub mod zimwiki {
-    #[cfg(feature = "read-zimwiki")]
-    pub use rescribe_read_zimwiki::parse;
-    #[cfg(feature = "read-zimwiki")]
-    pub use rescribe_read_zimwiki::parse_with_options;
     #[cfg(feature = "write-zimwiki")]
-    pub use rescribe_write_zimwiki::emit;
+    pub use zimwiki::rescribe::emit;
     #[cfg(feature = "write-zimwiki")]
-    pub use rescribe_write_zimwiki::emit_with_options;
+    pub use zimwiki::rescribe::emit_with_options;
+    #[cfg(feature = "read-zimwiki")]
+    pub use zimwiki::rescribe::parse;
+    #[cfg(feature = "read-zimwiki")]
+    pub use zimwiki::rescribe::parse_with_options;
 }
 
 /// Common imports for typical usage.

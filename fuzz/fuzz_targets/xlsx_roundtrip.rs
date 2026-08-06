@@ -3,8 +3,8 @@
 //! XLSX roundtrip fuzz target.
 //!
 //! Generates arbitrary rescribe Documents with XLSX-supported constructs,
-//! emits them to XLSX bytes via rescribe-write-xlsx, parses them back via
-//! rescribe-read-xlsx, and asserts that text content is preserved.
+//! emits them to XLSX bytes via rescribe-fmt-ooxml's xlsx module, parses
+//! them back the same way, and asserts that text content is preserved.
 //!
 //! Direction: arbitrary_rescribe_doc → emit → parse → assert text preserved.
 
@@ -72,7 +72,11 @@ fn cell_text(val: &FuzzCellValue) -> String {
 }
 
 fn make_cell_node(val: &FuzzCellValue, first_row: bool) -> Node {
-    let kind = if first_row { node::TABLE_HEADER } else { node::TABLE_CELL };
+    let kind = if first_row {
+        node::TABLE_HEADER
+    } else {
+        node::TABLE_CELL
+    };
     let text = cell_text(val);
     let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text);
     // Set xlsx:cell-type so the writer uses the correct API (set_cell(f64) vs
@@ -126,12 +130,12 @@ fuzz_target!(|sheet: FuzzSheet| {
     let doc = Document::new().with_content(Node::new(node::DOCUMENT).child(table));
 
     // Emit to XLSX bytes — must not panic.
-    let Ok(emit_result) = rescribe_write_xlsx::emit(&doc) else {
+    let Ok(emit_result) = rescribe_fmt_ooxml::xlsx::emit(&doc) else {
         return;
     };
 
     // Parse back — must not panic.
-    let Ok(parse_result) = rescribe_read_xlsx::parse_bytes(&emit_result.value) else {
+    let Ok(parse_result) = rescribe_fmt_ooxml::xlsx::parse_bytes(&emit_result.value) else {
         return;
     };
 
@@ -140,8 +144,7 @@ fuzz_target!(|sheet: FuzzSheet| {
     let text_after = extract_text(&parse_result.value.content);
 
     assert_eq!(
-        text_before,
-        text_after,
+        text_before, text_after,
         "XLSX roundtrip lost text content\n  before: {text_before:?}\n  after:  {text_after:?}"
     );
 });

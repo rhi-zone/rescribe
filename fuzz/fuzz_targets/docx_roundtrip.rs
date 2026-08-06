@@ -3,8 +3,8 @@
 //! DOCX roundtrip fuzz target.
 //!
 //! Generates arbitrary rescribe Documents with DOCX-supported constructs,
-//! emits them to DOCX bytes via rescribe-write-docx, parses them back via
-//! rescribe-read-docx, and asserts that text content is preserved.
+//! emits them to DOCX bytes via rescribe-fmt-ooxml's docx module, parses
+//! them back the same way, and asserts that text content is preserved.
 //!
 //! Direction: arbitrary_rescribe_doc → emit → parse → assert text preserved
 //!
@@ -54,7 +54,9 @@ enum FuzzBlock {
 fn sanitise(s: &str) -> Option<String> {
     let out: String = s
         .chars()
-        .filter(|c| !matches!(*c, '\0' | '\r' | '\x01'..='\x08' | '\x0b' | '\x0c' | '\x0e'..='\x1f'))
+        .filter(
+            |c| !matches!(*c, '\0' | '\r' | '\x01'..='\x08' | '\x0b' | '\x0c' | '\x0e'..='\x1f'),
+        )
         .collect();
     if out.is_empty() { None } else { Some(out) }
 }
@@ -107,10 +109,15 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
                     return None;
                 }
                 let lvl = i64::from(*level % 6) + 1; // 1–6
-                Some(Node::new(node::HEADING).prop(prop::LEVEL, lvl).children(children))
+                Some(
+                    Node::new(node::HEADING)
+                        .prop(prop::LEVEL, lvl)
+                        .children(children),
+                )
             }
             FuzzBlock::BulletList { items } => {
-                let list_items: Vec<Node> = items.iter().filter_map(|i| make_list_item(i)).collect();
+                let list_items: Vec<Node> =
+                    items.iter().filter_map(|i| make_list_item(i)).collect();
                 if list_items.is_empty() {
                     None
                 } else {
@@ -122,7 +129,8 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
                 }
             }
             FuzzBlock::OrderedList { items } => {
-                let list_items: Vec<Node> = items.iter().filter_map(|i| make_list_item(i)).collect();
+                let list_items: Vec<Node> =
+                    items.iter().filter_map(|i| make_list_item(i)).collect();
                 if list_items.is_empty() {
                     None
                 } else {
@@ -143,12 +151,12 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
     let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(content_nodes));
 
     // Emit to DOCX bytes — must not panic.
-    let Ok(emit_result) = rescribe_write_docx::emit(&doc) else {
+    let Ok(emit_result) = rescribe_fmt_ooxml::docx::emit(&doc) else {
         return;
     };
 
     // Parse back — must not panic.
-    let Ok(parse_result) = rescribe_read_docx::parse_bytes(&emit_result.value) else {
+    let Ok(parse_result) = rescribe_fmt_ooxml::docx::parse_bytes(&emit_result.value) else {
         return;
     };
 
@@ -157,8 +165,7 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
     let text_after = extract_text(&parse_result.value.content);
 
     assert_eq!(
-        text_before,
-        text_after,
+        text_before, text_after,
         "DOCX roundtrip lost text content\n  before: {text_before:?}\n  after:  {text_after:?}"
     );
 });

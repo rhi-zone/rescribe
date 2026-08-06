@@ -3,8 +3,8 @@
 //! PPTX roundtrip fuzz target.
 //!
 //! Generates arbitrary rescribe Documents with PPTX-supported constructs,
-//! emits them to PPTX bytes via rescribe-write-pptx, parses them back via
-//! rescribe-read-pptx, and asserts that text content is preserved.
+//! emits them to PPTX bytes via rescribe-fmt-ooxml's pptx module, parses
+//! them back the same way, and asserts that text content is preserved.
 //!
 //! Direction: arbitrary_rescribe_doc → emit → parse → assert text preserved
 //!
@@ -48,11 +48,7 @@ fn sanitise(s: &str) -> Option<String> {
             )
         })
         .collect();
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
 
 fn make_text(s: &str) -> Option<Node> {
@@ -87,25 +83,25 @@ fuzz_target!(|slides: Vec<FuzzSlide>| {
                         }
                     }
                     FuzzSlideContent::Table { rows } => {
-                        let row_nodes: Vec<Node> = rows
-                            .iter()
-                            .filter_map(|row| {
-                                let cells: Vec<Node> = row
-                                    .iter()
-                                    .filter_map(|t| {
-                                        let text_node = make_text(t)?;
-                                        Some(Node::new(node::TABLE_CELL).child(
-                                            Node::new(node::PARAGRAPH).child(text_node),
-                                        ))
-                                    })
-                                    .collect();
-                                if cells.is_empty() {
-                                    None
-                                } else {
-                                    Some(Node::new(node::TABLE_ROW).children(cells))
-                                }
-                            })
-                            .collect();
+                        let row_nodes: Vec<Node> =
+                            rows.iter()
+                                .filter_map(|row| {
+                                    let cells: Vec<Node> =
+                                        row.iter()
+                                            .filter_map(|t| {
+                                                let text_node = make_text(t)?;
+                                                Some(Node::new(node::TABLE_CELL).child(
+                                                    Node::new(node::PARAGRAPH).child(text_node),
+                                                ))
+                                            })
+                                            .collect();
+                                    if cells.is_empty() {
+                                        None
+                                    } else {
+                                        Some(Node::new(node::TABLE_ROW).children(cells))
+                                    }
+                                })
+                                .collect();
                         if !row_nodes.is_empty() {
                             div = div.child(Node::new(node::TABLE).children(row_nodes));
                         }
@@ -128,12 +124,12 @@ fuzz_target!(|slides: Vec<FuzzSlide>| {
     let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(slide_nodes));
 
     // Emit to PPTX bytes — must not panic.
-    let Ok(emit_result) = rescribe_write_pptx::emit(&doc) else {
+    let Ok(emit_result) = rescribe_fmt_ooxml::pptx::emit(&doc) else {
         return;
     };
 
     // Parse back — must not panic.
-    let Ok(parse_result) = rescribe_read_pptx::parse(&emit_result.value) else {
+    let Ok(parse_result) = rescribe_fmt_ooxml::pptx::parse(&emit_result.value) else {
         return;
     };
 
@@ -149,8 +145,7 @@ fuzz_target!(|slides: Vec<FuzzSlide>| {
     chars_after.sort();
 
     assert_eq!(
-        chars_before,
-        chars_after,
+        chars_before, chars_after,
         "PPTX roundtrip lost text content\n  before: {text_before:?}\n  after:  {text_after:?}"
     );
 });

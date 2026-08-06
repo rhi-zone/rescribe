@@ -141,7 +141,7 @@ fn html() {
 fn asciidoc() {
     run_format_fixtures(&fixtures_root(), "asciidoc", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_asciidoc::parse(s)
+        asciidoc::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -151,7 +151,7 @@ fn asciidoc() {
 fn mediawiki() {
     run_format_fixtures(&fixtures_root(), "mediawiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_mediawiki::parse(s)
+        mediawiki_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -171,7 +171,7 @@ fn latex() {
 fn rst() {
     run_format_fixtures(&fixtures_root(), "rst", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_rst::parse(s)
+        rst_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -181,7 +181,7 @@ fn rst() {
 fn org() {
     run_format_fixtures(&fixtures_root(), "org", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_org::parse(s)
+        org_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -191,7 +191,7 @@ fn org() {
 fn creole() {
     run_format_fixtures(&fixtures_root(), "creole", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_creole::parse(s)
+        creole::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -201,7 +201,7 @@ fn creole() {
 fn djot() {
     run_format_fixtures(&fixtures_root(), "djot", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_djot::parse(s)
+        djot_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -211,7 +211,7 @@ fn djot() {
 fn textile() {
     run_format_fixtures(&fixtures_root(), "textile", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_textile::parse(s)
+        textile_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -221,7 +221,7 @@ fn textile() {
 fn muse() {
     run_format_fixtures(&fixtures_root(), "muse", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_muse::parse(s)
+        muse_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -231,7 +231,7 @@ fn muse() {
 fn t2t() {
     run_format_fixtures(&fixtures_root(), "t2t", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_t2t::parse(s)
+        t2t::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -241,7 +241,7 @@ fn t2t() {
 fn tikiwiki() {
     run_format_fixtures(&fixtures_root(), "tikiwiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_tikiwiki::parse(s)
+        tikiwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -251,7 +251,7 @@ fn tikiwiki() {
 fn twiki() {
     run_format_fixtures(&fixtures_root(), "twiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_twiki::parse(s)
+        twiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -261,7 +261,7 @@ fn twiki() {
 fn vimwiki() {
     run_format_fixtures(&fixtures_root(), "vimwiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_vimwiki::parse(s)
+        vimwiki_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -271,7 +271,7 @@ fn vimwiki() {
 fn dokuwiki() {
     run_format_fixtures(&fixtures_root(), "dokuwiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_dokuwiki::parse(s)
+        dokuwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -281,7 +281,7 @@ fn dokuwiki() {
 fn jira() {
     run_format_fixtures(&fixtures_root(), "jira", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_jira::parse(s)
+        jira_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -291,7 +291,7 @@ fn jira() {
 fn haddock() {
     run_format_fixtures(&fixtures_root(), "haddock", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_haddock::parse(s)
+        haddock_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -301,7 +301,7 @@ fn haddock() {
 fn pod() {
     run_format_fixtures(&fixtures_root(), "pod", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_pod::parse(s)
+        pod_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -311,7 +311,7 @@ fn pod() {
 fn man() {
     run_format_fixtures(&fixtures_root(), "man", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_man::parse(s)
+        man_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -321,7 +321,7 @@ fn man() {
 fn xwiki() {
     run_format_fixtures(&fixtures_root(), "xwiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_xwiki::parse(s)
+        xwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -331,7 +331,7 @@ fn xwiki() {
 fn zimwiki() {
     run_format_fixtures(&fixtures_root(), "zimwiki", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_zimwiki::parse(s)
+        zimwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -341,7 +341,7 @@ fn zimwiki() {
 fn bbcode() {
     run_format_fixtures(&fixtures_root(), "bbcode", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_bbcode::parse(s)
+        bbcode_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -351,7 +351,7 @@ fn bbcode() {
 fn texinfo() {
     run_format_fixtures(&fixtures_root(), "texinfo", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_texinfo::parse(s)
+        texinfo::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -361,7 +361,7 @@ fn texinfo() {
 fn markua() {
     run_format_fixtures(&fixtures_root(), "markua", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_markua::parse(s)
+        markua::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -371,7 +371,7 @@ fn markua() {
 fn fountain() {
     run_format_fixtures(&fixtures_root(), "fountain", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_fountain::parse(s)
+        fountain_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -381,7 +381,7 @@ fn fountain() {
 fn ansi() {
     run_format_fixtures(&fixtures_root(), "ansi", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_ansi::parse(s)
+        ansi_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -401,7 +401,7 @@ fn csl_json() {
 fn native() {
     run_format_fixtures(&fixtures_root(), "native", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_native::parse(s)
+        native::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -420,7 +420,7 @@ fn pandoc_json() {
 fn docbook() {
     run_format_fixtures(&fixtures_root(), "docbook", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_docbook::parse(s)
+        docbook_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -430,7 +430,7 @@ fn docbook() {
 fn fb2() {
     run_format_fixtures(&fixtures_root(), "fb2", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_fb2::parse(s)
+        fb2_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -450,7 +450,7 @@ fn ipynb() {
 fn csv() {
     run_format_fixtures(&fixtures_root(), "csv", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_csv::parse(s)
+        csv_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -460,7 +460,7 @@ fn csv() {
 fn tsv() {
     run_format_fixtures(&fixtures_root(), "tsv", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_tsv::parse(s)
+        tsv_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -480,7 +480,7 @@ fn opml() {
 fn ris() {
     run_format_fixtures(&fixtures_root(), "ris", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_ris::parse(s)
+        ris::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -510,7 +510,7 @@ fn biblatex() {
 fn typst() {
     run_format_fixtures(&fixtures_root(), "typst", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_typst::parse(s)
+        typst_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -520,7 +520,7 @@ fn typst() {
 fn jats() {
     run_format_fixtures(&fixtures_root(), "jats", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_jats::parse(s)
+        jats_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -530,7 +530,7 @@ fn jats() {
 fn endnote_xml() {
     run_format_fixtures(&fixtures_root(), "endnotexml", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_endnotexml::parse(s)
+        endnotexml_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -540,7 +540,7 @@ fn endnote_xml() {
 fn tei() {
     run_format_fixtures(&fixtures_root(), "tei", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_tei::parse(s)
+        tei_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -549,7 +549,7 @@ fn tei() {
 #[test]
 fn docx() {
     run_format_fixtures(&fixtures_root(), "docx", |input| {
-        rescribe_read_docx::parse_bytes(input)
+        rescribe_fmt_ooxml::docx::parse_bytes(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -558,7 +558,7 @@ fn docx() {
 #[test]
 fn odt() {
     run_format_fixtures(&fixtures_root(), "odt", |input| {
-        rescribe_read_odt::parse(input)
+        odf_fmt::rescribe::parse(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -576,7 +576,7 @@ fn epub() {
 #[test]
 fn pptx() {
     run_format_fixtures(&fixtures_root(), "pptx", |input| {
-        rescribe_read_pptx::parse(input)
+        rescribe_fmt_ooxml::pptx::parse(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -585,7 +585,7 @@ fn pptx() {
 #[test]
 fn xlsx() {
     run_format_fixtures(&fixtures_root(), "xlsx", |input| {
-        rescribe_read_xlsx::parse_bytes(input)
+        rescribe_fmt_ooxml::xlsx::parse_bytes(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -604,7 +604,7 @@ fn pdf() {
 fn rtf() {
     run_format_fixtures(&fixtures_root(), "rtf", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_rtf::parse(s)
+        rtf_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -630,7 +630,7 @@ fn multimarkdown() {
         &["subscript", "superscript"],
         |input| {
             let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-            rescribe_read_multimarkdown::parse(s)
+            multimarkdown_fmt::rescribe::parse(s)
                 .map(|r| r.value)
                 .map_err(|e| e.to_string())
         },
@@ -644,7 +644,7 @@ fn multimarkdown() {
 #[test]
 fn djot_writer() {
     run_format_writer_fixtures(&fixtures_root(), "djot", |doc| {
-        rescribe_write_djot::emit(doc)
+        djot_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -653,7 +653,7 @@ fn djot_writer() {
 #[test]
 fn rtf_writer() {
     run_format_writer_fixtures(&fixtures_root(), "rtf", |doc| {
-        rescribe_write_rtf::emit(doc)
+        rtf_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -810,7 +810,7 @@ fn latex_writer() {
 #[test]
 fn org_writer() {
     run_format_writer_fixtures(&fixtures_root(), "org", |doc| {
-        rescribe_write_org::emit(doc)
+        org_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -819,7 +819,7 @@ fn org_writer() {
 #[test]
 fn rst_writer() {
     run_format_writer_fixtures(&fixtures_root(), "rst", |doc| {
-        rescribe_write_rst::emit(doc)
+        rst_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -828,7 +828,7 @@ fn rst_writer() {
 #[test]
 fn asciidoc_writer() {
     run_format_writer_fixtures(&fixtures_root(), "asciidoc", |doc| {
-        rescribe_write_asciidoc::emit(doc)
+        asciidoc::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

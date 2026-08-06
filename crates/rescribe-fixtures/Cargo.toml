@@ -23,99 +23,64 @@ rescribe-read-html = { workspace = true }
 
 # Pandoc corpus harness (tests/pandoc.rs)
 rescribe-fmt-pandoc-json = { workspace = true }
-rescribe-read-rst = { workspace = true }
 rescribe-read-latex = { workspace = true }
-rescribe-read-org = { workspace = true }
-rescribe-read-djot = { workspace = true }
-rescribe-read-mediawiki = { workspace = true }
-rescribe-read-creole = { workspace = true }
-rescribe-read-textile = { workspace = true }
-rescribe-read-haddock = { workspace = true }
-rescribe-read-jira = { workspace = true }
-rescribe-read-tikiwiki = { workspace = true }
-rescribe-read-twiki = { workspace = true }
-rescribe-read-vimwiki = { workspace = true }
-rescribe-read-t2t = { workspace = true }
-rescribe-read-pod = { workspace = true }
-rescribe-read-man = { workspace = true }
-rescribe-read-asciidoc = { workspace = true }
-rescribe-read-typst = { workspace = true }
-rescribe-read-docbook = { workspace = true }
-rescribe-read-jats = { workspace = true }
-rescribe-read-dokuwiki = { workspace = true }
-rescribe-read-muse = { workspace = true }
-rescribe-read-fb2 = { workspace = true }
-rescribe-read-xwiki = { workspace = true }
-rescribe-read-zimwiki = { workspace = true }
-rescribe-read-bbcode = { workspace = true }
-rescribe-read-texinfo = { workspace = true }
-rescribe-read-markua = { workspace = true }
-rescribe-read-fountain = { workspace = true }
-rescribe-read-ansi = { workspace = true }
+typst-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 rescribe-fmt-ipynb = { workspace = true }
 rescribe-fmt-csl-json = { workspace = true }
-rescribe-read-native = { workspace = true }
-rescribe-read-csv = { workspace = true }
-rescribe-read-tsv = { workspace = true }
-rescribe-read-ris = { workspace = true }
 rescribe-fmt-bibtex = { workspace = true }
 rescribe-fmt-biblatex = { workspace = true }
-rescribe-read-endnotexml = { workspace = true }
-rescribe-read-tei = { workspace = true }
-rescribe-read-docx = { workspace = true }
-rescribe-read-odt = { workspace = true }
+rescribe-fmt-ooxml = { workspace = true }
 rescribe-read-epub = { workspace = true }
-rescribe-read-pptx = { workspace = true }
-rescribe-read-xlsx = { workspace = true }
 ooxml-sml = { workspace = true }
 ooxml-wml = { workspace = true }
 ooxml-pml = { workspace = true }
 rescribe-fmt-pdf = { workspace = true }
-rescribe-read-rtf = { workspace = true }
-rescribe-read-multimarkdown = { workspace = true }
+multimarkdown-fmt = { workspace = true, features = ["rescribe", "read"] }
 
 # Cross-API harness (tests/streaming_apis.rs): drives events()/StreamingParser/
 # streaming-writer directly against the standalone -fmt crates, not just the
 # rescribe adapter's parse()/emit().
-rst-fmt = { workspace = true }
-org-fmt = { workspace = true }
+rst-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+org-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 html-fmt = { workspace = true }
-asciidoc = { workspace = true }
-djot-fmt = { workspace = true }
-texinfo = { workspace = true }
-fb2-fmt = { workspace = true }
-textile-fmt = { workspace = true }
+asciidoc = { workspace = true, features = ["rescribe", "read", "write"] }
+djot-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+texinfo = { workspace = true, features = ["rescribe", "read", "write"] }
+fb2-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+textile-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 commonmark-fmt = { workspace = true, features = ["extensions"] }
-docbook-fmt = { workspace = true }
-jats-fmt = { workspace = true }
-tei-fmt = { workspace = true }
+docbook-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+jats-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+tei-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 opml-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
-endnotexml-fmt = { workspace = true }
-odf-fmt = { workspace = true }
-ansi-fmt = { workspace = true }
-bbcode-fmt = { workspace = true }
-creole = { workspace = true }
-dokuwiki = { workspace = true }
-jira-fmt = { workspace = true }
-mediawiki-fmt = { workspace = true }
-tikiwiki = { workspace = true }
-twiki = { workspace = true }
-vimwiki-fmt = { workspace = true }
-xwiki = { workspace = true }
-zimwiki = { workspace = true }
-markua = { workspace = true }
-muse-fmt = { workspace = true }
-t2t = { workspace = true }
-pod-fmt = { workspace = true }
-haddock-fmt = { workspace = true }
-fountain-fmt = { workspace = true }
-man-fmt = { workspace = true }
-rtf-fmt = { workspace = true }
+endnotexml-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+odf-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+ansi-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+bbcode-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+creole = { workspace = true, features = ["rescribe", "read", "write"] }
+dokuwiki = { workspace = true, features = ["rescribe", "read", "write"] }
+jira-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+mediawiki-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+tikiwiki = { workspace = true, features = ["rescribe", "read", "write"] }
+twiki = { workspace = true, features = ["rescribe", "read", "write"] }
+vimwiki-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+xwiki = { workspace = true, features = ["rescribe", "read"] }
+zimwiki = { workspace = true, features = ["rescribe", "read"] }
+markua = { workspace = true, features = ["rescribe"] }
+muse-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+t2t = { workspace = true, features = ["rescribe", "read", "write"] }
+pod-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+haddock-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+fountain-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+man-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+rtf-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+csv-fmt = { workspace = true, features = ["rescribe"] }
+tsv-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+native = { workspace = true, features = ["rescribe"] }
+ris = { workspace = true, features = ["rescribe"] }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests
-rescribe-write-djot = { workspace = true }
-rescribe-write-rtf = { workspace = true }
 
 # Major text format writer smoke tests
 rescribe-write-markdown = { workspace = true }
@@ -123,9 +88,6 @@ rescribe-write-commonmark = { workspace = true }
 rescribe-write-gfm = { workspace = true }
 rescribe-write-html = { workspace = true }
 rescribe-write-latex = { workspace = true }
-rescribe-write-org = { workspace = true }
-rescribe-write-rst = { workspace = true }
-rescribe-write-asciidoc = { workspace = true }
 
 # Tier D presentation writers (tests/run.rs writer smoke tests)
 rescribe-write-beamer = { workspace = true }
