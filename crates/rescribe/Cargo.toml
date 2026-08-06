@@ -184,7 +184,7 @@ read-pandoc-json = ["dep:rescribe-fmt-pandoc-json"]
 write-pandoc-json = ["dep:rescribe-fmt-pandoc-json"]
 format-pandoc-json = ["read-pandoc-json", "write-pandoc-json"]
 
-read-pdf = ["dep:rescribe-read-pdf"]
+read-pdf = ["dep:rescribe-fmt-pdf"]
 format-pdf = ["read-pdf"]
 
 write-plaintext = ["dep:rescribe-write-plaintext"]
@@ -352,7 +352,7 @@ rescribe-read-markdown = { workspace = true, optional = true }
 rescribe-read-html = { workspace = true, optional = true }
 rescribe-read-latex = { workspace = true, optional = true }
 rescribe-read-org = { workspace = true, optional = true }
-rescribe-read-pdf = { workspace = true, optional = true }
+rescribe-fmt-pdf = { workspace = true, optional = true }
 rescribe-read-docx = { workspace = true, optional = true }
 rescribe-fmt-ipynb = { workspace = true, optional = true }
 rescribe-read-xlsx = { workspace = true, optional = true }

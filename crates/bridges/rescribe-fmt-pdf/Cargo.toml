@@ -1,5 +1,5 @@
 [package]
-name = "rescribe-read-pdf"
+name = "rescribe-fmt-pdf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

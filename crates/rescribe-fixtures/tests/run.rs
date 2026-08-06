@@ -594,7 +594,7 @@ fn xlsx() {
 #[test]
 fn pdf() {
     run_format_fixtures(&fixtures_root(), "pdf", |input| {
-        rescribe_read_pdf::parse(input)
+        rescribe_fmt_pdf::parse(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

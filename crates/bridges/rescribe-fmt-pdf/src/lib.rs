@@ -1,4 +1,5 @@
-//! PDF reader for rescribe.
+//! PDF reader for rescribe (no writer: PDF generation is out of scope — see
+//! crate-level rationale in TODO.md/docs/format-audit.md).
 //!
 //! Parses PDF files into rescribe's document IR.
 //!

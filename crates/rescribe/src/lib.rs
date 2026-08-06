@@ -550,8 +550,8 @@ pub mod pandoc_json {
 /// PDF format support (reader only).
 #[cfg(feature = "read-pdf")]
 pub mod pdf {
-    pub use rescribe_read_pdf::parse;
-    pub use rescribe_read_pdf::parse_with_options;
+    pub use rescribe_fmt_pdf::parse;
+    pub use rescribe_fmt_pdf::parse_with_options;
 }
 
 /// Plain text format support (writer only).

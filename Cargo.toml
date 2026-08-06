@@ -38,7 +38,7 @@ rescribe-write-plaintext = { path = "crates/writers/rescribe-write-plaintext" }
 rescribe-write-latex = { path = "crates/writers/rescribe-write-latex" }
 rescribe-write-org = { path = "crates/writers/rescribe-write-org" }
 rescribe-fmt-pandoc-json = { path = "crates/bridges/rescribe-fmt-pandoc-json" }
-rescribe-read-pdf = { path = "crates/readers/rescribe-read-pdf" }
+rescribe-fmt-pdf = { path = "crates/bridges/rescribe-fmt-pdf" }
 rescribe-transforms = { path = "crates/rescribe-transforms" }
 rescribe-read-docx = { path = "crates/readers/rescribe-read-docx" }
 rescribe-write-docx = { path = "crates/writers/rescribe-write-docx" }

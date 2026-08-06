@@ -70,7 +70,7 @@ rescribe-read-xlsx = { workspace = true }
 ooxml-sml = { workspace = true }
 ooxml-wml = { workspace = true }
 ooxml-pml = { workspace = true }
-rescribe-read-pdf = { workspace = true }
+rescribe-fmt-pdf = { workspace = true }
 rescribe-read-rtf = { workspace = true }
 rescribe-read-multimarkdown = { workspace = true }
 
