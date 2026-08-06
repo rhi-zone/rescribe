@@ -2343,6 +2343,7 @@ dependencies = [
  "serde_yaml",
  "thiserror",
  "zip 7.2.0",
+ "zip-fmt",
 ]
 
 [[package]]

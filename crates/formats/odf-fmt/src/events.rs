@@ -299,10 +299,10 @@ pub enum OdfEvent<'a> {
 /// Text-body elements that open an *inline* content model — inside them,
 /// only the constructs `parser::parse_inlines` recognizes are structural;
 /// everything else is an `Inline::Unknown` raw capture.
-const INLINE_CONTAINERS: &[&str] = &["text:p", "text:h", "text:span", "text:a"];
+pub(crate) const INLINE_CONTAINERS: &[&str] = &["text:p", "text:h", "text:span", "text:a"];
 
 /// Text-body elements that open a *block* content model.
-const BLOCK_CONTAINERS: &[&str] = &[
+pub(crate) const BLOCK_CONTAINERS: &[&str] = &[
     "text:list",
     "text:list-item",
     "text:list-header",
@@ -318,7 +318,7 @@ const BLOCK_CONTAINERS: &[&str] = &[
 
 /// Elements `parser::parse_inlines` recognizes structurally; every other
 /// element encountered in an inline content model is raw-captured.
-const INLINE_RECOGNIZED: &[&str] = &[
+pub(crate) const INLINE_RECOGNIZED: &[&str] = &[
     "text:span",
     "text:a",
     "text:note",
@@ -328,7 +328,7 @@ const INLINE_RECOGNIZED: &[&str] = &[
 
 /// Inline field elements whose text content `parse()` captures as
 /// `Inline::Field`. Kept in sync with `parser::parse_inlines`.
-const FIELD_ELEMENTS: &[&str] = &[
+pub(crate) const FIELD_ELEMENTS: &[&str] = &[
     "text:page-number",
     "text:date",
     "text:time",
@@ -447,7 +447,7 @@ fn extract_events(input: &[u8]) -> VecDeque<OdfEvent<'static>> {
 
 /// Which body section we are currently inside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BodyKind {
+pub(crate) enum BodyKind {
     None,
     Text,
     Spreadsheet,
@@ -665,7 +665,7 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
 /// Returns `true` if the element's subtree was consumed here, in which case
 /// the caller must not track it as an open container.
 #[allow(clippy::too_many_lines)]
-fn push_text_start_event(
+pub(crate) fn push_text_start_event(
     events: &mut VecDeque<OdfEvent<'static>>,
     name: &str,
     attrs: &[(String, String)],
@@ -806,7 +806,7 @@ fn push_text_start_event(
     false
 }
 
-fn push_spreadsheet_start_event(
+pub(crate) fn push_spreadsheet_start_event(
     events: &mut VecDeque<OdfEvent<'static>>,
     name: &str,
     e: &quick_xml::events::BytesStart<'_>,
@@ -855,7 +855,7 @@ fn push_spreadsheet_start_event(
     }
 }
 
-fn push_presentation_start_event(
+pub(crate) fn push_presentation_start_event(
     events: &mut VecDeque<OdfEvent<'static>>,
     name: &str,
     e: &quick_xml::events::BytesStart<'_>,
@@ -914,7 +914,11 @@ fn push_presentation_start_event(
     }
 }
 
-fn push_end_event(events: &mut VecDeque<OdfEvent<'static>>, name: &str, body_kind: BodyKind) {
+pub(crate) fn push_end_event(
+    events: &mut VecDeque<OdfEvent<'static>>,
+    name: &str,
+    body_kind: BodyKind,
+) {
     match body_kind {
         BodyKind::Text => push_text_end_event(events, name),
         BodyKind::Spreadsheet => push_spreadsheet_end_event(events, name),
@@ -965,7 +969,7 @@ fn push_presentation_end_event(events: &mut VecDeque<OdfEvent<'static>>, name: &
     }
 }
 
-fn get_spreadsheet_value(
+pub(crate) fn get_spreadsheet_value(
     e: &quick_xml::events::BytesStart<'_>,
     value_type: Option<&str>,
 ) -> Option<String> {
@@ -979,7 +983,7 @@ fn get_spreadsheet_value(
     get_attr(e, attr_name).or_else(|| get_attr(e, b"office:string-value"))
 }
 
-fn get_attr(e: &quick_xml::events::BytesStart<'_>, key: &[u8]) -> Option<String> {
+pub(crate) fn get_attr(e: &quick_xml::events::BytesStart<'_>, key: &[u8]) -> Option<String> {
     e.attributes()
         .flatten()
         .find(|a| a.key.as_ref() == key)

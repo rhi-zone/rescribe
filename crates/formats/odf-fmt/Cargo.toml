@@ -53,6 +53,7 @@ thiserror.workspace = true
 serde.workspace = true
 rescribe-format-api.workspace = true
 zip.workspace = true
+zip-fmt.workspace = true
 
 [build-dependencies]
 ooxml-codegen.workspace = true

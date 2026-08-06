@@ -1,11 +1,41 @@
-//! Chunk-driven (batch) ODF parser and streaming writer.
+//! Chunk-driven (batch) ODF parser and streaming writer, plus the
+//! genuinely incremental push-based [`StreamingParser`].
 //!
 //! # Memory model
 //!
-//! ODF documents are ZIP archives. A ZIP's central directory lives at the end
-//! of the file, so true incremental parsing is not possible. [`BatchParser`]
-//! accumulates chunks until [`finish`](BatchParser::finish) is called, then
-//! parses the complete buffer. Memory usage is O(full input).
+//! [`BatchParser`] accumulates chunks until [`finish`](BatchParser::finish)
+//! is called, then parses the complete buffer via `zip::ZipArchive` over an
+//! in-memory `Cursor` — memory usage is O(full input). Use this when the
+//! full document is going to be materialized as an [`OdfDocument`] AST
+//! anyway (there is nothing to gain from incremental draining in that
+//! case).
+//!
+//! [`StreamingParser`] is the true chunk-fed reader: it drives ZIP entry
+//! delivery via `zip-fmt`'s hand-rolled push-based `StreamingParser` (which
+//! parses local file headers directly, rather than requiring the
+//! end-of-file central directory the way `zip::ZipArchive` does) and feeds
+//! `content.xml`'s bytes — the dominant contributor to a real document's
+//! size — into `crate::content_stream::ContentDriver` token-by-token as
+//! they arrive, rather than buffering the whole entry first. See
+//! `content_stream`'s module docs for the exact memory-bound contract
+//! (O(largest token + nesting depth), plus one documented, bounded
+//! exception for a handful of subtree-consuming constructs).
+//!
+//! **Event order versus `events()`/`parse()`:** `events::extract_events`
+//! reads named ZIP entries in a fixed logical order (mimetype, then
+//! meta.xml, then styles.xml, then content.xml, then embedded images),
+//! regardless of their physical position in the archive, because
+//! `zip::ZipArchive` supports random access by name.
+//! [`StreamingParser`] cannot do this — a true push-based reader only ever
+//! sees entries in the order the archive stream delivers them, and
+//! reordering would require buffering the whole archive first, defeating
+//! the point of streaming. For this crate's own [`Writer`]/[`emit`](crate::emit)
+//! output the physical order matches the logical order, so the two APIs'
+//! event sequences coincide; for an archive written by some other producer
+//! that interleaves these parts differently, [`StreamingParser`]'s event
+//! order will differ from `events()`'s. This is an inherent property of
+//! genuine streaming over a reorderable container, not a bug — see
+//! `docs/format-audit.md`'s odf-fmt entry.
 //!
 //! [`Writer`] accepts [`OdfEvent`] values and reconstructs an [`OdfDocument`]
 //! AST internally; [`finish`](Writer::finish) emits the ZIP. Because ODF is
@@ -20,6 +50,18 @@
 //! p.feed(b"...chunk 1...");
 //! p.feed(b"...chunk 2...");
 //! let doc = p.finish().unwrap().value;
+//! ```
+//!
+//! # Example — chunk-fed streaming reader
+//! ```no_run
+//! use odf_fmt::batch::StreamingParser;
+//! use odf_fmt::OdfEvent;
+//!
+//! let mut events = Vec::new();
+//! let mut p = StreamingParser::new(|ev: OdfEvent<'static>| events.push(ev));
+//! p.feed(b"...chunk 1...");
+//! p.feed(b"...chunk 2...");
+//! let diagnostics = p.finish();
 //! ```
 //!
 //! # Example — streaming writer
@@ -37,9 +79,13 @@
 //! ```
 
 use crate::ast::*;
-use crate::error::{Error, ParseResult};
+use crate::content_stream::ContentDriver;
+use crate::error::{Diagnostic, Error, ParseResult};
 use crate::events::OdfEvent;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::io::Write;
+use std::rc::Rc;
 
 // ── BatchParser ───────────────────────────────────────────────────────────────
 
@@ -67,6 +113,213 @@ impl BatchParser {
     /// Parse all accumulated input and return the document AST.
     pub fn finish(self) -> Result<ParseResult<OdfDocument>, Error> {
         crate::parser::parse(&self.buf)
+    }
+}
+
+// ── StreamingParser — genuinely incremental, chunk-fed reader ──────────────
+
+/// Handler trait for streaming ODF events — the shared
+/// [`rescribe_format_api::Handler`], not a locally declared trait; see that
+/// crate's docs for why bounding `H` by one shared trait (instead of each
+/// format crate declaring its own concrete `Handler`) is required for a
+/// common `StreamingParse` trait to exist at all. Implemented automatically
+/// for any `FnMut(OdfEvent<'static>)`.
+pub use rescribe_format_api::Handler;
+
+/// Which ZIP entry is currently open, and what (if anything) is
+/// accumulated for it. `content.xml` is the one entry that does *not*
+/// accumulate its whole content — its bytes are fed straight into
+/// `ContentDriver` as they arrive.
+enum CurrentEntry {
+    None,
+    Mimetype(Vec<u8>),
+    Meta(Vec<u8>),
+    Styles(Vec<u8>),
+    Content,
+    Image(String, Vec<u8>),
+    /// Any other entry (`META-INF/manifest.xml`, `settings.xml`, ...) —
+    /// `events::extract_events` doesn't emit anything for these either.
+    Other,
+}
+
+/// Routes `zip-fmt`'s per-entry byte stream to `OdfEvent`s, dispatching
+/// each to the wrapped user handler as soon as it's provably complete. See
+/// the module docs for the full memory/ordering contract.
+struct Router<H: Handler<OdfEvent<'static>>> {
+    handler: H,
+    current: CurrentEntry,
+    content_driver: ContentDriver,
+    /// Scratch queue: `ContentDriver` and the whole-entry parsers below both
+    /// produce zero or more events per call, drained into `handler`
+    /// immediately after each call rather than held here.
+    scratch: VecDeque<OdfEvent<'static>>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<H: Handler<OdfEvent<'static>>> Router<H> {
+    fn new(handler: H) -> Self {
+        Router {
+            handler,
+            current: CurrentEntry::None,
+            content_driver: ContentDriver::new(),
+            scratch: VecDeque::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn drain_scratch(&mut self) {
+        while let Some(ev) = self.scratch.pop_front() {
+            self.handler.handle(ev);
+        }
+    }
+
+    fn start_entry(&mut self, name: &str) {
+        self.current = match name {
+            "mimetype" => CurrentEntry::Mimetype(Vec::new()),
+            "meta.xml" => CurrentEntry::Meta(Vec::new()),
+            "styles.xml" => CurrentEntry::Styles(Vec::new()),
+            "content.xml" => {
+                self.content_driver = ContentDriver::new();
+                CurrentEntry::Content
+            }
+            _ if name.starts_with("Pictures/") || name.starts_with("media/") => {
+                CurrentEntry::Image(name.to_string(), Vec::new())
+            }
+            _ => CurrentEntry::Other,
+        };
+    }
+
+    fn data(&mut self, chunk: &[u8]) {
+        match &mut self.current {
+            CurrentEntry::Content => {
+                self.content_driver.feed(chunk, &mut self.scratch);
+                self.drain_scratch();
+            }
+            CurrentEntry::Mimetype(buf) | CurrentEntry::Meta(buf) | CurrentEntry::Styles(buf) => {
+                buf.extend_from_slice(chunk);
+            }
+            CurrentEntry::Image(_, buf) => buf.extend_from_slice(chunk),
+            CurrentEntry::None | CurrentEntry::Other => {}
+        }
+    }
+
+    fn end_entry(&mut self) {
+        match std::mem::replace(&mut self.current, CurrentEntry::None) {
+            CurrentEntry::Mimetype(buf) => {
+                let text = String::from_utf8_lossy(&buf).trim().to_string();
+                self.handler.handle(OdfEvent::Mimetype(text));
+            }
+            CurrentEntry::Meta(buf) => {
+                let xml = String::from_utf8_lossy(&buf).into_owned();
+                self.handler
+                    .handle(OdfEvent::Meta(crate::parser::parse_meta_xml(&xml)));
+            }
+            CurrentEntry::Styles(buf) => {
+                let xml = String::from_utf8_lossy(&buf).into_owned();
+                let (named_styles, page_layouts) =
+                    crate::parser::parse_styles_xml(&xml, &mut self.diagnostics);
+                for style in named_styles {
+                    self.handler.handle(OdfEvent::NamedStyle(style));
+                }
+                for layout in page_layouts {
+                    self.handler.handle(OdfEvent::PageLayout(layout));
+                }
+            }
+            CurrentEntry::Content => {
+                self.content_driver.finish(&mut self.scratch);
+                self.drain_scratch();
+            }
+            CurrentEntry::Image(name, data) => {
+                if !data.is_empty() {
+                    self.handler.handle(OdfEvent::EmbeddedImage { name, data });
+                }
+            }
+            CurrentEntry::None | CurrentEntry::Other => {}
+        }
+    }
+
+    /// Final cleanup once the ZIP layer has signalled end of input: flush
+    /// `content.xml`'s driver if it never received an `EndEntry` (a
+    /// truncated archive cut off mid-entry — `zip-fmt`'s own `finish()`
+    /// already reports this as a diagnostic; this ensures whatever body
+    /// content *was* fully received still reaches the handler instead of
+    /// being silently dropped).
+    fn finish(mut self) -> Vec<Diagnostic> {
+        if matches!(self.current, CurrentEntry::Content) {
+            self.content_driver.finish(&mut self.scratch);
+            self.drain_scratch();
+        }
+        self.diagnostics
+    }
+}
+
+impl<H: Handler<OdfEvent<'static>>> Handler<zip_fmt::batch::Event> for Router<H> {
+    fn handle(&mut self, event: zip_fmt::batch::Event) {
+        match event {
+            zip_fmt::batch::Event::StartEntry { name, .. } => self.start_entry(&name),
+            zip_fmt::batch::Event::Data(chunk) => self.data(&chunk),
+            zip_fmt::batch::Event::EndEntry { .. } => self.end_entry(),
+            zip_fmt::batch::Event::ArchiveComment(_) => {}
+        }
+    }
+}
+
+/// Shared-ownership wrapper so [`StreamingParser::finish`] can recover
+/// `Router`'s state after `zip_fmt::StreamingParser::finish` consumes its
+/// own handler — see that method's body for why.
+struct SharedRouter<H: Handler<OdfEvent<'static>>>(Rc<RefCell<Router<H>>>);
+
+impl<H: Handler<OdfEvent<'static>>> Clone for SharedRouter<H> {
+    fn clone(&self) -> Self {
+        SharedRouter(Rc::clone(&self.0))
+    }
+}
+
+impl<H: Handler<OdfEvent<'static>>> Handler<zip_fmt::batch::Event> for SharedRouter<H> {
+    fn handle(&mut self, event: zip_fmt::batch::Event) {
+        self.0.borrow_mut().handle(event);
+    }
+}
+
+/// Genuinely incremental, chunk-fed ODF reader. See the module docs for
+/// the memory-bound and event-ordering contract.
+pub struct StreamingParser<H: Handler<OdfEvent<'static>>> {
+    inner: zip_fmt::StreamingParser<SharedRouter<H>>,
+    router: SharedRouter<H>,
+}
+
+impl<H: Handler<OdfEvent<'static>>> StreamingParser<H> {
+    /// Create a new `StreamingParser` that delivers events to `handler`.
+    pub fn new(handler: H) -> Self {
+        let router = SharedRouter(Rc::new(RefCell::new(Router::new(handler))));
+        StreamingParser {
+            inner: zip_fmt::StreamingParser::new(router.clone()),
+            router,
+        }
+    }
+
+    /// Feed the next chunk of ODF ZIP archive bytes. May be called with
+    /// chunks of any size, including 1 byte, and any number of times.
+    pub fn feed(&mut self, chunk: &[u8]) {
+        self.inner.feed(chunk);
+    }
+
+    /// Signal end of input. Returns accumulated diagnostics (ZIP-layer
+    /// diagnostics from `zip-fmt` plus any from `styles.xml` parsing).
+    ///
+    /// `zip_fmt::Diagnostic` and this crate's own [`Diagnostic`] are both
+    /// `rescribe_format_api::Diagnostic` re-exports (the same type), so
+    /// the two diagnostic lists concatenate directly with no conversion.
+    pub fn finish(self) -> Vec<Diagnostic> {
+        let mut diags: Vec<Diagnostic> = self.inner.finish();
+        // `zip_fmt::StreamingParser::finish` just consumed its own clone of
+        // `self.router` — `self.router` (this one) is now the only
+        // remaining `Rc`, so this always succeeds.
+        let router = Rc::try_unwrap(self.router.0)
+            .unwrap_or_else(|_| unreachable!("zip_fmt::StreamingParser::finish drops its handler"))
+            .into_inner();
+        diags.extend(router.finish());
+        diags
     }
 }
 

@@ -40,6 +40,7 @@
 
 pub mod ast;
 pub mod batch;
+mod content_stream;
 pub mod error;
 pub mod events;
 pub mod generated;
@@ -49,7 +50,7 @@ pub mod writer;
 pub use ast::*;
 pub use error::{DiagLevel, Diagnostic, Error, ParseResult};
 pub use events::{EventIter, OdfEvent};
-pub use rescribe_format_api::{Emit, Events, Parse, StreamingWrite};
+pub use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, StreamingWrite};
 
 // ── Trait implementations ───────────────────────────────────────────────────
 //
@@ -67,14 +68,27 @@ pub use rescribe_format_api::{Emit, Events, Parse, StreamingWrite};
 // `Parse`/`Emit` impls (`crates/formats/zip-fmt/src/parse.rs`,
 // `emit.rs`).
 //
-// `StreamingParse` is still NOT implemented: unlike zip-fmt (which hand-
-// rolled a genuinely incremental, `Handler`-dispatching chunk parser to
-// work around ZIP's end-of-file central directory), odf-fmt's own
-// `batch::BatchParser` is pull-style (`feed()` buffers, `finish()` parses
-// the whole buffer and returns the AST) — there is no `Handler<E>`-based
-// push-dispatch construct anywhere in this crate to hang a `StreamingParse`
-// impl on. This is a separate, tracked gap (see TODO.md) from the
-// `Parse`/`Emit` gap this commit closes.
+// `StreamingParse` is now implemented too, backed by `batch::StreamingParser`
+// (not `batch::BatchParser`, which stays pull-style/buffer-until-finish).
+// `StreamingParser` drives ZIP entry delivery via zip-fmt's own hand-rolled
+// push-based `StreamingParser` (parsing local file headers directly,
+// instead of `zip::ZipArchive`'s end-of-file central directory
+// requirement) and feeds `content.xml` — the dominant contributor to a
+// real document's size — into a token-by-token drain loop
+// (`content_stream::ContentDriver`) rather than buffering the whole entry
+// first. See `batch.rs`'s module docs for the full memory-bound contract,
+// including one documented, bounded exception, and for a real, inherent
+// difference from `events()`: entries are delivered in ZIP physical order,
+// not the fixed logical order `events()`'s random-access reads use.
+
+impl StreamingParse for OdfDocument {
+    type Event = OdfEvent<'static>;
+    type Parser<H: Handler<OdfEvent<'static>>> = batch::StreamingParser<H>;
+
+    fn streaming_parser<H: Handler<OdfEvent<'static>>>(handler: H) -> batch::StreamingParser<H> {
+        batch::StreamingParser::new(handler)
+    }
+}
 
 impl Parse for OdfDocument {
     fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {

@@ -837,12 +837,24 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // implementation (direct quick_xml scan of content.xml, not a
     // parse()-then-walk fake — correcting a prior assessment) but is
     // eagerly, fully buffered before the first next() call (self-documented
-    // in events.rs), so it is not memory-bounded; no StreamingParser<H>
-    // exists yet (batch.rs module doc calls it "future" work). The streaming
-    // Writer genuinely builds its AST incrementally per event (same
-    // sanctioned shape as ooxml-sml's SmlWriter, deferring only ZIP byte
-    // packaging to finish()) and, as of 2026-08-03, is byte-identical to
-    // build() across all 66 odt fixtures.
+    // in events.rs), so it is not memory-bounded. The streaming Writer
+    // genuinely builds its AST incrementally per event (same sanctioned
+    // shape as ooxml-sml's SmlWriter, deferring only ZIP byte packaging to
+    // finish()) and, as of 2026-08-03, is byte-identical to build() across
+    // all 66 odt fixtures. As of 2026-08-06, `batch::StreamingParser<H>`
+    // exists and is genuinely incremental: it drives ZIP entry delivery via
+    // zip-fmt's own hand-rolled push-based StreamingParser (parsing local
+    // file headers directly, not `zip::ZipArchive`'s end-of-file central
+    // directory) and feeds content.xml into `content_stream::ContentDriver`
+    // token-by-token, buffering only the handful of subtree-consuming leaf
+    // constructs (automatic-styles block, annotations, unknown-element raw
+    // capture, field values, note citations) — bounded by that one
+    // construct's size, not the whole document (see batch.rs/
+    // content_stream.rs module docs). Its event *order* can legitimately
+    // differ from events()'s (physical ZIP entry order vs. events()'s fixed
+    // logical read order), so the fixture check below compares the event
+    // *multiset*, not an exact sequence, and separately confirms real
+    // incremental delivery.
     FormatCapabilities {
         format: "odt",
         events: ApiState::NotYetWired(
@@ -855,12 +867,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              OdfEvent spans three sibling document-body shapes (text/spreadsheet/presentation) \
              and a faithful hand-written ast_to_events projection is substantial follow-up work",
         ),
-        streaming_parser: ApiState::NotYetWired(
-            "no StreamingParser<H> type exists in odf-fmt at all yet — batch.rs only has \
-             BatchParser (a legitimate buffer-until-finish AST builder, since ODF's ZIP central \
-             directory lives at the end of the file) and Writer; batch.rs's own module doc \
-             calls a true chunked event-delivering parser \"a future StreamingParser\"",
-        ),
+        // Wired 2026-08-06: crates/rescribe-fixtures/tests/streaming_apis/odf.rs's
+        // odf_streaming_parser_event_multiset_matches_events_under_adversarial_chunking,
+        // checked against a Debug-formatted, sorted event multiset (see that
+        // test's doc comment for why an exact-sequence check would be wrong
+        // here) plus a real-incremental-delivery check.
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {

@@ -169,3 +169,91 @@ fn odf_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     );
     assert_or_known_failure("odt", "streaming_writer", result);
 }
+
+// odf_fmt::batch::StreamingParser (added 2026-08-06, closing the "no
+// StreamingParser<H> exists at all" gap noted above) drives ZIP entry
+// delivery via zip-fmt's push-based StreamingParser and feeds content.xml
+// into content_stream::ContentDriver token-by-token, rather than requiring
+// the whole content.xml entry buffered first (see batch.rs's module docs
+// for the full memory-bound contract). Its event *order* can legitimately
+// differ from events()'s: events() reads mimetype/meta.xml/styles.xml/
+// content.xml by name in a fixed logical order regardless of their
+// physical position in the ZIP, while StreamingParser only ever sees
+// entries in the order the archive stream delivers them — reordering would
+// require buffering the whole archive first, defeating the point of
+// streaming. So this check compares the *multiset* of emitted events
+// (OdfEvent has no PartialEq — Debug-formatted and sorted — since it
+// embeds Cow<str>/nested AST types not all wired for equality) rather than
+// requiring an exact sequence match, and separately confirms real
+// incremental delivery (some events reach the handler after feeding half
+// the input, before finish()).
+#[test]
+fn odf_streaming_parser_event_multiset_matches_events_under_adversarial_chunking() {
+    use rescribe_format_api::StreamingParse;
+
+    let root = fixtures_root().join("odt");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/odt dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+
+        let mut bulk: Vec<String> = odf_fmt::events(&input).map(|e| format!("{e:?}")).collect();
+        bulk.sort();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed: Vec<String> = Vec::new();
+            let mut parser =
+                odf_fmt::OdfDocument::streaming_parser(|e: odf_fmt::OdfEvent<'static>| {
+                    streamed.push(format!("{e:?}"));
+                });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            streamed.sort();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser's event multiset diverged from events() for fixture {name} \
+                     under chunking {chunking_name} ({} vs {} events)",
+                    streamed.len(),
+                    bulk.len()
+                ));
+            }
+        }
+
+        // Skip fixtures with too little content for "some events after half
+        // the input" to be a meaningful signal — e.g. adv-missing-content,
+        // whose only event at all is Mimetype, could legitimately land in
+        // either half depending on exact ZIP layout.
+        if input.len() > 32 && bulk.len() > 1 {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<String> = Vec::new();
+            let mut parser =
+                odf_fmt::OdfDocument::streaming_parser(|e: odf_fmt::OdfEvent<'static>| {
+                    delivered.push(format!("{e:?}"));
+                });
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — expected real \
+                     incremental delivery per batch.rs's ContentDriver design"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of odt fixtures, got {checked}"
+    );
+    assert_or_known_failure("odt", "streaming_parser", result);
+}
