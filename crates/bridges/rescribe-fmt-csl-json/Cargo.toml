@@ -1,0 +1,13 @@
+[package]
+name = "rescribe-fmt-csl-json"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CSL JSON reader and writer for rescribe"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rescribe-core.workspace = true
+rescribe-std.workspace = true

@@ -1,4 +1,4 @@
-//! CSL JSON writer for rescribe.
+//! CSL JSON writer half of `rescribe-fmt-csl-json`.
 //!
 //! Serializes `bibliography`/`bibliography_entry`/`bibliography_field` IR
 //! nodes (see `rescribe_std::node` and ADR 0005 in the rescribe repo) to

@@ -177,9 +177,9 @@ pub mod creole {
 #[cfg(any(feature = "read-csl-json", feature = "write-csl-json"))]
 pub mod csl_json {
     #[cfg(feature = "read-csl-json")]
-    pub use rescribe_read_csl_json::parse;
+    pub use rescribe_fmt_csl_json::parse;
     #[cfg(feature = "write-csl-json")]
-    pub use rescribe_write_csl_json::emit;
+    pub use rescribe_fmt_csl_json::emit;
 }
 
 /// CSV (Comma-Separated Values) format support.

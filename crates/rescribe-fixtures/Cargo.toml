@@ -53,7 +53,7 @@ rescribe-read-markua = { workspace = true }
 rescribe-read-fountain = { workspace = true }
 rescribe-read-ansi = { workspace = true }
 rescribe-read-ipynb = { workspace = true }
-rescribe-read-csl-json = { workspace = true }
+rescribe-fmt-csl-json = { workspace = true }
 rescribe-read-native = { workspace = true }
 rescribe-read-csv = { workspace = true }
 rescribe-read-tsv = { workspace = true }

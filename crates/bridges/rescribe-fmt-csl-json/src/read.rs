@@ -1,4 +1,4 @@
-//! CSL JSON reader for rescribe.
+//! CSL JSON reader half of `rescribe-fmt-csl-json`.
 //!
 //! Parses CSL JSON (Citation Style Language JSON) into rescribe's document
 //! IR, using the `bibliography`/`bibliography_entry`/`bibliography_field`
@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use rescribe_read_csl_json::parse;
+//! use rescribe_fmt_csl_json::parse;
 //!
 //! let csl = r#"[{
 //!   "id": "smith2020",

@@ -262,8 +262,8 @@ path = "../crates/writers/rescribe-write-epub"
 [dependencies.rescribe-fmt-bibtex]
 path = "../crates/bridges/rescribe-fmt-bibtex"
 
-[dependencies.rescribe-read-csl-json]
-path = "../crates/readers/rescribe-read-csl-json"
+[dependencies.rescribe-fmt-csl-json]
+path = "../crates/bridges/rescribe-fmt-csl-json"
 
 [dependencies.rescribe-read-ipynb]
 path = "../crates/readers/rescribe-read-ipynb"

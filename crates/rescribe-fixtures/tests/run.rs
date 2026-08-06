@@ -391,7 +391,7 @@ fn ansi() {
 fn csl_json() {
     run_format_fixtures(&fixtures_root(), "csl-json", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_csl_json::parse(s)
+        rescribe_fmt_csl_json::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

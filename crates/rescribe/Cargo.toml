@@ -59,8 +59,8 @@ read-creole = ["dep:rescribe-read-creole"]
 write-creole = ["dep:rescribe-write-creole"]
 format-creole = ["read-creole", "write-creole"]
 
-read-csl-json = ["dep:rescribe-read-csl-json"]
-write-csl-json = ["dep:rescribe-write-csl-json"]
+read-csl-json = ["dep:rescribe-fmt-csl-json"]
+write-csl-json = ["dep:rescribe-fmt-csl-json"]
 format-csl-json = ["read-csl-json", "write-csl-json"]
 
 read-csv = ["dep:rescribe-read-csv"]
@@ -361,7 +361,7 @@ rescribe-read-djot = { workspace = true, optional = true }
 opml-fmt = { workspace = true, optional = true }
 rescribe-read-mediawiki = { workspace = true, optional = true }
 rescribe-fmt-bibtex = { workspace = true, optional = true }
-rescribe-read-csl-json = { workspace = true, optional = true }
+rescribe-fmt-csl-json = { workspace = true, optional = true }
 rescribe-read-docbook = { workspace = true, optional = true }
 rescribe-read-rst = { workspace = true, optional = true }
 rescribe-read-asciidoc = { workspace = true, optional = true }
@@ -414,7 +414,6 @@ rescribe-write-ipynb = { workspace = true, optional = true }
 rescribe-write-epub = { workspace = true, optional = true }
 rescribe-write-djot = { workspace = true, optional = true }
 rescribe-write-mediawiki = { workspace = true, optional = true }
-rescribe-write-csl-json = { workspace = true, optional = true }
 rescribe-write-docbook = { workspace = true, optional = true }
 rescribe-write-rst = { workspace = true, optional = true }
 rescribe-write-asciidoc = { workspace = true, optional = true }
