@@ -835,12 +835,35 @@ impl<'a> Parser<'a> {
     fn parse_definer_target_command(&mut self) -> (Option<String>, Arg) {
         match self.peek() {
             Some((Tok::GroupOpen, _)) => {
-                let arg = self.parse_mandatory_arg();
-                let name = arg.iter().find_map(|n| match n {
-                    Node::ControlSymbol { name, .. } => Some(name.clone()),
-                    _ => None,
-                });
-                (name, arg)
+                // Deliberately does NOT go through `parse_mandatory_arg`
+                // (which would recurse through `parse_one` ->
+                // `parse_control_sequence`, resolving `\foo` as a *use*
+                // against the current scope). The name here is being
+                // *declared*, not invoked — resolving it would silently
+                // turn a `\renewcommand{\foo}...`/second `\newcommand{\foo}...`
+                // (redefining an already-defined `\foo`) into a `Command`
+                // node instead of the literal `ControlSymbol` the source
+                // actually wrote, breaking round-trip (found by the
+                // `fuzz_latex_fmt_roundtrip` target). Consume `{`, a bare
+                // `Cs` token, `}` directly instead.
+                let (_, open_span) = self.bump().unwrap();
+                match self.bump() {
+                    Some((Tok::Cs(n), s)) => {
+                        let name_node = Node::ControlSymbol {
+                            name: n.to_string(),
+                            span: s,
+                        };
+                        self.expect_group_close(open_span);
+                        (Some(n.to_string()), vec![name_node])
+                    }
+                    other => {
+                        if let Some(t) = other {
+                            self.peeked = Some(Some(t));
+                        }
+                        self.expect_group_close(open_span);
+                        (None, Vec::new())
+                    }
+                }
             }
             Some((Tok::Cs(_), _)) => {
                 let (tok, s) = self.bump().unwrap();

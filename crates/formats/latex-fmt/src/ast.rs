@@ -146,4 +146,74 @@ impl LatexDoc {
         }
         self
     }
+
+    /// Puts a programmatically-built document into the canonical shape
+    /// `parse()` always produces, before round-tripping (same contract as
+    /// `rtf_fmt::RtfDoc::normalize` — see that crate for precedent).
+    ///
+    /// Concretely: merges adjacent `Text` siblings into one. `parse()`'s
+    /// tokenizer produces maximal-munch `Text` runs, so two back-to-back
+    /// `Text` nodes with nothing tokenizer-special between them can never
+    /// come out of `parse()` — but the `Node` type itself doesn't forbid
+    /// constructing that shape by hand (e.g. a fuzz/property-test
+    /// generator that emits two independent `Text` leaves in a row).
+    /// `emit(doc)` then `parse()` naturally re-merges them, which is
+    /// correct behavior, not a bug — `normalize()` makes a hand-built
+    /// `LatexDoc` match what `parse()` would have produced for the same
+    /// rendered text, so `parse(emit(doc)).strip_spans() ==
+    /// doc.normalize().strip_spans()` holds for any `doc`, not only ones
+    /// already in canonical form.
+    pub fn normalize(&mut self) -> &mut Self {
+        merge_adjacent_text(&mut self.nodes);
+        for n in &mut self.nodes {
+            n.normalize();
+        }
+        self
+    }
+}
+
+fn merge_adjacent_text(nodes: &mut Vec<Node>) {
+    let mut i = 0;
+    while i + 1 < nodes.len() {
+        let can_merge = matches!(
+            (&nodes[i], &nodes[i + 1]),
+            (Node::Text { .. }, Node::Text { .. })
+        );
+        if can_merge {
+            let next_value = match nodes.remove(i + 1) {
+                Node::Text { value, .. } => value,
+                _ => unreachable!(),
+            };
+            if let Node::Text { value, .. } = &mut nodes[i] {
+                value.push_str(&next_value);
+            }
+        } else {
+            i += 1;
+        }
+    }
+}
+
+impl Node {
+    fn normalize(&mut self) {
+        match self {
+            Node::Group { body, .. } | Node::Environment { body, .. } => {
+                merge_adjacent_text(body);
+                for n in body.iter_mut() {
+                    n.normalize();
+                }
+            }
+            _ => {}
+        }
+        match self {
+            Node::Command { opt, args, .. } | Node::Environment { opt, args, .. } => {
+                for a in opt.iter_mut().chain(args.iter_mut()) {
+                    merge_adjacent_text(a);
+                    for n in a.iter_mut() {
+                        n.normalize();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }

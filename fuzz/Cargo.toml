@@ -306,6 +306,10 @@ path = "../crates/formats/tei-fmt"
 path = "../crates/formats/opml-fmt"
 features = ["rescribe", "read"]
 
+[dependencies.latex-fmt]
+path = "../crates/formats/latex-fmt"
+features = ["rescribe", "read", "write"]
+
 [dependencies.rescribe-format-api]
 path = "../crates/formats/rescribe-format-api"
 
@@ -1100,6 +1104,20 @@ bench = false
 [[bin]]
 name = "fuzz_opml_fmt_roundtrip"
 path = "fuzz_targets/opml_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_latex_fmt_reader"
+path = "fuzz_targets/latex_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_latex_fmt_roundtrip"
+path = "fuzz_targets/latex_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false
