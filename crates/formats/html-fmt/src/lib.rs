@@ -52,6 +52,8 @@ pub mod emit;
 pub mod events;
 mod ids;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 mod sink;
 pub mod writer;
 
