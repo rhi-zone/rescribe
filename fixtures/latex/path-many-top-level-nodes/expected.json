@@ -1,0 +1,8 @@
+{
+  "description": "A long run of plain words stays a single merged text run (tokenizer maximal-munch), not 50 separate top-level nodes",
+  "category": "pathological",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

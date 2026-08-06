@@ -1,0 +1,10 @@
+{
+  "description": "Inline $...$ math is captured as a raw_block between the surrounding text paragraphs (math-mode content is never split into separate paragraph/raw_block IR nodes within one sentence at the current IR-mapping granularity — see rescribe.rs docs)",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 3 },
+    { "path": "/0/0", "kind": "text", "props": { "content": "The value is " } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "$x + y$" } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "." } }
+  ]
+}

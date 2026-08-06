@@ -1,8 +1,0 @@
-{
-  "description": "URL link via \\url command",
-  "category": "rare",
-  "assertions": [
-    { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } }
-  ]
-}

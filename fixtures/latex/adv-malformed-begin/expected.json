@@ -1,0 +1,8 @@
+{
+  "description": "\\begin with no following {name} at all (end of input): degrades to a bare raw_block, no panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\begin " } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Unresolved command whose trailing group is never closed: no panic, content still captured",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\textbf " } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{unterminated}" } }
+  ]
+}

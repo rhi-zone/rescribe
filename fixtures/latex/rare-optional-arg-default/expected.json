@@ -1,0 +1,9 @@
+{
+  "description": "\\newcommand with an optional leading argument ([2][Hi]); a use that omits the optional bracket still resolves correctly against the declared arity",
+  "category": "rare",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\newcommand{\\greet }[2][Hi]{#1, #2!}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\greet{World}" } }
+  ]
+}

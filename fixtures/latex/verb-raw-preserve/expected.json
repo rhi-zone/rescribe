@@ -1,0 +1,8 @@
+{
+  "description": "\\verb|...| is captured verbatim (its own tokenizer-level raw-capture close set — see tokenize.rs) regardless of the braces inside",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\verb|a{b}c|" } }
+  ]
+}

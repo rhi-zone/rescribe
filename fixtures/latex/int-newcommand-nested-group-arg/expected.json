@@ -1,0 +1,9 @@
+{
+  "description": "A resolved macro's argument containing a nested {...} group round-trips through raw_block source capture without losing the nested braces",
+  "category": "integration",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\newcommand{\\box }[1]{[#1]}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\box{{nested group}}" } }
+  ]
+}

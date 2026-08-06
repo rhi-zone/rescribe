@@ -1,0 +1,8 @@
+{
+  "description": "Plain text becomes a paragraph/text pair (the one semantic mapping the rescribe adapter does)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "children_count": 1 },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is a plain paragraph." } }
+  ]
+}

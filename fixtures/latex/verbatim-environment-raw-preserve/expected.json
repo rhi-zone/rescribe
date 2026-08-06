@@ -1,0 +1,8 @@
+{
+  "description": "verbatim environment body is captured raw (backslashes/braces inside are not tokenized) regardless of in-document definition state",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\begin{verbatim}raw \\stuff{here}\\end{verbatim}" } }
+  ]
+}

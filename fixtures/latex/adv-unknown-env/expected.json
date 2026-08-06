@@ -1,7 +1,0 @@
-{
-  "description": "Unknown environment is skipped with warning, no error thrown",
-  "category": "adversarial",
-  "assertions": [
-    { "path": "/", "kind": "document" }
-  ]
-}

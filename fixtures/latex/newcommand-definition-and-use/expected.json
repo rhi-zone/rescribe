@@ -1,0 +1,9 @@
+{
+  "description": "\\newcommand definition + resolved use; both become raw_block at the IR level (the rescribe adapter doesn't distinguish resolved from unresolved — see rescribe.rs docs), but no fidelity warning is produced for the resolved use",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\newcommand{\\greet }[1]{Hello, #1!}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\greet{World}" } }
+  ]
+}

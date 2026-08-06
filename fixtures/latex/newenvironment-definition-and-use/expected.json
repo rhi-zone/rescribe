@@ -1,0 +1,9 @@
+{
+  "description": "\\newenvironment definition + resolved \\begin{myenv}...\\end{myenv} use",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\newenvironment{myenv}{[}{]}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\begin{myenv}body\\end{myenv}" } }
+  ]
+}

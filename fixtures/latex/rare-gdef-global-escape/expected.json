@@ -1,0 +1,9 @@
+{
+  "description": "\\gdef inside a {...} group escapes to the global scope frame, so \\x resolves outside the group too (see parse.rs's scope-stack docs) — captured here as raw_block source since IR doesn't distinguish resolved from unresolved, but no fidelity warning is produced for the resolved use (verified separately by parse.rs's gdef_escapes_to_global_scope unit test)",
+  "category": "rare",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{\\gdef \\x {outer}}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\x " } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "A %-comment becomes its own raw_block between the surrounding text paragraphs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "before" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "%a note\n" } },
+    { "path": "/2", "kind": "paragraph" },
+    { "path": "/2/0", "kind": "text", "props": { "content": "after" } }
+  ]
+}

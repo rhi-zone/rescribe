@@ -1,7 +1,0 @@
-{
-  "description": "Code block via lstlisting environment",
-  "category": "rare",
-  "assertions": [
-    { "path": "/0", "kind": "code_block", "props": { "content": "hello world" } }
-  ]
-}

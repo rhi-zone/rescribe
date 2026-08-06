@@ -1,0 +1,10 @@
+{
+  "description": "\\x defined outer, shadowed by a nested \\def\\x inside a {...} group, restored to the outer definition once the group closes — round-trips correctly at every scope depth",
+  "category": "rare",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 3 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\def \\x {outer}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{\\def \\x {inner}\\x }" } },
+    { "path": "/2", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\x " } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "\\section, undefined in-document, raw-preserves as raw_block rather than becoming a heading node",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\section " } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{Introduction}" } }
+  ]
+}

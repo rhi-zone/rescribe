@@ -1,0 +1,8 @@
+{
+  "description": "60 levels of nested {...} groups do not overflow the recursive-descent parser (bounded, not pathological in the sense of triggering a crash) — a real limit exists (recursion depth is unbounded within available stack) but 60 is well within it",
+  "category": "pathological",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block" }
+  ]
+}

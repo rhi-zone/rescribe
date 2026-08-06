@@ -1,0 +1,10 @@
+{
+  "description": "A leading %-comment immediately followed by an unresolved command: each becomes its own raw_block, in source order",
+  "category": "integration",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 3 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "%leading comment\n" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\undefinedcmd " } },
+    { "path": "/2", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{x}" } }
+  ]
+}

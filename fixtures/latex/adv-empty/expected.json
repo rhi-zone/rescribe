@@ -1,7 +1,7 @@
 {
-  "description": "Empty document produces empty content",
+  "description": "Empty document produces an empty document node, no panic",
   "category": "adversarial",
   "assertions": [
-    { "path": "/", "kind": "document", "children_count": 0 }
+    { "path": "", "kind": "document", "children_count": 0 }
   ]
 }

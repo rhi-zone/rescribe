@@ -1,0 +1,10 @@
+{
+  "description": "\\newcommand then \\renewcommand of the same name; the second use resolves against the latest definition (see parse_command_definer) with no fidelity warning",
+  "category": "rare",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 3 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\newcommand{\\greet }{v1}" } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\renewcommand{\\greet }{v2}" } },
+    { "path": "/2", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\greet " } }
+  ]
+}

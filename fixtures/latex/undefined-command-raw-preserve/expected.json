@@ -1,0 +1,12 @@
+{
+  "description": "\\textbf, undefined in-document, raw-preserves as raw_block (no built-in \"standard commands\" table — see crate::parse's resolution model)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This has " } },
+    { "path": "/1", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\textbf " } },
+    { "path": "/2", "kind": "raw_block", "props": { "format": "latex", "latex:source": "{bold}" } },
+    { "path": "/3", "kind": "paragraph" },
+    { "path": "/3/0", "kind": "text", "props": { "content": " text." } }
+  ]
+}

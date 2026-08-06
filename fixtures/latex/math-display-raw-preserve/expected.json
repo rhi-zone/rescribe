@@ -1,0 +1,8 @@
+{
+  "description": "Display $$...$$ math is captured as one raw_block carrying the exact source, delimiters included",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "$$E = mc^2$$" } }
+  ]
+}

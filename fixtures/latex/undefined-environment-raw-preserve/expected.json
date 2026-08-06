@@ -1,0 +1,8 @@
+{
+  "description": "An unrecognized environment raw-preserves its entire begin...end span as one raw_block",
+  "category": "happy",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\begin{tikzpicture}\nsome content\n\\end{tikzpicture}" } }
+  ]
+}

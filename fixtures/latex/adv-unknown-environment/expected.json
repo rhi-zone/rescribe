@@ -1,0 +1,8 @@
+{
+  "description": "Unresolved environment with no matching \\end (truncated input): raw-preserved up to end of input, no panic. The re-emitted latex:source synthesizes the closing \\end{tikzpicture} the AST always carries (canonical form — see CLAUDE.md's roundtrip-direction rule: the AST, not the original malformed bytes, is ground truth)",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "raw_block", "props": { "format": "latex", "latex:source": "\\begin{tikzpicture}\nunterminated\\end{tikzpicture}" } }
+  ]
+}
