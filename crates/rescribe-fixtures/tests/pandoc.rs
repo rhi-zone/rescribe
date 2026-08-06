@@ -57,7 +57,7 @@ fn run_formats(
 fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
     // Binary formats — handle before UTF-8 conversion.
     if format == "odt" {
-        return rescribe_read_odt::parse(input)
+        return odf_fmt::rescribe::parse(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string());
     }
@@ -69,7 +69,7 @@ fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
         "gfm" => rescribe_read_gfm::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "rst" => rescribe_read_rst::parse(s)
+        "rst" => rst_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
         "html" => rescribe_read_html::parse(s)
@@ -78,64 +78,64 @@ fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
         "latex" => rescribe_read_latex::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "org" => rescribe_read_org::parse(s)
+        "org" => org_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "djot" => rescribe_read_djot::parse(s)
+        "djot" => djot_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "mediawiki" => rescribe_read_mediawiki::parse(s)
+        "mediawiki" => mediawiki_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "creole" => rescribe_read_creole::parse(s)
+        "creole" => creole::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "textile" => rescribe_read_textile::parse(s)
+        "textile" => textile_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "haddock" => rescribe_read_haddock::parse(s)
+        "haddock" => haddock_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "jira" => rescribe_read_jira::parse(s)
+        "jira" => jira_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "tikiwiki" => rescribe_read_tikiwiki::parse(s)
+        "tikiwiki" => tikiwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "twiki" => rescribe_read_twiki::parse(s)
+        "twiki" => twiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "vimwiki" => rescribe_read_vimwiki::parse(s)
+        "vimwiki" => vimwiki_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "t2t" => rescribe_read_t2t::parse(s)
+        "t2t" => t2t::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "pod" => rescribe_read_pod::parse(s)
+        "pod" => pod_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "man" => rescribe_read_man::parse(s)
+        "man" => man_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "asciidoc" => rescribe_read_asciidoc::parse(s)
+        "asciidoc" => asciidoc::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "typst" => rescribe_read_typst::parse(s)
+        "typst" => typst_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "docbook" => rescribe_read_docbook::parse(s)
+        "docbook" => docbook_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "jats" => rescribe_read_jats::parse(s)
+        "jats" => jats_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "dokuwiki" => rescribe_read_dokuwiki::parse(s)
+        "dokuwiki" => dokuwiki::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "muse" => rescribe_read_muse::parse(s)
+        "muse" => muse_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "fb2" => rescribe_read_fb2::parse(s)
+        "fb2" => fb2_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
         _ => Err(format!("no reader registered for {format:?}")),
