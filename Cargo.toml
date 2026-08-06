@@ -45,6 +45,7 @@ odf-fmt = { path = "crates/formats/odf-fmt" }
 commonmark-fmt = { path = "crates/formats/commonmark-fmt" }
 djot-fmt = { path = "crates/formats/djot-fmt" }
 rtf-fmt = { path = "crates/formats/rtf-fmt" }
+latex-fmt = { path = "crates/formats/latex-fmt" }
 rst-fmt = { path = "crates/formats/rst-fmt" }
 asciidoc = { path = "crates/formats/asciidoc" }
 org-fmt = { path = "crates/formats/org-fmt" }
