@@ -675,8 +675,8 @@ rtf (`rtf-fmt`), ris (`ris`), csv (`csv-fmt`), tsv (`tsv-fmt`), native (`native`
 Backed by a sanctioned third-party library with no hand-rolled logic layered on top:
 epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
 
-Residual `zip::` usage in `rescribe-read-odt` and `rescribe-read-pptx` is confined to
-`#[cfg(test)]` fixture builders — verified, not a violation.
+Residual `zip::` usage in `rescribe-read-odt` and `rescribe-fmt-ooxml`'s pptx module is
+confined to `#[cfg(test)]` fixture builders — verified, not a violation.
 
 ### Violating (11)
 
