@@ -47,6 +47,21 @@ pub fn emit(doc: &OdfDocument) -> Result<Vec<u8>, Error> {
     Ok(cursor.into_inner())
 }
 
+/// Diagnostic-and-continue variant of [`emit`], for the infallible
+/// `rescribe_format_api::Emit` trait impl (see `lib.rs`).
+///
+/// Mirrors `zip-fmt`'s `emit()` (`crates/formats/zip-fmt/src/emit.rs`):
+/// `zip::ZipWriter` is fallible even over an in-memory `Cursor<Vec<u8>>`
+/// (format-limit errors, e.g. a duplicate entry name or more than
+/// `u16::MAX` entries without zip64), but the `Emit` trait's signature is
+/// infallible and carries no diagnostics channel. On the rare failure
+/// path this returns an empty `Vec` rather than a partial/corrupt
+/// archive — a caller that needs to distinguish "empty document" from
+/// "write failed" should use [`emit`] instead, which returns a `Result`.
+pub fn emit_lenient(doc: &OdfDocument) -> Vec<u8> {
+    emit(doc).unwrap_or_default()
+}
+
 // ── Manifest ──────────────────────────────────────────────────────────────────
 
 fn build_manifest(doc: &OdfDocument) -> String {

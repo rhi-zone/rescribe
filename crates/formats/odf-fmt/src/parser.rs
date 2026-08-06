@@ -31,9 +31,50 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
     let cursor = Cursor::new(input);
     let mut archive = ZipArchive::new(cursor)?;
     let mut diags = Vec::new();
+    let doc = parse_archive(&mut archive, &mut diags);
+    Ok(ParseResult::with_diagnostics(doc, diags))
+}
 
+/// Diagnostic-and-continue variant of [`parse`], for the infallible
+/// `rescribe_format_api::Parse` trait impl (see `lib.rs`).
+///
+/// Mirrors `zip-fmt`'s `parse()` (`crates/formats/zip-fmt/src/parse.rs`):
+/// a ZIP archive that fails to open at all (corrupt/truncated central
+/// directory) produces an empty [`OdfDocument`] plus a diagnostic instead
+/// of propagating an error — the same "partial document + diagnostic"
+/// shape every other ill-formed construct in this parser already falls
+/// back to (see `parse_archive`'s use of `read_zip_text`'s `None` case
+/// and each XML sub-parser's `Err(_) => break`).
+pub fn parse_lenient(input: &[u8]) -> (OdfDocument, Vec<Diagnostic>) {
+    let cursor = Cursor::new(input);
+    let mut diags = Vec::new();
+    let mut archive = match ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(e) => {
+            diags.push(crate::error::warn(format!(
+                "failed to open ZIP archive: {e}"
+            )));
+            return (OdfDocument::default(), diags);
+        }
+    };
+    let doc = parse_archive(&mut archive, &mut diags);
+    (doc, diags)
+}
+
+/// Shared body for [`parse`] and [`parse_lenient`]: everything after the
+/// ZIP archive itself has been successfully opened. Nothing below this
+/// point is fallible in the `Result`-propagating sense — every sub-parser
+/// already degrades gracefully on malformed input (missing entries return
+/// `None` from `read_zip_text`; malformed XML breaks its read loop early
+/// via `Err(_) => break`) rather than raising an error, so `parse` and
+/// `parse_lenient` only differ in how they handle the archive failing to
+/// open at all.
+fn parse_archive(
+    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    diags: &mut Vec<Diagnostic>,
+) -> OdfDocument {
     // Read mimetype
-    let mimetype = read_zip_text(&mut archive, "mimetype")
+    let mimetype = read_zip_text(archive, "mimetype")
         .unwrap_or_else(|| "application/vnd.oasis.opendocument.text".to_string());
     let mimetype = mimetype.trim().to_string();
 
@@ -52,15 +93,14 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
     }
 
     // styles.xml
-    let (named_styles, page_layouts) = if let Some(xml) = read_zip_text(&mut archive, "styles.xml")
-    {
-        parse_styles_xml(&xml, &mut diags)
+    let (named_styles, page_layouts) = if let Some(xml) = read_zip_text(archive, "styles.xml") {
+        parse_styles_xml(&xml, diags)
     } else {
         (Vec::new(), Vec::new())
     };
 
     // meta.xml
-    let meta = if let Some(xml) = read_zip_text(&mut archive, "meta.xml") {
+    let meta = if let Some(xml) = read_zip_text(archive, "meta.xml") {
         parse_meta_xml(&xml)
     } else {
         OdfMeta::default()
@@ -68,13 +108,13 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
 
     // content.xml
     let (body, automatic_styles, list_styles) =
-        if let Some(xml) = read_zip_text(&mut archive, "content.xml") {
-            parse_content_xml(&xml, &mut diags)
+        if let Some(xml) = read_zip_text(archive, "content.xml") {
+            parse_content_xml(&xml, diags)
         } else {
             (OdfBody::Empty, Vec::new(), Vec::new())
         };
 
-    let doc = OdfDocument {
+    OdfDocument {
         mimetype,
         body,
         automatic_styles,
@@ -83,9 +123,7 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
         list_styles,
         meta,
         images,
-    };
-
-    Ok(ParseResult::with_diagnostics(doc, diags))
+    }
 }
 
 // ── ZIP helpers ───────────────────────────────────────────────────────────────

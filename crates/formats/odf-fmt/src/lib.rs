@@ -49,33 +49,44 @@ pub mod writer;
 pub use ast::*;
 pub use error::{DiagLevel, Diagnostic, Error, ParseResult};
 pub use events::{EventIter, OdfEvent};
-pub use rescribe_format_api::{Events, StreamingWrite};
+pub use rescribe_format_api::{Emit, Events, Parse, StreamingWrite};
 
 // ── Trait implementations ───────────────────────────────────────────────────
 //
-// Only `Events` and `StreamingWrite` are implemented here. `Parse` and
-// `Emit` are deliberately NOT implemented: this crate's `parse(&[u8]) ->
-// Result<ParseResult<OdfDocument>, Error>` and `emit(&OdfDocument) ->
-// Result<Vec<u8>, Error>` are hard-`Result`-returning (a corrupt ZIP or a
-// failed write is a real `Error`, not a diagnosable-and-continue case —
-// a deliberately different philosophy from zip-fmt's own `Parse` impl,
-// which treats archive corruption as diagnosable). Forcing these into the
-// trait's infallible `(Self, Vec<Diagnostic>)` / `Vec<u8>` shapes would
-// mean silently swallowing the `Err` case or synthesizing a placeholder
-// document/byte vector on failure — a real behavior change, not a
-// mechanical rename, and not something to guess at (same category as
-// rst-fmt's `Parse`/`Events` gap, documented in that crate's `lib.rs`).
+// `Parse` and `Emit` wrap `parser::parse_lenient`/`writer::emit_lenient`,
+// diagnostic-and-continue variants added alongside the pre-existing
+// `Result`-returning `parser::parse`/`writer::emit` (still exported below,
+// still used by `rescribe-read-odt`/`rescribe-write-odt` and the batch
+// API, which want the hard-`Result` for real I/O failures). The two
+// variants differ only in how a ZIP archive that fails to open at all is
+// handled — every other fallible-looking construct in `parser.rs`
+// already degrades gracefully (`Err(_) => break`) rather than
+// propagating an error, so there was no wider "silently swallow errors"
+// behavior change hiding in this split. See `parser::parse_lenient` and
+// `writer::emit_lenient` for the exact shape, matching zip-fmt's own
+// `Parse`/`Emit` impls (`crates/formats/zip-fmt/src/parse.rs`,
+// `emit.rs`).
 //
-// `StreamingParse` is also NOT implemented: unlike zip-fmt (which hand-
+// `StreamingParse` is still NOT implemented: unlike zip-fmt (which hand-
 // rolled a genuinely incremental, `Handler`-dispatching chunk parser to
 // work around ZIP's end-of-file central directory), odf-fmt's own
 // `batch::BatchParser` is pull-style (`feed()` buffers, `finish()` parses
 // the whole buffer and returns the AST) — there is no `Handler<E>`-based
 // push-dispatch construct anywhere in this crate to hang a `StreamingParse`
-// impl on. Building one would be new-feature work (a real, pre-existing
-// gap against this crate's own documented "ODF is ZIP-based, true
-// incremental parsing is not possible" limitation — see `batch.rs`'s
-// module docs), not a trait migration.
+// impl on. This is a separate, tracked gap (see TODO.md) from the
+// `Parse`/`Emit` gap this commit closes.
+
+impl Parse for OdfDocument {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        parser::parse_lenient(input)
+    }
+}
+
+impl Emit for OdfDocument {
+    fn emit(&self) -> Vec<u8> {
+        writer::emit_lenient(self)
+    }
+}
 
 impl Events for OdfDocument {
     type Event<'a> = OdfEvent<'static>;
