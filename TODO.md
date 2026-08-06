@@ -9,6 +9,81 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-06: `odf-fmt`'s `Parse`/`Emit`/`StreamingParse` gaps closed — both were addressable,
+not load-bearing-blocked, per a same-session follow-up assessment.**
+
+**Gap 1 (`Parse`/`Emit`, hard-`Result` → diagnostic-and-continue):** `parser::parse`/
+`writer::emit` keep their existing `Result`-returning signatures (still used by
+`rescribe-read-odt`/`rescribe-write-odt` and `batch::BatchParser`, which want a hard `Error` on
+real I/O failure). Added `parser::parse_lenient`/`writer::emit_lenient` alongside them,
+mirroring `zip-fmt`'s own `Parse`/`Emit` impls exactly: a ZIP archive that fails to open at all
+produces an empty `OdfDocument` plus a diagnostic instead of propagating `Err`. Investigating
+`parser.rs`'s actual control flow found this was the *only* real gap — every other
+fallible-looking construct already degrades gracefully (`Err(_) => break` on malformed XML,
+`None` from `read_zip_text` on a missing entry) rather than propagating an error, so no
+redesign of the ~2100-line recursive-descent parser was needed. `rescribe_format_api::Parse`/
+`Emit` are now implemented for `OdfDocument`.
+
+**Gap 2 (`StreamingParse`, genuine push-based reader):** `odf-fmt` depended on the plain `zip`
+crate, not `zip-fmt` (confirmed via `Cargo.toml`). Added a `zip-fmt` dependency and rebuilt
+`batch::StreamingParser<H>` on top of `zip-fmt`'s hand-rolled push-based ZIP `StreamingParser`
+(parses local file headers directly, not `zip::ZipArchive`'s end-of-file central directory
+requirement). `content.xml`'s existing `quick_xml` event-loop logic (`events.rs`'s
+`parse_content_events`, previously run against a fully-buffered `file.read_to_string`) is now
+driven token-by-token via a new `content_stream::ContentDriver`, fed from `zip-fmt`'s
+incremental per-entry `Data` events — mirroring `docbook-fmt`'s "rebuild a `Reader` over the
+unconsumed tail each call, `Err`/ambiguous-`Eof` means wait for more bytes" technique.
+
+Real, load-bearing complication found and resolved during this work, not glossed over:
+`parse_content_events` is flat SAX at the top level (paragraph/span/table/list opens and
+closes dispatch directly, matching the "just needs incremental feeding" characterization) but
+delegates five leaf constructs to `parser.rs`/`events.rs` helpers that consume their own
+subtree in one call — `office:automatic-styles` (→ `parse_auto_styles_block`),
+`office:annotation`, `text:note-citation`, field elements, and an explicit
+`<text:soft-page-break>…</text:soft-page-break>`. These are not chunk-boundary-safe as written
+(they assume the full subtree is already in the buffer). Rather than rewrite each into its own
+resumable state machine (real from-scratch-parser territory, out of proportion for five
+constructs), added one generic depth-tracking pre-scan (`content_stream::subtree_end`) that
+determines whether a *complete* subtree is present in the currently-buffered bytes before
+calling the existing, unmodified helper — bounded by that one construct's size, not the whole
+`content.xml`, the same class of documented exception as `zip-fmt`'s own `Store`+
+data-descriptor case. A `text_start_consumes_subtree` predicate (kept as a separate pure
+function, cross-checked by a `debug_assert!` against `push_text_start_event`'s actual return
+value in every non-gated call) mirrors `push_text_start_event`'s own dispatch condition so the
+two can't silently diverge.
+
+A second real bug caught while building this (not merely "found and moved past"): every fresh
+`Reader` constructed mid-subtree hit `quick_xml`'s default `check_end_names` validation, which
+has no record of the enclosing element's opening tag (consumed by a *different* `Reader`
+instance) and raised a spurious `IllFormed(UnmatchedEndTag)` the instant it reached that
+element's closing tag — silently producing *zero* body events for any document containing an
+`<office:automatic-styles>` block, i.e. nearly every real ODT. Fixed the same way
+`docbook-fmt`'s `batch.rs` already does: `check_end_names = false` / `allow_unmatched_ends =
+true` on every such `Reader`, with tag balance enforced by hand instead (this module's generic
+depth counters, or the existing helpers' own explicit `name == end_tag` checks). Regression
+test added (`content_stream::tests::drains_automatic_styles_and_body_content`).
+
+Event **order** is a real, inherent difference from `events()`, not a bug: `events()` reads
+named ZIP entries (mimetype, meta.xml, styles.xml, content.xml) in a fixed logical order via
+random access, while `StreamingParser` only ever sees entries in the order the archive stream
+delivers them — reordering would require buffering the whole archive first, defeating the
+point of streaming. `odf-fmt`'s own writer output happens to match the logical order, but an
+archive from some other producer may not. Documented in `batch.rs`'s module docs and in the
+new fixture test's doc comment, which compares the event *multiset* (sorted, Debug-formatted —
+`OdfEvent` has no `PartialEq`) rather than requiring an exact sequence match.
+
+Verified via `cargo test -q -p odf-fmt` (34 tests, all pass, including two new regression
+tests for the `check_end_names` bug), `cargo clippy --all-targets --all-features -p odf-fmt --
+-D warnings` clean, `cargo fmt --check` clean, `cargo test -q -p rescribe-read-odt -p
+rescribe-write-odt` unaffected, and a new
+`crates/rescribe-fixtures/tests/streaming_apis/odf.rs::odf_streaming_parser_event_multiset_matches_events_under_adversarial_chunking`
+passing over all 67 odt fixtures (both bulk-feed and single-byte-at-a-time chunking) plus a
+real-incremental-delivery check — moving `streaming_harness`'s `odt` `streaming_parser` cell
+from `NotYetWired` to `Wired`. `docs/format-audit.md`'s odt row updated to match. `cargo test -q
+-p rescribe-fixtures` run in full: pre-existing, unrelated `html-fmt` failures from a
+concurrent session's in-progress work (confirmed via `git status` — `events.rs`/`ids.rs`
+dirty/untracked, unrelated to this change) are the only failures; both new `odf` tests pass.
+
 **2026-08-05: the `rescribe-read-fb2`/`rescribe-write-fb2` adapter-layer `Section.annotation`
 gap closed — the last open piece named in the 2026-08-04 `fb2-fmt` section-level annotation
 entry below.** Confirmed from `fb2-fmt`'s actual source (not assumption) that this was purely
@@ -4118,6 +4193,14 @@ Chunked HTML, Plaintext
 
 ## Architecture: Format Crate Split (M0-style, ongoing)
 
+**SUPERSEDED (2026-08-05) for new work — not yet migrated for existing crates.** The
+3-crate-per-format layout described in this section (`{format}-fmt` +
+`rescribe-read-{format}` + `rescribe-write-{format}`) is no longer the target
+architecture. See "Adapter architecture: feature-flag migration (decided 2026-08-05)"
+below for the new target (a `rescribe` feature flag on the `{format}-fmt` crate itself,
+no separate adapter crates) and the migration status of the ~44 existing verticals.
+This section is kept for history; do not use it to scaffold new adapter crates.
+
 ### Motivation
 
 `rescribe-read-{format}` and `rescribe-write-{format}` should be **thin IR adapters only** —
@@ -4168,6 +4251,70 @@ full design spec and per-vertical checklist. Short version:
 - `emit(ast) -> String` with round-trip guarantee
 - No `Document`, `Node`, or `Properties` anywhere in the standalone crate
 - Rescribe adapter does only AST↔IR translation (no format parsing/writing)
+
+---
+
+## Adapter architecture: feature-flag migration (decided 2026-08-05)
+
+**Decision:** collapse the 3-crate-per-format layout above (`{format}-fmt` +
+`rescribe-read-{format}` + `rescribe-write-{format}`) down to 1. Each standalone
+`{format}-fmt` crate gains an optional `rescribe` Cargo feature (default off, pulling
+in `rescribe-core` as an optional dependency only when enabled) that exposes the
+AST↔`Document` translation directly, in a feature-gated module inside the crate.
+Rationale given: no point maintaining 3x as many crates per format. Full rule text is
+in CLAUDE.md's "The `rescribe` feature module must never contain parsing or writing
+logic" and the updated `crates/` architecture diagram.
+
+**Migration status (updated 2026-08-06): mostly done.** The following ~38 hand-rolled
+verticals have been migrated to the single-crate `rescribe`-feature layout (adapter
+crates deleted, consumers repointed at `{format}_fmt::rescribe::{parse,emit}`),
+following `opml-fmt` (commit `c61f527711`) as the reference implementation: opml,
+ansi, asciidoc, bbcode, creole, csv, djot, docbook, dokuwiki, endnotexml, fb2,
+fountain, haddock, jats, jira, man, markua, mediawiki, multimarkdown, muse, native,
+odf/odt, org, pod, ris, rst, rtf, t2t, tei, texinfo, textile, tikiwiki, tsv, twiki,
+typst, vimwiki, xwiki, zimwiki.
+
+**Not migrated — genuine open items, not oversights:**
+- **html-fmt**: its reader forks between an html5ever path (wraps `html-fmt`) and an
+  independent tree-sitter-based HTML parser with no `html-fmt` dependency at all.
+  The mechanical one-crate-one-translation-module pattern doesn't fit this fork as-is
+  — needs an explicit call (migrate only the html5ever half and leave a slimmed
+  `rescribe-read-html` for tree-sitter, drop the tree-sitter backend, or fold
+  tree-sitter-html into `html-fmt` itself) before migrating.
+- **Library-backed / binary formats** (docx, pptx, xlsx, epub, gfm, markdown,
+  markdown-strict, latex, pdf, ipynb, bibtex, biblatex, csl-json, pandoc-json,
+  commonmark, and the OOXML cluster): these had no matching `crates/formats/*-fmt`
+  crate for this pattern to move code into, so they were out of scope for this pass
+  by construction. A parallel, separately-run consolidation (`rescribe-fmt-*` bridge
+  crates under `crates/bridges/`, plus a fresh `epub-fmt`) covered most of these
+  concurrently with this migration — check `crates/bridges/` and `crates/formats/`
+  for current state before assuming any of them still needs this treatment.
+
+**What still holds from the old rule, unchanged:**
+- The `rescribe` module still must not contain any tokenizing/parsing/emitting logic
+  — only AST↔`Document` translation. Same test as before: read the module's
+  production functions, check imports.
+- Still ≤300 lines each direction (was: ≤300 lines "each side" as a separate crate;
+  now: ≤300 lines each direction within the feature-gated module) — not re-audited
+  per crate as part of this migration pass; flag any crate found over the limit.
+- The `{format}-fmt` crate itself must have **zero** rescribe-awareness when the
+  `rescribe` feature is off — default off, so a non-rescribe consumer of the crate
+  never pulls in `rescribe-core`, not even as an unused optional dependency, unless
+  they opt in. Verified per migrated crate via `cargo build --no-default-features`
+  + `cargo tree` showing no `rescribe-core` in the dependency graph.
+
+**Known follow-up gap: `fuzz/` was not updated.** `fuzz/Cargo.toml` and
+`fuzz/fuzz_targets/{format}_reader.rs`/`{format}_roundtrip.rs` for the ~38 migrated
+formats still reference the deleted `rescribe-read-{format}`/`rescribe-write-{format}`
+crates and need the same repointing (`{format}_fmt::rescribe::{parse,emit}`, plus
+enabling that crate's `rescribe`/`read`/`write` features in `fuzz/Cargo.toml`) that
+`crates/rescribe`, `crates/rescribe-fixtures`, and the workspace root `Cargo.toml`
+already got. Deferred because `fuzz/Cargo.toml` is a 1000+ line file under heavy
+concurrent edit from other sessions during this migration, and a regex-driven sweep
+of it carried real risk of corruption. `fuzz` is `exclude`d from the main workspace
+so this does not block `cargo build --workspace`, but it does mean the fuzz no-panic
+gate for these formats' rescribe adapters is currently broken (`cargo check` in
+`fuzz/` fails) until someone does this pass.
 
 ---
 
@@ -7862,6 +8009,7 @@ during the earlier audit pass (`csl-json`, `pandoc-json`, `ipynb`, `bibtex`, `bi
 during that earlier pass as legitimate thin wrappers around sanctioned third-party
 libraries or genuinely reader-less/writer-only targets, not CLAUDE.md violations — that
 question is not reopened here, only recorded as already closed.
+
 **Not attempted this pass** (construct coverage remains incomplete beyond the two flagged
 gaps above): abbreviation definitions/references, glossary terms/references, TOC
 placeholders (`{{TOC}}`), file transclusion (`{{file}}`), image dimensions
