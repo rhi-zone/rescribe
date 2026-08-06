@@ -86,6 +86,7 @@ native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }
 xml-entities = { path = "crates/formats/xml-entities" }
 zip-fmt = { path = "crates/formats/zip-fmt" }
+epub-fmt = { path = "crates/formats/epub-fmt" }
 rescribe-write-revealjs = { path = "crates/writers/rescribe-write-revealjs" }
 rescribe-write-slidy = { path = "crates/writers/rescribe-write-slidy" }
 rescribe-write-s5 = { path = "crates/writers/rescribe-write-s5" }
