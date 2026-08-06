@@ -11,38 +11,91 @@ pub mod writer;
 
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use events::{Event, OwnedEvent};
-pub use rescribe_format_api::{Emit, StreamingParse, StreamingWrite};
+pub use rescribe_format_api::{
+    Diagnostic, Emit, Events, Parse, Severity, Span, StreamingParse, StreamingWrite,
+};
 pub use writer::Writer;
 
 use std::borrow::Cow;
 
 // ── Trait implementations ───────────────────────────────────────────────────
 //
-// Only `Emit`, `StreamingParse`, and `StreamingWrite` are implemented here.
-// `Parse` and `Events` are deliberately NOT implemented: rst-fmt's
-// `parse(&str) -> Result<RstDoc<'_>, RstError>` and
-// `events(&str) -> EventIter<'_>` differ from the shared trait signatures
-// in three real, non-mechanical ways — `&str` input (not `&[u8]`), a hard
-// `Result<_, RstError>` (not an infallible `(_, Vec<Diagnostic>)` — rst-fmt
-// has no `Diagnostic`/`Severity` type at all), and a `RstDoc<'a>` borrowing
-// from the input (the `Parse` trait's `Self` has no lifetime tied to the
-// `&[u8]` argument, so a lending/GAT-shaped trait would be needed). Forcing
-// these through the current `Parse`/`Events` trait shapes would be a real
-// design change (str-vs-bytes on every crate's trait signature, whether
-// `Self` should support a per-call lifetime via a GAT, and whether a
-// fallible `Result`-returning crate should be coerced into the
-// diagnostics-vec convention every other surveyed crate already follows)
-// — flagged for a decision, not guessed at here.
+// `RstDoc<'a>` implements all five shared `rescribe-format-api` traits.
 //
-// `Emit`/`StreamingParse`/`StreamingWrite` don't hit this: `emit(&self)`
-// takes an already-parsed `&RstDoc<'a>` (no fresh-lifetime construction),
-// and the streaming-parse/streaming-write constructors don't take input at
-// all (input arrives later via `feed()`), so both sides off the associated
-// types are unaffected by RstDoc's lifetime parameter.
+// `Parse` and `Events` are implemented for `RstDoc<'static>` /
+// `EventIter<'_>` respectively:
+//
+// - `Parse::parse` has no `Result` to lose: `RstError` is defined but never
+//   constructed anywhere in this crate (confirmed by grep) — `parse()`
+//   unconditionally returns `Ok(...)`, so there is no error path the
+//   infallible `(Self, Vec<Diagnostic>)` shape drops.
+// - `Parse`'s `Self` has no per-call lifetime, but `RstDoc<'a>` borrows
+//   from its input. The crate already has the fix for this: `into_owned()`,
+//   the same pattern `StreamingParse for RstDoc<'static>` below uses. The
+//   trait impl parses to a local `RstDoc<'_>` and immediately
+//   `.into_owned()`s it.
+// - `Events`'s `Event<'a>`/`EventIter<'a>` are declared as GATs specifically
+//   to support borrowing implementations (see that trait's doc comment in
+//   `rescribe-format-api`) — rst-fmt's own `Event<'a>`/`EventIter<'a>` wire
+//   in directly with zero-copy preserved, no ownership conversion needed.
+//
+// Both trait methods take `&[u8]`; this crate's native `parse`/`events`
+// take `&str` (and `rescribe-read-rst`/the fixture suite already call them
+// by that name). Per the `bbcode-fmt`/`commonmark-fmt` precedent for this
+// exact bridge, those `&str`-based functions are kept, unrenamed, as
+// separate non-trait entry points, with a UTF-8 validation step added for
+// the `&[u8]`-taking trait methods.
 
 impl Emit for RstDoc<'_> {
     fn emit(&self) -> Vec<u8> {
         build(self).into_bytes()
+    }
+}
+
+impl Parse for RstDoc<'static> {
+    fn parse(input: &[u8]) -> (Self, Vec<Diagnostic>) {
+        match std::str::from_utf8(input) {
+            Ok(s) => {
+                // `parse_str` never returns `Err` in practice (`RstError`
+                // is never constructed anywhere in this crate), but the
+                // `Result` is still the return type — treat a hypothetical
+                // `Err` as an empty document plus a diagnostic rather than
+                // panicking or unwrapping.
+                match parse(s) {
+                    Ok(doc) => (doc.into_owned(), vec![]),
+                    Err(e) => (
+                        RstDoc::default(),
+                        vec![Diagnostic::new(Severity::Error, e.0)],
+                    ),
+                }
+            }
+            Err(_) => (
+                RstDoc::default(),
+                vec![
+                    Diagnostic::new(Severity::Warning, "input is not valid UTF-8")
+                        .with_span(Span::NONE)
+                        .with_code("rst::invalid-utf8"),
+                ],
+            ),
+        }
+    }
+}
+
+impl Events for RstDoc<'static> {
+    type Event<'a> = Event<'a>;
+    type EventIter<'a> = EventIter<'a>;
+
+    fn events(input: &[u8]) -> EventIter<'_> {
+        // `events_str` borrows text runs straight from its `&str` argument,
+        // so on invalid UTF-8 there is no owned buffer this function could
+        // hand back a borrowing `EventIter` from, and `Events::events` has
+        // no diagnostic channel to report the failure through — falls back
+        // to an empty-document iterator, matching `bbcode-fmt`'s precedent
+        // for the same `&[u8]`-vs-`&str` bridging problem.
+        match std::str::from_utf8(input) {
+            Ok(s) => events(s),
+            Err(_) => events(""),
+        }
     }
 }
 
