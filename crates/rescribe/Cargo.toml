@@ -90,8 +90,8 @@ read-endnotexml = ["dep:endnotexml-fmt", "endnotexml-fmt/rescribe", "endnotexml-
 write-endnotexml = ["dep:endnotexml-fmt", "endnotexml-fmt/rescribe", "endnotexml-fmt/write"]
 format-endnotexml = ["read-endnotexml", "write-endnotexml"]
 
-read-epub = ["dep:rescribe-read-epub"]
-write-epub = ["dep:rescribe-write-epub"]
+read-epub = ["dep:epub-fmt", "epub-fmt/rescribe", "epub-fmt/read"]
+write-epub = ["dep:epub-fmt", "epub-fmt/rescribe", "epub-fmt/write"]
 format-epub = ["read-epub", "write-epub"]
 
 read-fb2 = ["dep:fb2-fmt", "fb2-fmt/rescribe", "fb2-fmt/read"]
@@ -354,7 +354,7 @@ rescribe-read-latex = { workspace = true, optional = true }
 org-fmt = { workspace = true, optional = true }
 rescribe-fmt-pdf = { workspace = true, optional = true }
 rescribe-fmt-ipynb = { workspace = true, optional = true }
-rescribe-read-epub = { workspace = true, optional = true }
+epub-fmt = { workspace = true, optional = true }
 djot-fmt = { workspace = true, optional = true }
 opml-fmt = { workspace = true, optional = true }
 # Covers docx/pptx/xlsx reading AND writing — see the single dep entry below
@@ -410,7 +410,6 @@ rescribe-fmt-pandoc-json = { workspace = true, optional = true }
 rescribe-write-markdown = { workspace = true, optional = true }
 rescribe-write-latex = { workspace = true, optional = true }
 rescribe-write-plaintext = { workspace = true, optional = true }
-rescribe-write-epub = { workspace = true, optional = true }
 rescribe-write-revealjs = { workspace = true, optional = true }
 rescribe-write-slidy = { workspace = true, optional = true }
 rescribe-write-s5 = { workspace = true, optional = true }

@@ -1,6 +1,6 @@
-/// Generate EPUB fixture files for the rescribe-read-epub test suite.
+/// Generate EPUB fixture files for the epub-fmt fixture suite.
 ///
-/// Run with: cargo run -p rescribe-read-epub --bin gen_fixtures
+/// Run with: cargo run -p epub-fmt --bin gen_fixtures --features rescribe
 use rescribe_core::Node;
 use std::io::Write;
 use zip::ZipWriter;
@@ -244,7 +244,7 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
 }
 
 fn generate_expected_json(desc: &str, epub_bytes: &[u8]) -> String {
-    let result = rescribe_read_epub::parse_bytes(epub_bytes).expect("parse failed");
+    let result = epub_fmt::rescribe::parse(epub_bytes).expect("parse failed");
     let doc = result.value;
 
     let mut assertions: Vec<serde_json::Value> = Vec::new();

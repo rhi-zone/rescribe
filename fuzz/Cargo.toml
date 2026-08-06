@@ -236,12 +236,6 @@ path = "../crates/readers/rescribe-read-markdown-strict"
 [dependencies.rescribe-read-multimarkdown]
 path = "../crates/readers/rescribe-read-multimarkdown"
 
-[dependencies.rescribe-read-epub]
-path = "../crates/readers/rescribe-read-epub"
-
-[dependencies.rescribe-write-epub]
-path = "../crates/writers/rescribe-write-epub"
-
 [dependencies.rescribe-fmt-bibtex]
 path = "../crates/bridges/rescribe-fmt-bibtex"
 
@@ -320,6 +314,7 @@ path = "../crates/formats/zip-fmt"
 
 [dependencies.epub-fmt]
 path = "../crates/formats/epub-fmt"
+features = ["rescribe", "read", "write"]
 
 [dependencies.endnotexml-fmt]
 path = "../crates/formats/endnotexml-fmt"

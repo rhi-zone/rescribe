@@ -22,7 +22,15 @@ write = ["writer-builder", "writer-streaming"]
 # AST<->rescribe::Document translation. Off by default so consumers who only
 # want the standalone EPUB library never pull in rescribe-core. Pulls in
 # translation code gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
-rescribe = ["dep:rescribe-core", "dep:rescribe-std", "html-fmt/rescribe", "html-fmt/read", "html-fmt/write"]
+rescribe = [
+    "dep:rescribe-core",
+    "dep:rescribe-std",
+    "dep:zip",
+    "dep:serde_json",
+    "html-fmt/rescribe",
+    "html-fmt/read",
+    "html-fmt/write",
+]
 
 [dependencies]
 quick-xml = { workspace = true }
@@ -31,5 +39,13 @@ html-fmt = { workspace = true }
 rescribe-format-api = { workspace = true }
 rescribe-core = { workspace = true, optional = true }
 rescribe-std = { workspace = true, optional = true }
+# Only used by the `gen_fixtures` bin (fixture-file generation), gated behind
+# the `rescribe` feature alongside it — never pulled in by the core library.
+zip = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[[bin]]
+name = "gen_fixtures"
+required-features = ["rescribe"]
 
 [dev-dependencies]

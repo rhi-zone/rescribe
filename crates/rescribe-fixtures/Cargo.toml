@@ -29,7 +29,6 @@ rescribe-fmt-csl-json = { workspace = true }
 rescribe-fmt-bibtex = { workspace = true }
 rescribe-fmt-biblatex = { workspace = true }
 rescribe-fmt-ooxml = { workspace = true }
-rescribe-read-epub = { workspace = true }
 ooxml-sml = { workspace = true }
 ooxml-wml = { workspace = true }
 ooxml-pml = { workspace = true }
@@ -52,6 +51,7 @@ docbook-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 jats-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 tei-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 opml-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
+epub-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 endnotexml-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 odf-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 ansi-fmt = { workspace = true, features = ["rescribe", "read", "write"] }

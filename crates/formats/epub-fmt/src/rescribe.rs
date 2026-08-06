@@ -30,11 +30,17 @@
 //! **Content**: each spine item's translated HTML content is flattened
 //! directly into the document — no wrapper node — matching the previous
 //! `rescribe-read-epub` adapter's shape (which existing fixtures assert
-//! paths against). The chapter/spine boundary is instead recorded as
+//! paths against). For multi-chapter EPUBs, a synthetic level-1 heading
+//! whose text is the spine item's manifest id is prepended to each
+//! chapter's content (skipped when that id is empty or looks
+//! auto-generated, i.e. starts with `"item"`) — also matching the previous
+//! adapter, which used this as its only per-chapter label without parsing
+//! nav/NCX. The chapter/spine boundary is instead recorded as
 //! `epub:manifest_id`/`epub:href`/`epub:spine_linear`/`epub:spine_id`/
-//! `epub:spine_properties` properties on that chapter's *first* node (a
-//! placeholder empty paragraph if the chapter had no content at all), so
-//! the writer reconstructs the manifest/spine exactly — including
+//! `epub:spine_properties` properties on that chapter's *first* node (the
+//! synthetic heading when present, otherwise the first real content node,
+//! or a placeholder empty paragraph if the chapter had no content at all),
+//! so the writer reconstructs the manifest/spine exactly — including
 //! `linear="no"` items, which still appear in document order (unlike a
 //! reading-order-only projection) so no content is dropped. A document
 //! built from scratch (not round-tripping an EPUB) has none of these
@@ -79,7 +85,7 @@ mod read {
         ResourceId, ResourceMap, Severity, SourceInfo, WarningKind,
     };
     use rescribe_format_api::{Emit as _, Parse as _};
-    use rescribe_std::node;
+    use rescribe_std::{node, prop};
 
     /// Parse EPUB bytes into a document.
     pub fn parse(input: &[u8]) -> Result<ConversionResult<Document>, ParseError> {
@@ -166,6 +172,7 @@ mod read {
             );
         }
 
+        let num_spine_items = epub.package.spine.items.len();
         let mut children = Vec::new();
         for item in &epub.package.spine.items {
             let Some(mi) = epub.package.manifest.iter().find(|m| m.id == item.idref) else {
@@ -212,6 +219,20 @@ mod read {
                     // props are invisible to assertions that don't ask for
                     // them.
                     let mut chapter_children = result.value.content.children;
+                    // For multi-chapter EPUBs, prepend a synthetic level-1
+                    // heading using the spine item's manifest id as a
+                    // chapter-title stand-in — matches the previous
+                    // `rescribe-read-epub` adapter's behavior (its only
+                    // source of a per-chapter label without accessing
+                    // nav/NCX). Skipped for ids that look
+                    // auto-generated/meaningless ("item1", "item2", ...) or
+                    // empty, same heuristic as before.
+                    if num_spine_items > 1 && !mi.id.is_empty() && !mi.id.starts_with("item") {
+                        let heading = Node::new(node::HEADING)
+                            .prop(prop::LEVEL, 1i64)
+                            .child(Node::new(node::TEXT).prop(prop::CONTENT, mi.id.clone()));
+                        chapter_children.insert(0, heading);
+                    }
                     if chapter_children.is_empty() {
                         chapter_children.push(Node::new(node::PARAGRAPH));
                     }
@@ -304,9 +325,11 @@ mod read {
             assert_eq!(doc.metadata.get_str("author"), Some("Sample Author"));
             assert_eq!(doc.metadata.get_str("language"), Some("en"));
             // chapter1.xhtml is `<h1>Chapter 1</h1><p>Hello.</p>`; chapter2
-            // similarly — each chapter contributes 2 top-level nodes, so 2
-            // chapters flatten to 4 top-level document children.
-            assert_eq!(doc.content.children.len(), 4);
+            // similarly — each chapter contributes 2 top-level nodes from its
+            // own XHTML, plus a synthetic level-1 heading (spine id "ch1"/
+            // "ch2") prepended since this is a multi-chapter book — 3 nodes
+            // per chapter, 6 top-level document children total.
+            assert_eq!(doc.content.children.len(), 6);
             assert_eq!(doc.content.children[0].kind.as_str(), node::HEADING);
             assert_eq!(
                 doc.content.children[0].props.get_str("epub:manifest_id"),

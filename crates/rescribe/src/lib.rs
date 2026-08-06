@@ -262,14 +262,12 @@ pub mod endnotexml {
 /// EPUB format support.
 #[cfg(any(feature = "read-epub", feature = "write-epub"))]
 pub mod epub {
-    #[cfg(feature = "read-epub")]
-    pub use rescribe_read_epub::parse;
-    #[cfg(feature = "read-epub")]
-    pub use rescribe_read_epub::parse_bytes;
-    #[cfg(feature = "read-epub")]
-    pub use rescribe_read_epub::parse_file;
     #[cfg(feature = "write-epub")]
-    pub use rescribe_write_epub::emit;
+    pub use epub_fmt::rescribe::emit;
+    #[cfg(feature = "read-epub")]
+    pub use epub_fmt::rescribe::parse;
+    #[cfg(feature = "read-epub")]
+    pub use epub_fmt::rescribe::parse as parse_bytes;
 }
 
 /// FictionBook 2 (FB2) format support.

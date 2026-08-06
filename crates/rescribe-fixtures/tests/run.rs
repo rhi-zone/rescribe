@@ -567,7 +567,7 @@ fn odt() {
 #[test]
 fn epub() {
     run_format_fixtures(&fixtures_root(), "epub", |input| {
-        rescribe_read_epub::parse_bytes(input)
+        epub_fmt::rescribe::parse(input)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

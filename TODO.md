@@ -4289,15 +4289,28 @@ repointed: `crates/rescribe`, `crates/rescribe-fixtures`, `crates/formats/epub-f
 `crates/readers/rescribe-read-epub`, `crates/writers/rescribe-write-epub`,
 `crates/readers/rescribe-read-markdown` (dev-deps/tests), `fuzz/`.
 
+**epub (migrated 2026-08-06, after the `~39` count above):** the fresh `epub-fmt`
+crate (built earlier the same session, wrapping `zip-fmt` for the container and
+delegating XHTML content-document translation to `html-fmt`'s own `rescribe` module)
+already had a `rescribe.rs` module equivalent to — and a strict superset of —
+`rescribe-read-epub`/`rescribe-write-epub`'s translation logic (more metadata fields,
+full resource/manifest/spine/guide/encryption/unclassified-entry round-tripping).
+`crates/readers/rescribe-read-epub` and `crates/writers/rescribe-write-epub` are
+deleted; consumers (`crates/rescribe`, `crates/rescribe-fixtures`, `fuzz/`) repointed
+at `epub_fmt::rescribe::{parse,emit}`. The old adapter's `gen_fixtures` bin moved to
+`crates/formats/epub-fmt/src/bin/gen_fixtures.rs` (gated behind the crate's
+`rescribe` feature via `required-features`), following `odf-fmt`'s precedent.
+
 **Not migrated — genuine open items, not oversights:**
-- **Library-backed / binary formats** (docx, pptx, xlsx, epub, gfm, markdown,
+- **Library-backed / binary formats** (docx, pptx, xlsx, gfm, markdown,
   markdown-strict, latex, pdf, ipynb, bibtex, biblatex, csl-json, pandoc-json,
   commonmark, and the OOXML cluster): these had no matching `crates/formats/*-fmt`
   crate for this pattern to move code into, so they were out of scope for this pass
   by construction. A parallel, separately-run consolidation (`rescribe-fmt-*` bridge
-  crates under `crates/bridges/`, plus a fresh `epub-fmt`) covered most of these
-  concurrently with this migration — check `crates/bridges/` and `crates/formats/`
-  for current state before assuming any of them still needs this treatment.
+  crates under `crates/bridges/`, plus a fresh `epub-fmt`, now migrated — see above)
+  covered most of these concurrently with this migration — check `crates/bridges/`
+  and `crates/formats/` for current state before assuming any of them still needs
+  this treatment.
 
 **What still holds from the old rule, unchanged:**
 - The `rescribe` module still must not contain any tokenizing/parsing/emitting logic

@@ -3,8 +3,9 @@
 //! EPUB roundtrip fuzz target.
 //!
 //! Generates arbitrary rescribe Documents with EPUB-supported constructs,
-//! emits them to EPUB bytes via rescribe-write-epub, parses them back via
-//! rescribe-read-epub, and asserts that text content is preserved.
+//! emits them to EPUB bytes via `epub_fmt::rescribe::emit`, parses them back
+//! via `epub_fmt::rescribe::parse`, and asserts that text content is
+//! preserved.
 //!
 //! Direction: arbitrary_rescribe_doc → emit → parse → assert text preserved
 //!
@@ -63,7 +64,11 @@ fn sanitise(s: &str) -> Option<String> {
         .filter(|c| !matches!(*c, '\0' | '\r' | '\n' | '\x01'..='\x08' | '\x0b' | '\x0c' | '\x0e'..='\x1f'))
         .collect();
     // HTML parsers normalize whitespace-only text nodes to empty strings
-    if out.trim().is_empty() { None } else { Some(out) }
+    if out.trim().is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 fn make_inline(fi: &FuzzInline) -> Option<Node> {
@@ -115,7 +120,11 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
                 }
                 // Levels 2–6 only: level 1 splits chapters and text is lost
                 let lvl = i64::from(*level % 5) + 2; // 2–6
-                Some(Node::new(node::HEADING).prop(prop::LEVEL, lvl).children(children))
+                Some(
+                    Node::new(node::HEADING)
+                        .prop(prop::LEVEL, lvl)
+                        .children(children),
+                )
             }
             FuzzBlock::BulletList { items } => {
                 let list_items: Vec<Node> =
@@ -153,12 +162,12 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
     let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(content_nodes));
 
     // Emit to EPUB bytes — must not panic.
-    let Ok(emit_result) = rescribe_write_epub::emit(&doc) else {
+    let Ok(emit_result) = epub_fmt::rescribe::emit(&doc) else {
         return;
     };
 
     // Parse back — must not panic.
-    let Ok(parse_result) = rescribe_read_epub::parse_bytes(&emit_result.value) else {
+    let Ok(parse_result) = epub_fmt::rescribe::parse(&emit_result.value) else {
         return;
     };
 
@@ -167,8 +176,7 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
     let text_after = extract_text(&parse_result.value.content);
 
     assert_eq!(
-        text_before,
-        text_after,
+        text_before, text_after,
         "EPUB roundtrip lost text content\n  before: {text_before:?}\n  after:  {text_after:?}"
     );
 });
