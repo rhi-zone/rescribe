@@ -304,7 +304,7 @@ pub fn run_format_writer_fixtures(
             }
         };
 
-        let doc = match rescribe_read_pandoc_json::parse(input_str) {
+        let doc = match rescribe_fmt_pandoc_json::parse(input_str) {
             Ok(r) => r.value,
             Err(e) => {
                 all_failures.push((
