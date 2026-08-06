@@ -180,8 +180,8 @@ read-org = ["dep:rescribe-read-org"]
 write-org = ["dep:rescribe-write-org"]
 format-org = ["read-org", "write-org"]
 
-read-pandoc-json = ["dep:rescribe-read-pandoc-json"]
-write-pandoc-json = ["dep:rescribe-write-pandoc-json"]
+read-pandoc-json = ["dep:rescribe-fmt-pandoc-json"]
+write-pandoc-json = ["dep:rescribe-fmt-pandoc-json"]
 format-pandoc-json = ["read-pandoc-json", "write-pandoc-json"]
 
 read-pdf = ["dep:rescribe-read-pdf"]
@@ -401,7 +401,7 @@ rescribe-fmt-biblatex = { workspace = true, optional = true }
 rescribe-read-markdown-strict = { workspace = true, optional = true }
 rescribe-read-multimarkdown = { workspace = true, optional = true }
 rescribe-read-fountain = { workspace = true, optional = true }
-rescribe-read-pandoc-json = { workspace = true, optional = true }
+rescribe-fmt-pandoc-json = { workspace = true, optional = true }
 
 # Writers (optional)
 rescribe-write-markdown = { workspace = true, optional = true }
@@ -463,7 +463,6 @@ rescribe-write-endnotexml = { workspace = true, optional = true }
 rescribe-write-markdown-strict = { workspace = true, optional = true }
 rescribe-write-multimarkdown = { workspace = true, optional = true }
 rescribe-write-fountain = { workspace = true, optional = true }
-rescribe-write-pandoc-json = { workspace = true, optional = true }
 
 [dev-dependencies]
 rescribe-read-markdown = { workspace = true }

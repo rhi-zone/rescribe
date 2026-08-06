@@ -538,13 +538,13 @@ pub mod org {
 #[cfg(any(feature = "read-pandoc-json", feature = "write-pandoc-json"))]
 pub mod pandoc_json {
     #[cfg(feature = "read-pandoc-json")]
-    pub use rescribe_read_pandoc_json::parse;
+    pub use rescribe_fmt_pandoc_json::parse;
     #[cfg(feature = "read-pandoc-json")]
-    pub use rescribe_read_pandoc_json::parse_with_options;
+    pub use rescribe_fmt_pandoc_json::parse_with_options;
     #[cfg(feature = "write-pandoc-json")]
-    pub use rescribe_write_pandoc_json::emit;
+    pub use rescribe_fmt_pandoc_json::emit;
     #[cfg(feature = "write-pandoc-json")]
-    pub use rescribe_write_pandoc_json::emit_with_options;
+    pub use rescribe_fmt_pandoc_json::emit_with_options;
 }
 
 /// PDF format support (reader only).

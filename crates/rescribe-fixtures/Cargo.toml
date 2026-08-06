@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 rescribe-core = { workspace = true }
-rescribe-read-pandoc-json = { workspace = true }
+rescribe-fmt-pandoc-json = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
@@ -22,7 +22,7 @@ rescribe-read-gfm = { workspace = true }
 rescribe-read-html = { workspace = true }
 
 # Pandoc corpus harness (tests/pandoc.rs)
-rescribe-read-pandoc-json = { workspace = true }
+rescribe-fmt-pandoc-json = { workspace = true }
 rescribe-read-rst = { workspace = true }
 rescribe-read-latex = { workspace = true }
 rescribe-read-org = { workspace = true }

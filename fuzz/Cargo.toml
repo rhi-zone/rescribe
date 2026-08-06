@@ -30,8 +30,8 @@ path = "../crates/writers/rescribe-write-org"
 [dependencies.rescribe-read-pdf]
 path = "../crates/readers/rescribe-read-pdf"
 
-[dependencies.rescribe-read-pandoc-json]
-path = "../crates/readers/rescribe-read-pandoc-json"
+[dependencies.rescribe-fmt-pandoc-json]
+path = "../crates/bridges/rescribe-fmt-pandoc-json"
 
 [dependencies.rescribe-write-markdown]
 path = "../crates/writers/rescribe-write-markdown"

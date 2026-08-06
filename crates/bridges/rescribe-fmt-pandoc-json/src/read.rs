@@ -1,4 +1,4 @@
-//! Pandoc JSON reader for rescribe.
+//! Pandoc JSON reader half of `rescribe-fmt-pandoc-json`.
 //!
 //! Parses Pandoc's JSON AST format into rescribe's document IR.
 //! This enables interoperability with Pandoc's extensive format support.

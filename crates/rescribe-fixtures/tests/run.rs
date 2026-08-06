@@ -410,7 +410,7 @@ fn native() {
 #[test]
 fn pandoc_json() {
     run_format_fixtures(&fixtures_root(), "pandoc-json", |input| {
-        rescribe_read_pandoc_json::parse(std::str::from_utf8(input).map_err(|e| e.to_string())?)
+        rescribe_fmt_pandoc_json::parse(std::str::from_utf8(input).map_err(|e| e.to_string())?)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

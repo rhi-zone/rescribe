@@ -1,4 +1,4 @@
-//! Pandoc JSON writer for rescribe.
+//! Pandoc JSON writer half of `rescribe-fmt-pandoc-json`.
 //!
 //! Emits rescribe's document IR as Pandoc's JSON AST format.
 //! This enables interoperability with Pandoc's extensive format support.
@@ -562,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        use rescribe_read_pandoc_json::parse;
+        use crate::read::parse;
 
         let document = doc(|d| {
             d.heading(1, |i| i.text("Title"))

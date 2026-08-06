@@ -244,7 +244,7 @@ fixtures/
 ```
 
 `input.json` is a pandoc-json document.  The runner parses it with
-`rescribe_read_pandoc_json`, then passes the resulting `Document` to the emitter.
+`rescribe_fmt_pandoc_json`, then passes the resulting `Document` to the emitter.
 
 ### Writer `expected.json` schema
 
