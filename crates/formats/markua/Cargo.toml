@@ -6,8 +6,23 @@ license.workspace = true
 repository.workspace = true
 description = "Markua parser, AST, and builder — no rescribe dependency"
 
+[features]
+default = []
+# markua has no per-mode reader/writer features to compose — every API mode
+# (AST parse/emit, events, batch, streaming writer) is unconditionally
+# compiled in this crate. These umbrella features exist only so callers can
+# use the same `--features rescribe,read,write` invocation as other format
+# crates in this workspace; they gate nothing on their own.
+read = []
+write = []
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone Markua library never pull in rescribe-core.
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
+
 [dependencies]
 rescribe-format-api = { workspace = true }
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

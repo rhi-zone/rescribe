@@ -1,7 +1,9 @@
 //! Muse markup parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-muse` and `rescribe-write-muse` as thin adapter layers.
+//! Standalone crate with **no rescribe dependency by default**. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `MuseDoc` to and from rescribe's `Document`
+//! IR.
 //!
 //! # API layers
 //!
@@ -70,6 +72,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export primary types for convenience.

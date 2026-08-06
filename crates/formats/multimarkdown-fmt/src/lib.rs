@@ -1,8 +1,9 @@
 //! MultiMarkdown parser and emitter, built on `commonmark-fmt`.
 //!
-//! A standalone crate with **no rescribe dependency** — usable as a general
-//! Rust MultiMarkdown library. `rescribe-read-multimarkdown` and
-//! `rescribe-write-multimarkdown` are thin adapter layers on top.
+//! A standalone crate with **no rescribe dependency by default** — usable as
+//! a general Rust MultiMarkdown library. The optional `rescribe` feature
+//! (default off) adds `crate::rescribe::{parse, emit}`, a thin adapter that
+//! translates `MmdDoc` to and from rescribe's `Document` IR.
 //!
 //! # Design: extend, don't reimplement
 //!
@@ -93,6 +94,8 @@ pub mod emit;
 pub mod events;
 pub mod metadata;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod transform;
 pub mod writer;
 

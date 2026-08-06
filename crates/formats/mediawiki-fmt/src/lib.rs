@@ -1,7 +1,9 @@
 //! MediaWiki markup parser, AST, and emitter.
 //!
-//! A standalone crate with **no rescribe dependency**. `rescribe-read-mediawiki`
-//! and `rescribe-write-mediawiki` are thin adapter layers on top.
+//! A standalone crate with **no rescribe dependency by default**. The
+//! optional `rescribe` feature (default off) adds `crate::rescribe::{parse,
+//! emit}`, a thin adapter that translates `mediawiki_fmt::MediawikiDoc` to
+//! and from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -34,7 +36,7 @@
 //! remain as separate, non-trait entry points: they have a materially
 //! different contract from the trait methods (str input, no UTF-8
 //! validation) and are real external-consumer entry points --
-//! `rescribe-read-mediawiki` and this workspace's fixture harness
+//! this crate's `rescribe` feature module and this workspace's fixture harness
 //! (`crates/rescribe-fixtures/tests/streaming_apis.rs`) call `parse_str`/
 //! `events` directly -- not redundant duplicates of the trait methods.
 
@@ -43,6 +45,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

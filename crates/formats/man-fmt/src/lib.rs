@@ -1,7 +1,9 @@
 //! Man page (roff/troff) parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-man` and `rescribe-write-man` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates [`ManDoc`] to and from rescribe's `Document`
+//! IR.
 //!
 //! This crate denies `unsafe` by default (production code must never use it); a prior version of `events::events` used
 //! `Box::leak` to manufacture a `'static` reference to the parsed `ManDoc`,
@@ -54,6 +56,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 #[cfg(test)]
 mod test_alloc;
 pub mod writer;
