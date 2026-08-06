@@ -513,10 +513,10 @@ pub mod odt {
 /// OPML format support.
 #[cfg(any(feature = "read-opml", feature = "write-opml"))]
 pub mod opml {
-    #[cfg(feature = "read-opml")]
-    pub use rescribe_read_opml::parse;
     #[cfg(feature = "write-opml")]
-    pub use rescribe_write_opml::emit;
+    pub use opml_fmt::rescribe::emit;
+    #[cfg(feature = "read-opml")]
+    pub use opml_fmt::rescribe::parse;
 }
 
 /// Org-mode format support.

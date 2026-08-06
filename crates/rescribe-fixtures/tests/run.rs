@@ -470,7 +470,7 @@ fn tsv() {
 fn opml() {
     run_format_fixtures(&fixtures_root(), "opml", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_opml::parse(s)
+        opml_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

@@ -1,12 +1,13 @@
 //! OPML (Outline Processor Markup Language) parser, AST, and emitter.
 //!
-//! A standalone crate wrapping `quick-xml` with **no rescribe dependency**
-//! — usable as a general Rust OPML library by anything that needs to read
-//! or write outline/subscription-list files: a feed reader importing an
-//! OPML export, a podcast client's subscription list, a mind-mapping tool's
-//! outline import/export, a static-site generator's blogroll page.
-//! `rescribe-read-opml` and `rescribe-write-opml` are thin adapter layers
-//! on top that translate `opml_fmt::OpmlDoc` to and from rescribe's IR.
+//! A standalone crate wrapping `quick-xml` with **no rescribe dependency by
+//! default** — usable as a general Rust OPML library by anything that needs
+//! to read or write outline/subscription-list files: a feed reader
+//! importing an OPML export, a podcast client's subscription list, a
+//! mind-mapping tool's outline import/export, a static-site generator's
+//! blogroll page. The optional `rescribe` feature (default off) adds
+//! `crate::rescribe::{parse, emit}`, a thin adapter that translates
+//! `opml_fmt::OpmlDoc` to and from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -57,6 +58,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

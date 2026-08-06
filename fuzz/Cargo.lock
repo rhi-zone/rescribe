@@ -1021,6 +1021,7 @@ dependencies = [
  "serde_yaml",
  "thiserror",
  "zip 7.2.0",
+ "zip-fmt",
 ]
 
 [[package]]
@@ -1124,7 +1125,9 @@ name = "opml-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1529,7 +1532,6 @@ dependencies = [
  "rescribe-read-muse",
  "rescribe-read-native",
  "rescribe-read-odt",
- "rescribe-read-opml",
  "rescribe-read-org",
  "rescribe-read-pandoc-json",
  "rescribe-read-pdf",
@@ -1898,16 +1900,6 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "zip 2.4.2",
-]
-
-[[package]]
-name = "rescribe-read-opml"
-version = "0.1.0"
-dependencies = [
- "opml-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
 ]
 
 [[package]]

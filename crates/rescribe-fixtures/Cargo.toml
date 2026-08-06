@@ -57,7 +57,6 @@ rescribe-read-csl-json = { workspace = true }
 rescribe-read-native = { workspace = true }
 rescribe-read-csv = { workspace = true }
 rescribe-read-tsv = { workspace = true }
-rescribe-read-opml = { workspace = true }
 rescribe-read-ris = { workspace = true }
 rescribe-read-bibtex = { workspace = true }
 rescribe-read-biblatex = { workspace = true }
@@ -90,7 +89,7 @@ commonmark-fmt = { workspace = true, features = ["extensions"] }
 docbook-fmt = { workspace = true }
 jats-fmt = { workspace = true }
 tei-fmt = { workspace = true }
-opml-fmt = { workspace = true }
+opml-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 endnotexml-fmt = { workspace = true }
 odf-fmt = { workspace = true }
 ansi-fmt = { workspace = true }

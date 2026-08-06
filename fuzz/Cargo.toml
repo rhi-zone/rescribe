@@ -234,9 +234,6 @@ path = "../crates/readers/rescribe-read-docbook"
 [dependencies.rescribe-read-jats]
 path = "../crates/readers/rescribe-read-jats"
 
-[dependencies.rescribe-read-opml]
-path = "../crates/readers/rescribe-read-opml"
-
 [dependencies.rescribe-read-tei]
 path = "../crates/readers/rescribe-read-tei"
 
@@ -330,6 +327,7 @@ path = "../crates/formats/tei-fmt"
 
 [dependencies.opml-fmt]
 path = "../crates/formats/opml-fmt"
+features = ["rescribe", "read"]
 
 [dependencies.rescribe-format-api]
 path = "../crates/formats/rescribe-format-api"
