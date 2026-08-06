@@ -57,7 +57,9 @@ name = "ansi-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -154,7 +156,9 @@ name = "asciidoc"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -180,7 +184,9 @@ name = "bbcode-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -304,12 +310,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
-
-[[package]]
 name = "byteorder-lite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -323,30 +323,11 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "bzip2"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
-dependencies = [
- "bzip2-sys",
-]
-
-[[package]]
-name = "bzip2"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
 dependencies = [
  "libbz2-rs-sys",
-]
-
-[[package]]
-name = "bzip2-sys"
-version = "0.1.13+1.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225bff33b2141874fe80d71e07d6eec4f85c5c216453dd96388240f96e1acc14"
-dependencies = [
- "cc",
- "pkg-config",
 ]
 
 [[package]]
@@ -618,21 +599,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
-
-[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -646,7 +612,9 @@ name = "creole"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -750,6 +718,10 @@ dependencies = [
 [[package]]
 name = "csv-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
 
 [[package]]
 name = "data-url"
@@ -837,7 +809,9 @@ dependencies = [
 name = "djot-fmt"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -845,7 +819,9 @@ name = "docbook-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
  "xml-entities",
 ]
 
@@ -854,7 +830,9 @@ name = "dokuwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -919,7 +897,9 @@ name = "endnotexml-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -976,6 +956,18 @@ dependencies = [
  "upon",
  "uuid",
  "zip 6.0.0",
+]
+
+[[package]]
+name = "epub-fmt"
+version = "0.1.0"
+dependencies = [
+ "html-fmt",
+ "quick-xml 0.39.4",
+ "rescribe-core",
+ "rescribe-format-api",
+ "rescribe-std",
+ "zip-fmt",
 ]
 
 [[package]]
@@ -1053,7 +1045,9 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1152,7 +1146,9 @@ name = "fountain-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1254,7 +1250,9 @@ name = "haddock-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1422,7 +1420,9 @@ version = "0.1.0"
 dependencies = [
  "html5ever",
  "markup5ever_rcdom",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1869,7 +1869,9 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
  "serde",
  "serde_json",
  "sha2",
@@ -1934,7 +1936,9 @@ name = "jira-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2099,33 +2103,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "lzma-rs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
-dependencies = [
- "byteorder",
- "crc",
-]
-
-[[package]]
 name = "lzma-rust2"
 version = "0.15.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e20f57f9918e5bd7bc58c22cdd70a6afc7375d4dd9683af5f2b34bd3d2bba619"
 dependencies = [
  "sha2",
-]
-
-[[package]]
-name = "lzma-sys"
-version = "0.1.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fda04ab3764e6cde78b9974eec4f779acaba7c4e84b36eca3cf77c581b85d27"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -2139,7 +2122,9 @@ name = "man-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2147,7 +2132,9 @@ name = "markua"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2188,7 +2175,9 @@ name = "mediawiki-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2242,7 +2231,9 @@ version = "0.1.0"
 dependencies = [
  "arbitrary",
  "commonmark-fmt",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2250,7 +2241,9 @@ name = "muse-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2262,6 +2255,10 @@ checksum = "13d2233c9842d08cfe13f9eac96e207ca6a2ea10b80259ebe8ad0268be27d2af"
 [[package]]
 name = "native"
 version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
 
 [[package]]
 name = "new_debug_unreachable"
@@ -2338,7 +2335,9 @@ version = "0.1.0"
 dependencies = [
  "ooxml-codegen",
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
  "serde",
  "serde_yaml",
  "thiserror",
@@ -2504,7 +2503,9 @@ name = "org-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -2736,7 +2737,9 @@ name = "pod-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -3075,131 +3078,83 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 name = "rescribe"
 version = "0.1.0"
 dependencies = [
+ "ansi-fmt",
+ "asciidoc",
+ "bbcode-fmt",
+ "creole",
+ "csv-fmt",
+ "djot-fmt",
+ "docbook-fmt",
+ "dokuwiki",
+ "endnotexml-fmt",
+ "fb2-fmt",
+ "fountain-fmt",
+ "haddock-fmt",
+ "html-fmt",
  "jaq-core",
  "jaq-json",
  "jaq-std",
+ "jats-fmt",
+ "jira-fmt",
+ "man-fmt",
+ "markua",
+ "mediawiki-fmt",
+ "multimarkdown-fmt",
+ "muse-fmt",
+ "native",
+ "odf-fmt",
  "opml-fmt",
+ "org-fmt",
+ "pod-fmt",
  "rescribe-core",
+ "rescribe-fmt-biblatex",
+ "rescribe-fmt-bibtex",
+ "rescribe-fmt-csl-json",
+ "rescribe-fmt-ipynb",
+ "rescribe-fmt-ooxml",
+ "rescribe-fmt-pandoc-json",
+ "rescribe-fmt-pdf",
  "rescribe-math",
- "rescribe-read-ansi",
- "rescribe-read-asciidoc",
- "rescribe-read-bbcode",
- "rescribe-read-biblatex",
- "rescribe-read-bibtex",
  "rescribe-read-commonmark",
- "rescribe-read-creole",
- "rescribe-read-csl-json",
- "rescribe-read-csv",
- "rescribe-read-djot",
- "rescribe-read-docbook",
- "rescribe-read-docx",
- "rescribe-read-dokuwiki",
- "rescribe-read-endnotexml",
  "rescribe-read-epub",
- "rescribe-read-fb2",
- "rescribe-read-fountain",
  "rescribe-read-gfm",
- "rescribe-read-haddock",
- "rescribe-read-html",
- "rescribe-read-ipynb",
- "rescribe-read-jats",
- "rescribe-read-jira",
  "rescribe-read-latex",
- "rescribe-read-man",
  "rescribe-read-markdown",
  "rescribe-read-markdown-strict",
- "rescribe-read-markua",
- "rescribe-read-mediawiki",
- "rescribe-read-multimarkdown",
- "rescribe-read-muse",
- "rescribe-read-native",
- "rescribe-read-odt",
- "rescribe-read-org",
- "rescribe-read-pandoc-json",
- "rescribe-read-pdf",
- "rescribe-read-pod",
- "rescribe-read-pptx",
- "rescribe-read-ris",
- "rescribe-read-rst",
- "rescribe-read-rtf",
- "rescribe-read-t2t",
- "rescribe-read-tei",
- "rescribe-read-texinfo",
- "rescribe-read-textile",
- "rescribe-read-tikiwiki",
- "rescribe-read-tsv",
- "rescribe-read-twiki",
- "rescribe-read-typst",
- "rescribe-read-vimwiki",
- "rescribe-read-xlsx",
- "rescribe-read-xwiki",
- "rescribe-read-zimwiki",
  "rescribe-std",
- "rescribe-write-ansi",
- "rescribe-write-asciidoc",
- "rescribe-write-bbcode",
  "rescribe-write-beamer",
- "rescribe-write-biblatex",
- "rescribe-write-bibtex",
  "rescribe-write-chunkedhtml",
  "rescribe-write-commonmark",
  "rescribe-write-context",
- "rescribe-write-creole",
- "rescribe-write-csl-json",
- "rescribe-write-csv",
- "rescribe-write-djot",
- "rescribe-write-docbook",
- "rescribe-write-docx",
- "rescribe-write-dokuwiki",
  "rescribe-write-dzslides",
- "rescribe-write-endnotexml",
  "rescribe-write-epub",
- "rescribe-write-fb2",
- "rescribe-write-fountain",
  "rescribe-write-gfm",
- "rescribe-write-haddock",
- "rescribe-write-html",
  "rescribe-write-icml",
- "rescribe-write-ipynb",
- "rescribe-write-jats",
- "rescribe-write-jira",
  "rescribe-write-latex",
- "rescribe-write-man",
  "rescribe-write-markdown",
  "rescribe-write-markdown-strict",
- "rescribe-write-markua",
- "rescribe-write-mediawiki",
  "rescribe-write-ms",
- "rescribe-write-multimarkdown",
- "rescribe-write-muse",
- "rescribe-write-native",
- "rescribe-write-odt",
- "rescribe-write-org",
- "rescribe-write-pandoc-json",
  "rescribe-write-plaintext",
- "rescribe-write-pod",
- "rescribe-write-pptx",
  "rescribe-write-revealjs",
- "rescribe-write-ris",
- "rescribe-write-rst",
- "rescribe-write-rtf",
  "rescribe-write-s5",
  "rescribe-write-slideous",
  "rescribe-write-slidy",
- "rescribe-write-t2t",
- "rescribe-write-tei",
- "rescribe-write-texinfo",
- "rescribe-write-textile",
- "rescribe-write-tikiwiki",
- "rescribe-write-tsv",
- "rescribe-write-twiki",
- "rescribe-write-typst",
- "rescribe-write-vimwiki",
- "rescribe-write-xlsx",
- "rescribe-write-xwiki",
- "rescribe-write-zimwiki",
+ "ris",
+ "rst-fmt",
+ "rtf-fmt",
  "serde_json",
+ "t2t",
+ "tei-fmt",
+ "texinfo",
+ "textile-fmt",
  "thiserror",
+ "tikiwiki",
+ "tsv-fmt",
+ "twiki",
+ "typst-fmt",
+ "vimwiki-fmt",
+ "xwiki",
+ "zimwiki",
 ]
 
 [[package]]
@@ -3231,6 +3186,7 @@ dependencies = [
  "bbcode-fmt",
  "commonmark-fmt",
  "creole",
+ "csv-fmt",
  "djot-fmt",
  "docbook-fmt",
  "dokuwiki",
@@ -3244,7 +3200,9 @@ dependencies = [
  "man-fmt",
  "markua",
  "mediawiki-fmt",
+ "multimarkdown-fmt",
  "muse-fmt",
+ "native",
  "odf-fmt",
  "ooxml-pml",
  "ooxml-sml",
@@ -3253,79 +3211,34 @@ dependencies = [
  "org-fmt",
  "pod-fmt",
  "rescribe-core",
+ "rescribe-fmt-biblatex",
+ "rescribe-fmt-bibtex",
+ "rescribe-fmt-csl-json",
+ "rescribe-fmt-ipynb",
+ "rescribe-fmt-ooxml",
+ "rescribe-fmt-pandoc-json",
+ "rescribe-fmt-pdf",
  "rescribe-format-api",
- "rescribe-read-ansi",
- "rescribe-read-asciidoc",
- "rescribe-read-bbcode",
- "rescribe-read-biblatex",
- "rescribe-read-bibtex",
  "rescribe-read-commonmark",
- "rescribe-read-creole",
- "rescribe-read-csl-json",
- "rescribe-read-csv",
- "rescribe-read-djot",
- "rescribe-read-docbook",
- "rescribe-read-docx",
- "rescribe-read-dokuwiki",
- "rescribe-read-endnotexml",
  "rescribe-read-epub",
- "rescribe-read-fb2",
- "rescribe-read-fountain",
  "rescribe-read-gfm",
- "rescribe-read-haddock",
- "rescribe-read-html",
- "rescribe-read-ipynb",
- "rescribe-read-jats",
- "rescribe-read-jira",
  "rescribe-read-latex",
- "rescribe-read-man",
  "rescribe-read-markdown",
- "rescribe-read-markua",
- "rescribe-read-mediawiki",
- "rescribe-read-multimarkdown",
- "rescribe-read-muse",
- "rescribe-read-native",
- "rescribe-read-odt",
- "rescribe-read-org",
- "rescribe-read-pandoc-json",
- "rescribe-read-pdf",
- "rescribe-read-pod",
- "rescribe-read-pptx",
- "rescribe-read-ris",
- "rescribe-read-rst",
- "rescribe-read-rtf",
- "rescribe-read-t2t",
- "rescribe-read-tei",
- "rescribe-read-texinfo",
- "rescribe-read-textile",
- "rescribe-read-tikiwiki",
- "rescribe-read-tsv",
- "rescribe-read-twiki",
- "rescribe-read-typst",
- "rescribe-read-vimwiki",
- "rescribe-read-xlsx",
- "rescribe-read-xwiki",
- "rescribe-read-zimwiki",
- "rescribe-write-asciidoc",
  "rescribe-write-beamer",
  "rescribe-write-chunkedhtml",
  "rescribe-write-commonmark",
  "rescribe-write-context",
- "rescribe-write-djot",
  "rescribe-write-dzslides",
  "rescribe-write-gfm",
- "rescribe-write-html",
  "rescribe-write-icml",
  "rescribe-write-latex",
  "rescribe-write-markdown",
  "rescribe-write-ms",
- "rescribe-write-org",
  "rescribe-write-revealjs",
- "rescribe-write-rst",
- "rescribe-write-rtf",
  "rescribe-write-s5",
  "rescribe-write-slideous",
  "rescribe-write-slidy",
+ "ris",
  "rst-fmt",
  "rtf-fmt",
  "serde",
@@ -3335,11 +3248,89 @@ dependencies = [
  "texinfo",
  "textile-fmt",
  "tikiwiki",
+ "tsv-fmt",
  "twiki",
+ "typst-fmt",
  "vimwiki-fmt",
  "xwiki",
  "zimwiki",
  "zip 7.2.0",
+]
+
+[[package]]
+name = "rescribe-fmt-biblatex"
+version = "0.1.0"
+dependencies = [
+ "biblatex",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-fmt-bibtex"
+version = "0.1.0"
+dependencies = [
+ "biblatex",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-fmt-csl-json"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rescribe-fmt-ipynb"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "rescribe-core",
+ "rescribe-read-markdown",
+ "rescribe-std",
+ "rescribe-write-markdown",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rescribe-fmt-ooxml"
+version = "0.1.0"
+dependencies = [
+ "ooxml-dml",
+ "ooxml-pml",
+ "ooxml-sml",
+ "ooxml-wml",
+ "rescribe-core",
+ "rescribe-std",
+ "serde_json",
+ "zip 7.2.0",
+]
+
+[[package]]
+name = "rescribe-fmt-pandoc-json"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rescribe-fmt-pdf"
+version = "0.1.0"
+dependencies = [
+ "euclid 0.20.14",
+ "lopdf",
+ "pdf-extract",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -3357,52 +3348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-read-ansi"
-version = "0.1.0"
-dependencies = [
- "ansi-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-asciidoc"
-version = "0.1.0"
-dependencies = [
- "asciidoc",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-bbcode"
-version = "0.1.0"
-dependencies = [
- "bbcode-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-biblatex"
-version = "0.1.0"
-dependencies = [
- "biblatex",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-bibtex"
-version = "0.1.0"
-dependencies = [
- "biblatex",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-read-commonmark"
 version = "0.1.0"
 dependencies = [
@@ -3415,111 +3360,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-read-creole"
-version = "0.1.0"
-dependencies = [
- "creole",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-csl-json"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-read-csv"
-version = "0.1.0"
-dependencies = [
- "csv-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-djot"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "djot-fmt",
- "rescribe-core",
- "rescribe-std",
- "rescribe-write-djot",
-]
-
-[[package]]
-name = "rescribe-read-docbook"
-version = "0.1.0"
-dependencies = [
- "docbook-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-docx"
-version = "0.1.0"
-dependencies = [
- "ooxml-wml",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-dokuwiki"
-version = "0.1.0"
-dependencies = [
- "dokuwiki",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-endnotexml"
-version = "0.1.0"
-dependencies = [
- "endnotexml-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-read-epub"
 version = "0.1.0"
 dependencies = [
  "epub",
+ "html-fmt",
  "rescribe-core",
- "rescribe-read-html",
  "rescribe-std",
  "serde_json",
  "zip 7.2.0",
-]
-
-[[package]]
-name = "rescribe-read-fb2"
-version = "0.1.0"
-dependencies = [
- "fb2-fmt",
- "rescribe-core",
- "rescribe-fixtures",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-fountain"
-version = "0.1.0"
-dependencies = [
- "fountain-fmt",
- "rescribe-core",
- "rescribe-std",
 ]
 
 [[package]]
@@ -3527,60 +3376,6 @@ name = "rescribe-read-gfm"
 version = "0.1.0"
 dependencies = [
  "pulldown-cmark 0.12.2",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-haddock"
-version = "0.1.0"
-dependencies = [
- "haddock-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-html"
-version = "0.1.0"
-dependencies = [
- "html-fmt",
- "rescribe-core",
- "rescribe-fixtures",
- "rescribe-format-api",
- "rescribe-std",
- "rescribe-write-html",
- "tree-sitter",
- "tree-sitter-html",
-]
-
-[[package]]
-name = "rescribe-read-ipynb"
-version = "0.1.0"
-dependencies = [
- "base64",
- "rescribe-core",
- "rescribe-read-markdown",
- "rescribe-std",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-read-jats"
-version = "0.1.0"
-dependencies = [
- "jats-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-jira"
-version = "0.1.0"
-dependencies = [
- "jira-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -3597,25 +3392,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-read-man"
-version = "0.1.0"
-dependencies = [
- "man-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-read-markdown"
 version = "0.1.0"
 dependencies = [
  "commonmark-fmt",
+ "html-fmt",
  "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-format-api",
- "rescribe-read-html",
  "rescribe-std",
- "rescribe-write-html",
  "rescribe-write-markdown",
  "serde_yaml",
  "toml",
@@ -3628,266 +3413,6 @@ dependencies = [
  "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-markua"
-version = "0.1.0"
-dependencies = [
- "markua",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-mediawiki"
-version = "0.1.0"
-dependencies = [
- "mediawiki-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-multimarkdown"
-version = "0.1.0"
-dependencies = [
- "multimarkdown-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-muse"
-version = "0.1.0"
-dependencies = [
- "muse-fmt",
- "rescribe-core",
- "rescribe-fixtures",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-native"
-version = "0.1.0"
-dependencies = [
- "native",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-odt"
-version = "0.1.0"
-dependencies = [
- "odf-fmt",
- "rescribe-core",
- "rescribe-std",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "rescribe-read-org"
-version = "0.1.0"
-dependencies = [
- "org-fmt",
- "rescribe-core",
- "rescribe-std",
- "rescribe-write-org",
-]
-
-[[package]]
-name = "rescribe-read-pandoc-json"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-read-pdf"
-version = "0.1.0"
-dependencies = [
- "euclid 0.20.14",
- "lopdf",
- "pdf-extract",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-pod"
-version = "0.1.0"
-dependencies = [
- "pod-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-read-pptx"
-version = "0.1.0"
-dependencies = [
- "ooxml-dml",
- "ooxml-pml",
- "rescribe-core",
- "rescribe-std",
- "serde_json",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "rescribe-read-ris"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "ris",
-]
-
-[[package]]
-name = "rescribe-read-rst"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "rst-fmt",
-]
-
-[[package]]
-name = "rescribe-read-rtf"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "rtf-fmt",
-]
-
-[[package]]
-name = "rescribe-read-t2t"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "t2t",
-]
-
-[[package]]
-name = "rescribe-read-tei"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "tei-fmt",
-]
-
-[[package]]
-name = "rescribe-read-texinfo"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "texinfo",
-]
-
-[[package]]
-name = "rescribe-read-textile"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "textile-fmt",
-]
-
-[[package]]
-name = "rescribe-read-tikiwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "tikiwiki",
-]
-
-[[package]]
-name = "rescribe-read-tsv"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "tsv-fmt",
-]
-
-[[package]]
-name = "rescribe-read-twiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "twiki",
-]
-
-[[package]]
-name = "rescribe-read-typst"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "typst",
- "typst-fmt",
- "typst-html",
- "typst-kit",
- "typst-syntax",
-]
-
-[[package]]
-name = "rescribe-read-vimwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "vimwiki-fmt",
-]
-
-[[package]]
-name = "rescribe-read-xlsx"
-version = "0.1.0"
-dependencies = [
- "ooxml-sml",
- "rescribe-core",
- "rescribe-std",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-read-xwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "xwiki",
-]
-
-[[package]]
-name = "rescribe-read-zimwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "zimwiki",
 ]
 
 [[package]]
@@ -3906,55 +3431,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-ansi"
-version = "0.1.0"
-dependencies = [
- "ansi-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-asciidoc"
-version = "0.1.0"
-dependencies = [
- "asciidoc",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-bbcode"
-version = "0.1.0"
-dependencies = [
- "bbcode-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-beamer"
 version = "0.1.0"
 dependencies = [
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-biblatex"
-version = "0.1.0"
-dependencies = [
- "biblatex",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-bibtex"
-version = "0.1.0"
-dependencies = [
- "biblatex",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -3984,74 +3463,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-creole"
-version = "0.1.0"
-dependencies = [
- "creole",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-csl-json"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-write-csv"
-version = "0.1.0"
-dependencies = [
- "csv-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-djot"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-read-djot",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-docbook"
-version = "0.1.0"
-dependencies = [
- "docbook-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-read-docbook",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-docx"
-version = "0.1.0"
-dependencies = [
- "ooxml-wml",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-dokuwiki"
-version = "0.1.0"
-dependencies = [
- "dokuwiki",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-dzslides"
 version = "0.1.0"
 dependencies = [
@@ -4060,41 +3471,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-endnotexml"
-version = "0.1.0"
-dependencies = [
- "endnotexml-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-read-endnotexml",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-epub"
 version = "0.1.0"
 dependencies = [
  "epub-builder",
- "rescribe-core",
- "rescribe-std",
- "rescribe-write-html",
-]
-
-[[package]]
-name = "rescribe-write-fb2"
-version = "0.1.0"
-dependencies = [
- "fb2-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-fountain"
-version = "0.1.0"
-dependencies = [
- "fountain-fmt",
+ "html-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -4108,24 +3489,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-haddock"
-version = "0.1.0"
-dependencies = [
- "haddock-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-html"
-version = "0.1.0"
-dependencies = [
- "html-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-icml"
 version = "0.1.0"
 dependencies = [
@@ -4134,51 +3497,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-ipynb"
-version = "0.1.0"
-dependencies = [
- "base64",
- "rescribe-core",
- "rescribe-std",
- "rescribe-write-markdown",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rescribe-write-jats"
-version = "0.1.0"
-dependencies = [
- "jats-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-read-jats",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-jira"
-version = "0.1.0"
-dependencies = [
- "jira-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-latex"
 version = "0.1.0"
 dependencies = [
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-man"
-version = "0.1.0"
-dependencies = [
- "man-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -4201,89 +3522,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-markua"
-version = "0.1.0"
-dependencies = [
- "markua",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-mediawiki"
-version = "0.1.0"
-dependencies = [
- "mediawiki-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-ms"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-multimarkdown"
-version = "0.1.0"
-dependencies = [
- "multimarkdown-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-muse"
-version = "0.1.0"
-dependencies = [
- "muse-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-native"
-version = "0.1.0"
-dependencies = [
- "native",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-odt"
-version = "0.1.0"
-dependencies = [
- "odf-fmt",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-org"
-version = "0.1.0"
-dependencies = [
- "org-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-pandoc-json"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-read-pandoc-json",
- "rescribe-std",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4295,60 +3538,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-pod"
-version = "0.1.0"
-dependencies = [
- "pod-fmt",
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-pptx"
-version = "0.1.0"
-dependencies = [
- "ooxml-pml",
- "rescribe-core",
- "rescribe-read-pptx",
- "rescribe-std",
-]
-
-[[package]]
 name = "rescribe-write-revealjs"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-ris"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "ris",
-]
-
-[[package]]
-name = "rescribe-write-rst"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "rst-fmt",
-]
-
-[[package]]
-name = "rescribe-write-rtf"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "rtf-fmt",
 ]
 
 [[package]]
@@ -4376,125 +3570,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-write-t2t"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "t2t",
-]
-
-[[package]]
-name = "rescribe-write-tei"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-read-tei",
- "rescribe-std",
- "tei-fmt",
-]
-
-[[package]]
-name = "rescribe-write-texinfo"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "texinfo",
-]
-
-[[package]]
-name = "rescribe-write-textile"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "textile-fmt",
-]
-
-[[package]]
-name = "rescribe-write-tikiwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "tikiwiki",
-]
-
-[[package]]
-name = "rescribe-write-tsv"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
- "tsv-fmt",
-]
-
-[[package]]
-name = "rescribe-write-twiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "twiki",
-]
-
-[[package]]
-name = "rescribe-write-typst"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "typst-fmt",
-]
-
-[[package]]
-name = "rescribe-write-vimwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "vimwiki-fmt",
-]
-
-[[package]]
-name = "rescribe-write-xlsx"
-version = "0.1.0"
-dependencies = [
- "ooxml-sml",
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-xwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "xwiki",
-]
-
-[[package]]
-name = "rescribe-write-zimwiki"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-format-api",
- "rescribe-std",
- "zimwiki",
-]
-
-[[package]]
 name = "ris"
 version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
 
 [[package]]
 name = "roman-numerals-rs"
@@ -4523,14 +3604,18 @@ name = "rst-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
 name = "rtf-fmt"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -4969,7 +4054,9 @@ name = "t2t"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -4977,7 +4064,9 @@ name = "tei-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
  "xml-entities",
 ]
 
@@ -5010,7 +4099,9 @@ name = "texinfo"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -5018,7 +4109,9 @@ name = "textile-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -5052,7 +4145,9 @@ name = "tikiwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -5200,16 +4295,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tree-sitter-html"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261b708e5d92061ede329babaaa427b819329a9d427a1d710abb0f67bbef63ee"
-dependencies = [
- "cc",
- "tree-sitter-language",
-]
-
-[[package]]
 name = "tree-sitter-language"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5218,6 +4303,10 @@ checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 [[package]]
 name = "tsv-fmt"
 version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
 
 [[package]]
 name = "ttf-parser"
@@ -5233,7 +4322,9 @@ name = "twiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -5324,7 +4415,12 @@ dependencies = [
 name = "typst-fmt"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
+ "typst",
+ "typst-html",
+ "typst-kit",
  "typst-syntax",
 ]
 
@@ -5801,7 +4897,9 @@ name = "vimwiki-fmt"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -6095,16 +5193,9 @@ name = "xwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
-]
-
-[[package]]
-name = "xz2"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
-dependencies = [
- "lzma-sys",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -6298,37 +5389,9 @@ name = "zimwiki"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rescribe-core",
  "rescribe-format-api",
-]
-
-[[package]]
-name = "zip"
-version = "2.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
-dependencies = [
- "aes",
- "arbitrary",
- "bzip2 0.5.2",
- "constant_time_eq",
- "crc32fast",
- "crossbeam-utils",
- "deflate64",
- "displaydoc",
- "flate2",
- "getrandom 0.3.4",
- "hmac",
- "indexmap",
- "lzma-rs",
- "memchr",
- "pbkdf2",
- "sha1",
- "thiserror",
- "time",
- "xz2",
- "zeroize",
- "zopfli",
- "zstd",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -6367,7 +5430,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c42e33efc22a0650c311c2ef19115ce232583abbe80850bc8b66509ebef02de0"
 dependencies = [
  "aes",
- "bzip2 0.6.1",
+ "bzip2",
  "constant_time_eq",
  "crc32fast",
  "deflate64",

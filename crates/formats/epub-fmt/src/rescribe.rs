@@ -7,7 +7,7 @@
 //! direction is additionally gated on the reader/writer mode feature it
 //! depends on, so enabling `rescribe` alone (with no mode feature)
 //! compiles nothing. Content-document HTML<->IR translation is delegated
-//! to `rescribe-read-html`/`rescribe-write-html` (round-tripped through
+//! to `html-fmt`'s own `rescribe` module (round-tripped through
 //! `html_fmt::HtmlDoc::emit`/`parse` at the boundary) rather than
 //! reimplemented here, per this repo's "adapters translate, they don't
 //! parse" rule.
@@ -194,7 +194,7 @@ mod read {
 
             let html_bytes = cd.doc.emit();
             let html_str = String::from_utf8_lossy(&html_bytes);
-            match rescribe_read_html::parse(&html_str) {
+            match html_fmt::rescribe::parse(&html_str) {
                 Ok(result) => {
                     warnings.extend(result.warnings);
                     // Flatten this chapter's content directly into the
@@ -618,7 +618,7 @@ mod write {
     fn build_html(children: &[Node], warnings: &mut Vec<FidelityWarning>) -> html_fmt::HtmlDoc {
         let temp_doc =
             Document::new().with_content(Node::new(node::DOCUMENT).children(children.to_vec()));
-        match rescribe_write_html::emit_full_document(&temp_doc) {
+        match html_fmt::rescribe::emit_full_document(&temp_doc) {
             Ok(result) => {
                 warnings.extend(result.warnings);
                 let (html_doc, _diags) = html_fmt::HtmlDoc::parse(&result.value);

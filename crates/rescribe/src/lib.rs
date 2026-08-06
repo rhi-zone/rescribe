@@ -327,16 +327,16 @@ pub mod haddock {
 /// HTML format support.
 #[cfg(any(feature = "read-html", feature = "write-html"))]
 pub mod html {
+    #[cfg(feature = "write-html")]
+    pub use html_fmt::rescribe::emit;
+    #[cfg(feature = "write-html")]
+    pub use html_fmt::rescribe::emit_full_document;
+    #[cfg(feature = "write-html")]
+    pub use html_fmt::rescribe::emit_with_options;
     #[cfg(feature = "read-html")]
-    pub use rescribe_read_html::parse;
+    pub use html_fmt::rescribe::parse;
     #[cfg(feature = "read-html")]
-    pub use rescribe_read_html::parse_with_options;
-    #[cfg(feature = "write-html")]
-    pub use rescribe_write_html::emit;
-    #[cfg(feature = "write-html")]
-    pub use rescribe_write_html::emit_full_document;
-    #[cfg(feature = "write-html")]
-    pub use rescribe_write_html::emit_with_options;
+    pub use html_fmt::rescribe::parse_with_options;
 }
 
 /// ICML (InCopy Markup Language) format support (writer only).

@@ -110,8 +110,8 @@ read-haddock = ["dep:haddock-fmt", "haddock-fmt/rescribe", "haddock-fmt/read"]
 write-haddock = ["dep:haddock-fmt", "haddock-fmt/rescribe", "haddock-fmt/write"]
 format-haddock = ["read-haddock", "write-haddock"]
 
-read-html = ["dep:rescribe-read-html"]
-write-html = ["dep:rescribe-write-html"]
+read-html = ["dep:html-fmt", "html-fmt/rescribe", "html-fmt/read"]
+write-html = ["dep:html-fmt", "html-fmt/rescribe", "html-fmt/write"]
 format-html = ["read-html", "write-html"]
 
 write-icml = ["dep:rescribe-write-icml"]
@@ -349,7 +349,7 @@ rescribe-math = { workspace = true, optional = true }
 
 # Readers (optional)
 rescribe-read-markdown = { workspace = true, optional = true }
-rescribe-read-html = { workspace = true, optional = true }
+html-fmt = { workspace = true, optional = true }
 rescribe-read-latex = { workspace = true, optional = true }
 org-fmt = { workspace = true, optional = true }
 rescribe-fmt-pdf = { workspace = true, optional = true }
@@ -408,7 +408,6 @@ rescribe-fmt-pandoc-json = { workspace = true, optional = true }
 
 # Writers (optional)
 rescribe-write-markdown = { workspace = true, optional = true }
-rescribe-write-html = { workspace = true, optional = true }
 rescribe-write-latex = { workspace = true, optional = true }
 rescribe-write-plaintext = { workspace = true, optional = true }
 rescribe-write-epub = { workspace = true, optional = true }
@@ -428,7 +427,6 @@ rescribe-write-markdown-strict = { workspace = true, optional = true }
 
 [dev-dependencies]
 rescribe-read-markdown = { workspace = true }
-rescribe-read-html = { workspace = true }
+html-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 rescribe-write-markdown = { workspace = true }
-rescribe-write-html = { workspace = true }
 rescribe-std = { workspace = true }

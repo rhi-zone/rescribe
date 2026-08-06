@@ -2,10 +2,10 @@
 //!
 //! Tests Unicode handling, structural extremes, and other edge cases.
 
-use rescribe_read_html as html;
+use html_fmt::rescribe as html;
+use html_fmt::rescribe as html_write;
 use rescribe_read_markdown as markdown;
 use rescribe_std::{node, prop};
-use rescribe_write_html as html_write;
 use rescribe_write_markdown as md_write;
 
 /// Helper to extract all text content from a document.

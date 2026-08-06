@@ -29,5 +29,4 @@ toml.workspace = true
 
 [dev-dependencies]
 rescribe-write-markdown.workspace = true
-rescribe-read-html.workspace = true
-rescribe-write-html.workspace = true
+html-fmt = { workspace = true, features = ["rescribe", "read", "write"] }

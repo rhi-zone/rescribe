@@ -15,8 +15,9 @@ arbitrary = { version = "1", features = ["derive"] }
 path = "../crates/readers/rescribe-read-markdown"
 features = ["pulldown"]
 
-[dependencies.rescribe-read-html]
-path = "../crates/readers/rescribe-read-html"
+[dependencies.html-fmt]
+path = "../crates/formats/html-fmt"
+features = ["rescribe", "read", "write"]
 
 [dependencies.rescribe-read-latex]
 path = "../crates/readers/rescribe-read-latex"
@@ -35,9 +36,6 @@ path = "../crates/bridges/rescribe-fmt-pandoc-json"
 
 [dependencies.rescribe-write-markdown]
 path = "../crates/writers/rescribe-write-markdown"
-
-[dependencies.rescribe-write-html]
-path = "../crates/writers/rescribe-write-html"
 
 [dependencies.djot-fmt]
 path = "../crates/formats/djot-fmt"

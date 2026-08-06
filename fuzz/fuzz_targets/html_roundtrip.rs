@@ -5,15 +5,15 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
         // Parse the input
-        if let Ok(result1) = rescribe_read_html::parse(s) {
+        if let Ok(result1) = html_fmt::rescribe::parse(s) {
             let doc1 = result1.value;
 
             // Emit back to HTML
-            if let Ok(emitted) = rescribe_write_html::emit(&doc1) {
+            if let Ok(emitted) = html_fmt::rescribe::emit(&doc1) {
                 let html = String::from_utf8_lossy(&emitted.value);
 
                 // Parse again - should succeed if emit succeeded
-                if let Ok(result2) = rescribe_read_html::parse(&html) {
+                if let Ok(result2) = html_fmt::rescribe::parse(&html) {
                     let doc2 = result2.value;
 
                     // Text content should be preserved

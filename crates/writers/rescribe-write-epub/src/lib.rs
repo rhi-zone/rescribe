@@ -169,7 +169,7 @@ fn chapter_to_html(
         Document::new().with_content(Node::new(node::DOCUMENT).children(chapter.nodes.clone()));
 
     // Use HTML writer to convert
-    let result = rescribe_write_html::emit_full_document(&temp_doc)
+    let result = html_fmt::rescribe::emit_full_document(&temp_doc)
         .map_err(|e| EmitError::Io(std::io::Error::other(format!("HTML emit error: {}", e))))?;
 
     warnings.extend(result.warnings);

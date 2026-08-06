@@ -131,7 +131,7 @@ fn gfm() {
 fn html() {
     run_format_fixtures(&fixtures_root(), "html", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_html::parse(s)
+        html_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -792,7 +792,7 @@ fn gfm_writer() {
 #[test]
 fn html_writer() {
     run_format_writer_fixtures(&fixtures_root(), "html", |doc| {
-        rescribe_write_html::emit(doc)
+        html_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

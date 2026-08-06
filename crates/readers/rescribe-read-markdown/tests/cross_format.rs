@@ -41,11 +41,11 @@ fn main() {}
     let md_doc = md_result.value;
 
     // IR → HTML
-    let html_result = rescribe_write_html::emit(&md_doc).expect("Failed to emit HTML");
+    let html_result = html_fmt::rescribe::emit(&md_doc).expect("Failed to emit HTML");
     let html = String::from_utf8(html_result.value).expect("Invalid UTF-8");
 
     // HTML → IR
-    let html_result2 = rescribe_read_html::parse(&html).expect("Failed to parse HTML");
+    let html_result2 = html_fmt::rescribe::parse(&html).expect("Failed to parse HTML");
     let html_doc = html_result2.value;
 
     // Verify content is preserved
@@ -85,7 +85,7 @@ fn test_html_to_markdown_roundtrip() {
 "#;
 
     // HTML → IR
-    let html_result = rescribe_read_html::parse(html).expect("Failed to parse HTML");
+    let html_result = html_fmt::rescribe::parse(html).expect("Failed to parse HTML");
     let html_doc = html_result.value;
 
     // IR → Markdown
@@ -172,10 +172,10 @@ That's all folks!
 
     // Markdown → IR → HTML
     let md_doc = rescribe_read_markdown::parse(markdown).unwrap().value;
-    let html = String::from_utf8(rescribe_write_html::emit(&md_doc).unwrap().value).unwrap();
+    let html = String::from_utf8(html_fmt::rescribe::emit(&md_doc).unwrap().value).unwrap();
 
     // HTML → IR → Markdown
-    let html_doc = rescribe_read_html::parse(&html).unwrap().value;
+    let html_doc = html_fmt::rescribe::parse(&html).unwrap().value;
     let markdown2 =
         String::from_utf8(rescribe_write_markdown::emit(&html_doc).unwrap().value).unwrap();
 
@@ -217,8 +217,8 @@ In a paragraph with <angle brackets> and "quotes" and 'apostrophes'.
 
     // Markdown → IR → HTML → IR
     let md_doc = rescribe_read_markdown::parse(markdown).unwrap().value;
-    let html = String::from_utf8(rescribe_write_html::emit(&md_doc).unwrap().value).unwrap();
-    let html_doc = rescribe_read_html::parse(&html).unwrap().value;
+    let html = String::from_utf8(html_fmt::rescribe::emit(&md_doc).unwrap().value).unwrap();
+    let html_doc = html_fmt::rescribe::parse(&html).unwrap().value;
 
     let text = extract_text(&html_doc.content.children);
 
@@ -257,7 +257,7 @@ fn test_nested_structures() {
 
     // Markdown → IR → HTML
     let md_doc = rescribe_read_markdown::parse(markdown).unwrap().value;
-    let html = String::from_utf8(rescribe_write_html::emit(&md_doc).unwrap().value).unwrap();
+    let html = String::from_utf8(html_fmt::rescribe::emit(&md_doc).unwrap().value).unwrap();
 
     // HTML should have nested structures
     assert!(html.contains("<ul>"), "Missing ul tag");
@@ -265,7 +265,7 @@ fn test_nested_structures() {
     assert!(html.contains("<blockquote>"), "Missing blockquote tag");
 
     // Parse HTML back and verify content
-    let html_doc = rescribe_read_html::parse(&html).unwrap().value;
+    let html_doc = html_fmt::rescribe::parse(&html).unwrap().value;
     let text = extract_text(&html_doc.content.children);
 
     assert!(text.contains("Level 1 item 1"), "Missing level 1 content");

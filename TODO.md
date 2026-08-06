@@ -4265,22 +4265,31 @@ Rationale given: no point maintaining 3x as many crates per format. Full rule te
 in CLAUDE.md's "The `rescribe` feature module must never contain parsing or writing
 logic" and the updated `crates/` architecture diagram.
 
-**Migration status (updated 2026-08-06): mostly done.** The following ~38 hand-rolled
-verticals have been migrated to the single-crate `rescribe`-feature layout (adapter
-crates deleted, consumers repointed at `{format}_fmt::rescribe::{parse,emit}`),
-following `opml-fmt` (commit `c61f527711`) as the reference implementation: opml,
-ansi, asciidoc, bbcode, creole, csv, djot, docbook, dokuwiki, endnotexml, fb2,
-fountain, haddock, jats, jira, man, markua, mediawiki, multimarkdown, muse, native,
-odf/odt, org, pod, ris, rst, rtf, t2t, tei, texinfo, textile, tikiwiki, tsv, twiki,
-typst, vimwiki, xwiki, zimwiki.
+**Migration status (updated 2026-08-06): complete for all hand-rolled verticals.**
+The following ~39 hand-rolled verticals have been migrated to the single-crate
+`rescribe`-feature layout (adapter crates deleted, consumers repointed at
+`{format}_fmt::rescribe::{parse,emit}`), following `opml-fmt` (commit `c61f527711`)
+as the reference implementation: opml, ansi, asciidoc, bbcode, creole, csv, djot,
+docbook, dokuwiki, endnotexml, fb2, fountain, haddock, html, jats, jira, man, markua,
+mediawiki, multimarkdown, muse, native, odf/odt, org, pod, ris, rst, rtf, t2t, tei,
+texinfo, textile, tikiwiki, tsv, twiki, typst, vimwiki, xwiki, zimwiki.
+
+**html-fmt (last of the ~44, migrated 2026-08-06):** investigation found the
+"tree-sitter fork" concern below was stale — html-fmt itself has only ever had a
+single reader path (the html5ever/`markup5ever_rcdom`-based one, using the
+correction-event streaming architecture built earlier in the same session). The
+tree-sitter-html backend lived entirely inside the legacy `rescribe-read-html`
+adapter crate as an off-by-default feature with zero other consumers in the
+workspace — not part of `html-fmt` at all, and deleted along with that crate rather
+than migrated. `rescribe-read-html`/`rescribe-write-html` are deleted; the
+translation now lives in `crates/formats/html-fmt/src/rescribe/{mod,read,write}.rs`
+(split into files, following `docbook-fmt`'s precedent, given HTML's element
+vocabulary size), gated per API mode (`reader-ast`, `writer-builder`). Consumers
+repointed: `crates/rescribe`, `crates/rescribe-fixtures`, `crates/formats/epub-fmt`,
+`crates/readers/rescribe-read-epub`, `crates/writers/rescribe-write-epub`,
+`crates/readers/rescribe-read-markdown` (dev-deps/tests), `fuzz/`.
 
 **Not migrated — genuine open items, not oversights:**
-- **html-fmt**: its reader forks between an html5ever path (wraps `html-fmt`) and an
-  independent tree-sitter-based HTML parser with no `html-fmt` dependency at all.
-  The mechanical one-crate-one-translation-module pattern doesn't fit this fork as-is
-  — needs an explicit call (migrate only the html5ever half and leave a slimmed
-  `rescribe-read-html` for tree-sitter, drop the tree-sitter backend, or fold
-  tree-sitter-html into `html-fmt` itself) before migrating.
 - **Library-backed / binary formats** (docx, pptx, xlsx, epub, gfm, markdown,
   markdown-strict, latex, pdf, ipynb, bibtex, biblatex, csl-json, pandoc-json,
   commonmark, and the OOXML cluster): these had no matching `crates/formats/*-fmt`
@@ -4303,18 +4312,25 @@ typst, vimwiki, xwiki, zimwiki.
   they opt in. Verified per migrated crate via `cargo build --no-default-features`
   + `cargo tree` showing no `rescribe-core` in the dependency graph.
 
-**Known follow-up gap: `fuzz/` was not updated.** `fuzz/Cargo.toml` and
-`fuzz/fuzz_targets/{format}_reader.rs`/`{format}_roundtrip.rs` for the ~38 migrated
-formats still reference the deleted `rescribe-read-{format}`/`rescribe-write-{format}`
-crates and need the same repointing (`{format}_fmt::rescribe::{parse,emit}`, plus
-enabling that crate's `rescribe`/`read`/`write` features in `fuzz/Cargo.toml`) that
-`crates/rescribe`, `crates/rescribe-fixtures`, and the workspace root `Cargo.toml`
-already got. Deferred because `fuzz/Cargo.toml` is a 1000+ line file under heavy
-concurrent edit from other sessions during this migration, and a regex-driven sweep
-of it carried real risk of corruption. `fuzz` is `exclude`d from the main workspace
-so this does not block `cargo build --workspace`, but it does mean the fuzz no-panic
-gate for these formats' rescribe adapters is currently broken (`cargo check` in
-`fuzz/` fails) until someone does this pass.
+**Known follow-up gap: `fuzz/` was not updated for most formats.**
+`fuzz/Cargo.toml` and `fuzz/fuzz_targets/{format}_reader.rs`/`{format}_roundtrip.rs`
+for most of the migrated formats still reference the deleted
+`rescribe-read-{format}`/`rescribe-write-{format}` crates and need the same
+repointing (`{format}_fmt::rescribe::{parse,emit}`, plus enabling that crate's
+`rescribe`/`read`/`write` features in `fuzz/Cargo.toml`) that `crates/rescribe`,
+`crates/rescribe-fixtures`, and the workspace root `Cargo.toml` already got.
+Deferred because `fuzz/Cargo.toml` is a 1000+ line file under heavy concurrent edit
+from other sessions during this migration, and a regex-driven sweep of it carried
+real risk of corruption. `fuzz` is `exclude`d from the main workspace so this does
+not block `cargo build --workspace`, but it does mean the fuzz no-panic gate for
+most of these formats' rescribe adapters is currently broken (`cargo check` in
+`fuzz/` fails) until someone does this pass. **html was repointed** as part of its
+2026-08-06 migration (`fuzz/fuzz_targets/html_reader.rs`/`html_roundtrip.rs` now
+call `html_fmt::rescribe::{parse,emit}`) — but a pre-existing, unrelated break in
+`fuzz/Cargo.toml` (a `[dependencies.rescribe-read-ansi]` entry pointing at a path
+some other concurrent session already deleted) means `cargo check` in `fuzz/` still
+fails for an unrelated reason as of this writing; not fixed here since it's outside
+this migration's scope.
 
 ---
 

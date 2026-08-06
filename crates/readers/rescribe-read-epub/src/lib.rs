@@ -121,7 +121,7 @@ impl Converter {
             let chapter_title = doc.get_current_id();
 
             // Parse XHTML content using the HTML reader
-            let html_result = rescribe_read_html::parse(&content);
+            let html_result = html_fmt::rescribe::parse(&content);
 
             match html_result {
                 Ok(result) => {

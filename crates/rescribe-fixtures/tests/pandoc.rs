@@ -72,7 +72,7 @@ fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
         "rst" => rst_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "html" => rescribe_read_html::parse(s)
+        "html" => html_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
         "latex" => rescribe_read_latex::parse(s)
