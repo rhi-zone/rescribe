@@ -30,7 +30,7 @@ fn collect_items(node: &Node, items: &mut Vec<CslItem>) {
 
     // Legacy shapes, kept for backwards compatibility with documents built
     // by hand or by an older reader version (not produced by
-    // `rescribe-read-csl-json`/`rescribe-fmt-bibtex` any more).
+    // this crate's `read` module/`rescribe-fmt-bibtex` any more).
     if node.kind.as_str() == "csl:item"
         && let Some(item) = extract_csl_item(node)
     {
@@ -60,13 +60,13 @@ fn collect_items(node: &Node, items: &mut Vec<CslItem>) {
 }
 
 /// Extract a `CslItem` from a `bibliography_entry` node (see
-/// `rescribe-read-csl-json`'s `convert_item`). `csl:field` on each
+/// this crate's `read` module's `convert_item`). `csl:field` on each
 /// `bibliography_field` child names the exact source CSL-JSON variable;
 /// `field:role` is the fallback for a field built by a non-CSL-JSON
 /// producer (a cross-format conversion into CSL JSON). A `page_first`/
 /// `page_last` pair recombines into one `page` field; `prop::DATE` becomes
 /// `issued.date-parts`; a `misc` field whose `csl:field` is `"issued"` (the
-/// unparsed-literal-date fallback, see `rescribe-read-csl-json`'s
+/// unparsed-literal-date fallback, see this crate's `read` module's
 /// `convert_date`) reconstructs `issued.literal` instead of leaking into
 /// the catch-all `extra` bucket, since `issued` must stay an object per the
 /// CSL-JSON schema. Every other unrecognized field name/value round-trips
@@ -199,7 +199,7 @@ fn date_parts_from_map(
 }
 
 /// Reconstruct a `CslName` from a `bibliography_field`'s TEXT children,
-/// using `csl:name-part` (set by `rescribe-read-csl-json`'s `name_field`)
+/// using `csl:name-part` (set by this crate's `read` module's `name_field`)
 /// to tell `literal`/`given`/`family` apart — a bare child count is
 /// otherwise ambiguous.
 fn name_from_field(node: &Node) -> CslName {

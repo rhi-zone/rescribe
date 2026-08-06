@@ -5,12 +5,12 @@
 //! This is a `[[bin]]` fixture-generation tool, not library code -- per
 //! CLAUDE.md's adapter rules, format-parsing/writing logic belongs in the
 //! `-fmt` crate (or here, the upstream library), never in production
-//! `rescribe-read-pdf` code. `pdf_extract`/`lopdf` don't ship a PDF writer
+//! `rescribe-fmt-pdf` code. `pdf_extract`/`lopdf` don't ship a PDF writer
 //! usable for constructing arbitrary layouts, so this tool talks to lopdf
 //! directly to build real, structurally valid PDF bytes -- not
 //! hand-authored/guessed byte sequences.
 //!
-//! Run with `cargo run -p rescribe-read-pdf --bin gen_pdf_fixtures`.
+//! Run with `cargo run -p rescribe-fmt-pdf --bin gen_pdf_fixtures`.
 
 use lopdf::content::{Content, Operation};
 use lopdf::{Document, Object, Stream, dictionary};
@@ -26,7 +26,7 @@ struct Line {
 }
 
 fn build_heading_font_size_fixture() -> Vec<u8> {
-    // Layout rationale (see rescribe-read-pdf/src/lib.rs's block/line-break
+    // Layout rationale (see rescribe-fmt-pdf/src/lib.rs's block/line-break
     // heuristics): body text is 12pt with ~14pt line spacing (ratio 1.17,
     // well under the 1.5x line-break factor and the 2.5x block-break
     // factor, so wrapped lines merge into one paragraph block). Block

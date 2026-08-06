@@ -1800,7 +1800,7 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "epub",
     // `multimarkdown` moved to `CAPABILITIES` below (2026-08-04):
     // `multimarkdown-fmt` now exists, built on `commonmark-fmt`. `pdf` has
-    // NO standalone {format}-fmt crate (only `rescribe-read-pdf`) —
+    // NO standalone {format}-fmt crate (only `rescribe-fmt-pdf`) —
     // confirmed by directory listing `crates/formats/`; not further
     // investigated in this pass. `rtf` was audited this pass — see its
     // `CAPABILITIES` entry below.

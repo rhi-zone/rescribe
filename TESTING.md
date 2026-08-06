@@ -124,7 +124,7 @@ fuzz_target!(|data: &[u8]| {
 
 // fuzz/fuzz_targets/pdf_reader.rs
 fuzz_target!(|data: &[u8]| {
-    let _ = rescribe_read_pdf::parse(data);
+    let _ = rescribe_fmt_pdf::parse(data);
 });
 ```
 
