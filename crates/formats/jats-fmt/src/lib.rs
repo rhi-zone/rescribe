@@ -1,12 +1,13 @@
 //! JATS (Journal Article Tag Suite) and generic XML parser, AST, and emitter.
 //!
-//! A standalone crate wrapping `quick-xml` with **no rescribe dependency**
-//! — usable as a general Rust JATS/XML library. `rescribe-read-jats`
-//! and `rescribe-write-jats` are thin adapter layers on top that
-//! translate `jats_fmt::Node` to and from rescribe's IR; JATS-specific
-//! *meaning* (which element names — `<article>`, `<sec>`, `<xref>`, `<fig>`,
-//! etc. — map to which document semantics) lives in those adapters, not
-//! here — this crate only knows XML structure.
+//! A standalone crate wrapping `quick-xml` with **no rescribe dependency by
+//! default** — usable as a general Rust JATS/XML library. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter layer that translates `jats_fmt::Node` to and from
+//! rescribe's IR; JATS-specific *meaning* (which element names —
+//! `<article>`, `<sec>`, `<xref>`, `<fig>`, etc. — map to which document
+//! semantics) lives in that adapter, not here — this crate only knows XML
+//! structure.
 //!
 //! # Tag-set scope
 //!
@@ -76,6 +77,8 @@ pub mod parse;
 pub mod registry;
 #[cfg(feature = "registry-derive")]
 pub mod registry_derive;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

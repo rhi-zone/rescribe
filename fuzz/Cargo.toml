@@ -335,6 +335,9 @@ path = "../crates/formats/rescribe-format-api"
 [dependencies.zip-fmt]
 path = "../crates/formats/zip-fmt"
 
+[dependencies.epub-fmt]
+path = "../crates/formats/epub-fmt"
+
 [dependencies.endnotexml-fmt]
 path = "../crates/formats/endnotexml-fmt"
 
@@ -1182,6 +1185,20 @@ bench = false
 [[bin]]
 name = "fuzz_zip_fmt_roundtrip"
 path = "fuzz_targets/zip_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_epub_fmt_reader"
+path = "fuzz_targets/epub_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_epub_fmt_roundtrip"
+path = "fuzz_targets/epub_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

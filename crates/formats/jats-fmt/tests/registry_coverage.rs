@@ -1,4 +1,5 @@
-//! Coverage gap check: what JATS defines, minus what this reader mentions.
+//! Coverage gap check: what JATS defines, minus what the `rescribe` feature's
+//! reader (`crate::rescribe::read`) mentions.
 //!
 //! This is the consumer that justifies the registry's existence. A hand-written
 //! `COVERAGE.md` checklist can only report a ratio against *itself* — the
@@ -30,7 +31,7 @@ use std::collections::BTreeSet;
 
 use jats_fmt::registry::registry;
 
-const READER_SRC: &str = include_str!("../src/lib.rs");
+const READER_SRC: &str = include_str!("../src/rescribe.rs");
 
 /// Slices whose constructs are not JATS's own vocabulary. JATS embeds MathML
 /// and XHTML tables by reference, so their elements are legitimately in the
@@ -117,7 +118,7 @@ fn report_unmentioned_elements() {
 
     println!(
         "\nJATS Archiving elements (excluding embedded MathML): {}\n\
-         mentioned anywhere in rescribe-read-jats:            {}\n\
+         mentioned anywhere in the rescribe read adapter:     {}\n\
          never mentioned:                                     {}\n",
         all.len(),
         all.len() - gaps.len(),

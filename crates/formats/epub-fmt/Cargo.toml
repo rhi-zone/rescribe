@@ -1,15 +1,18 @@
 [package]
-name = "fountain-fmt"
+name = "epub-fmt"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Fountain screenplay parser, AST, and builder — no rescribe dependency"
+description = "EPUB2/EPUB3 reader/writer with a domain-typed package/manifest/spine/nav AST, built on zip-fmt (container) and html-fmt (XHTML content documents) — no rescribe dependency"
+readme.workspace = true
+keywords = ["epub", "ebook", "opf", "ocf"]
+categories = ["encoding", "parser-implementations"]
 
 [features]
 default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
 reader-ast = []
-reader-streaming = ["reader-ast"]
+reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
@@ -17,18 +20,18 @@ writer-builder = ["reader-ast", "writer-streaming"]
 read = ["reader-ast", "reader-streaming", "reader-batch"]
 write = ["writer-builder", "writer-streaming"]
 # AST<->rescribe::Document translation. Off by default so consumers who only
-# want the standalone Fountain library never pull in rescribe-core. Pulls in
+# want the standalone EPUB library never pull in rescribe-core. Pulls in
 # translation code gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
-rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
+rescribe = ["dep:rescribe-core", "dep:rescribe-std", "dep:rescribe-read-html", "dep:rescribe-write-html"]
 
 [dependencies]
+quick-xml = { workspace = true }
+zip-fmt = { workspace = true }
+html-fmt = { workspace = true }
 rescribe-format-api = { workspace = true }
 rescribe-core = { workspace = true, optional = true }
 rescribe-std = { workspace = true, optional = true }
+rescribe-read-html = { workspace = true, optional = true }
+rescribe-write-html = { workspace = true, optional = true }
 
 [dev-dependencies]
-criterion.workspace = true
-
-[[bench]]
-name = "fountain_bench"
-harness = false

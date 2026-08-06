@@ -1,13 +1,18 @@
 //! Fountain screenplay format parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-fountain` and `rescribe-write-fountain` as thin adapter layers.
+//! A standalone crate with **no rescribe dependency by default** — usable as
+//! a general Rust Fountain library by anything that needs to read or write
+//! screenplay files. The optional `rescribe` feature (default off) adds
+//! `crate::rescribe::{parse, emit}`, a thin adapter that translates
+//! [`FountainDoc`] to and from rescribe's `Document` IR.
 
 pub mod ast;
 pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export the most-used types for convenience.
