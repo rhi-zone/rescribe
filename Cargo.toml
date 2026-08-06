@@ -178,8 +178,7 @@ rescribe-write-ris = { path = "crates/writers/rescribe-write-ris" }
 rescribe-read-endnotexml = { path = "crates/readers/rescribe-read-endnotexml" }
 rescribe-write-endnotexml = { path = "crates/writers/rescribe-write-endnotexml" }
 rescribe-write-xlsx = { path = "crates/writers/rescribe-write-xlsx" }
-rescribe-read-biblatex = { path = "crates/readers/rescribe-read-biblatex" }
-rescribe-write-biblatex = { path = "crates/writers/rescribe-write-biblatex" }
+rescribe-fmt-biblatex = { path = "crates/bridges/rescribe-fmt-biblatex" }
 rescribe-read-markdown-strict = { path = "crates/readers/rescribe-read-markdown-strict" }
 rescribe-write-markdown-strict = { path = "crates/writers/rescribe-write-markdown-strict" }
 rescribe-read-multimarkdown = { path = "crates/readers/rescribe-read-multimarkdown" }

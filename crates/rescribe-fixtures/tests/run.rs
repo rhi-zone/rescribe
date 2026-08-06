@@ -500,7 +500,7 @@ fn bibtex() {
 fn biblatex() {
     run_format_fixtures(&fixtures_root(), "biblatex", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_biblatex::parse(s)
+        rescribe_fmt_biblatex::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

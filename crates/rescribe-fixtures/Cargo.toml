@@ -59,7 +59,7 @@ rescribe-read-csv = { workspace = true }
 rescribe-read-tsv = { workspace = true }
 rescribe-read-ris = { workspace = true }
 rescribe-fmt-bibtex = { workspace = true }
-rescribe-read-biblatex = { workspace = true }
+rescribe-fmt-biblatex = { workspace = true }
 rescribe-read-endnotexml = { workspace = true }
 rescribe-read-tei = { workspace = true }
 rescribe-read-docx = { workspace = true }

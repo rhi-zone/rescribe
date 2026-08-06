@@ -34,8 +34,8 @@ read-bbcode = ["dep:rescribe-read-bbcode"]
 write-bbcode = ["dep:rescribe-write-bbcode"]
 format-bbcode = ["read-bbcode", "write-bbcode"]
 
-read-biblatex = ["dep:rescribe-read-biblatex"]
-write-biblatex = ["dep:rescribe-write-biblatex"]
+read-biblatex = ["dep:rescribe-fmt-biblatex"]
+write-biblatex = ["dep:rescribe-fmt-biblatex"]
 format-biblatex = ["read-biblatex", "write-biblatex"]
 
 read-bibtex = ["dep:rescribe-fmt-bibtex"]
@@ -397,7 +397,7 @@ rescribe-read-commonmark = { workspace = true, optional = true }
 rescribe-read-gfm = { workspace = true, optional = true }
 rescribe-read-ris = { workspace = true, optional = true }
 rescribe-read-endnotexml = { workspace = true, optional = true }
-rescribe-read-biblatex = { workspace = true, optional = true }
+rescribe-fmt-biblatex = { workspace = true, optional = true }
 rescribe-read-markdown-strict = { workspace = true, optional = true }
 rescribe-read-multimarkdown = { workspace = true, optional = true }
 rescribe-read-fountain = { workspace = true, optional = true }
@@ -461,7 +461,6 @@ rescribe-write-gfm = { workspace = true, optional = true }
 rescribe-write-ris = { workspace = true, optional = true }
 rescribe-write-xlsx = { workspace = true, optional = true }
 rescribe-write-endnotexml = { workspace = true, optional = true }
-rescribe-write-biblatex = { workspace = true, optional = true }
 rescribe-write-markdown-strict = { workspace = true, optional = true }
 rescribe-write-multimarkdown = { workspace = true, optional = true }
 rescribe-write-fountain = { workspace = true, optional = true }

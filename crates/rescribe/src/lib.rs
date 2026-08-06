@@ -112,13 +112,13 @@ pub mod beamer {
 #[cfg(any(feature = "read-biblatex", feature = "write-biblatex"))]
 pub mod biblatex {
     #[cfg(feature = "read-biblatex")]
-    pub use rescribe_read_biblatex::parse;
+    pub use rescribe_fmt_biblatex::parse;
     #[cfg(feature = "read-biblatex")]
-    pub use rescribe_read_biblatex::parse_with_options;
+    pub use rescribe_fmt_biblatex::parse_with_options;
     #[cfg(feature = "write-biblatex")]
-    pub use rescribe_write_biblatex::emit;
+    pub use rescribe_fmt_biblatex::emit;
     #[cfg(feature = "write-biblatex")]
-    pub use rescribe_write_biblatex::emit_with_options;
+    pub use rescribe_fmt_biblatex::emit_with_options;
 }
 
 /// BibTeX format support.

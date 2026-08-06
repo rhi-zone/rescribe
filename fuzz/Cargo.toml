@@ -268,8 +268,8 @@ path = "../crates/readers/rescribe-read-csl-json"
 [dependencies.rescribe-read-ipynb]
 path = "../crates/readers/rescribe-read-ipynb"
 
-[dependencies.rescribe-read-biblatex]
-path = "../crates/readers/rescribe-read-biblatex"
+[dependencies.rescribe-fmt-biblatex]
+path = "../crates/bridges/rescribe-fmt-biblatex"
 
 [dependencies.rescribe-read-endnotexml]
 path = "../crates/readers/rescribe-read-endnotexml"

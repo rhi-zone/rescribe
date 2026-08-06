@@ -214,9 +214,9 @@ BibLaTeX defines regular entry types, type aliases, and unsupported/custom types
 - [x] unknown/custom entry type — `rare-custom-type` (valid syntax, not malformed — moved to
       "rare" category; captured verbatim as `biblatex:type` — fixed a bug where this used
       `biblatex::EntryType`'s `Debug` rendering of `Unknown` instead of the literal name;
-      see 2026-08-05 TODO.md entry. `rescribe-write-biblatex` splices it back over the
-      `@misc{` header, though note `rescribe-read-biblatex`'s `definition_list`-shaped
-      output doesn't currently feed `rescribe-write-biblatex`'s entry builder — see the
+      see 2026-08-05 TODO.md entry. `rescribe-fmt-biblatex` splices it back over the
+      `@misc{` header, though note `rescribe-fmt-biblatex`'s `definition_list`-shaped
+      output doesn't currently feed `rescribe-fmt-biblatex`'s entry builder — see the
       same TODO.md entry for that separate, pre-existing gap)
 - [ ] unknown field name — (missing)
 - [ ] entry with no key — (missing)
