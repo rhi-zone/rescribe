@@ -1,14 +1,18 @@
 #![allow(clippy::collapsible_if, clippy::never_loop)]
 //! txt2tags (t2t) parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-t2t` and `rescribe-write-t2t` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `t2t::T2tDoc` to and from rescribe's
+//! `Document` IR.
 
 pub mod ast;
 pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export the primary public API for convenience.

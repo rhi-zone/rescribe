@@ -1,7 +1,9 @@
 //! TikiWiki parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-tikiwiki` and `rescribe-write-tikiwiki` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `TikiwikiDoc` to and from rescribe's
+//! `Document` IR.
 //!
 //! This crate denies `unsafe` by default (production code must never use it); a prior version of `events::EventIter::new`
 //! used `unsafe { transmute }` to tie already-owned `Event<'static>` data to
@@ -17,6 +19,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export everything callers need.

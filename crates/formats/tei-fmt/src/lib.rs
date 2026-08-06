@@ -1,13 +1,15 @@
 //! TEI (Text Encoding Initiative) P5 and generic XML parser, AST, and
 //! emitter.
 //!
-//! A standalone crate wrapping `quick-xml` with **no rescribe dependency**
-//! — usable as a general Rust TEI/XML library. `rescribe-read-tei`
-//! and `rescribe-write-tei` are thin adapter layers on top that
-//! translate `tei_fmt::Node` to and from rescribe's IR; TEI-specific
-//! *meaning* (which element names — `<div>`, `<hi rend="…">`, `<ref
-//! target="…">`, `<teiHeader>`, etc. — map to which document semantics)
-//! lives in those adapters, not here — this crate only knows XML structure.
+//! A standalone crate wrapping `quick-xml` with **no rescribe dependency by
+//! default** — usable as a general Rust TEI/XML library. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{read, write}`
+//! (re-exported as `crate::rescribe::{parse, emit}`), a thin adapter that
+//! translates `tei_fmt::Node` to and from rescribe's `Document` IR;
+//! TEI-specific *meaning* (which element names — `<div>`, `<hi rend="…">`,
+//! `<ref target="…">`, `<teiHeader>`, etc. — map to which document
+//! semantics) lives in that module, not here — this crate only knows XML
+//! structure.
 //!
 //! # API layers
 //!
@@ -63,6 +65,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

@@ -29,6 +29,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 pub use ast::{Block, Diagnostic, Inline, Severity, Span, TableCell, TableRow, XwikiDoc};

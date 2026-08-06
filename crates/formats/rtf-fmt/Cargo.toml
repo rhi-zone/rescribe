@@ -13,6 +13,15 @@ reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = []
+# Umbrella convenience features: enable all reader or all writer modes at once.
+read = ["reader-ast", "reader-streaming", "reader-batch"]
+write = ["writer-builder", "writer-streaming"]
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone RTF library never pull in rescribe-core. Translation
+# code is gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
 
 [dependencies]
 rescribe-format-api = { workspace = true }
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }

@@ -46,6 +46,13 @@ odf-1-2 = []       # constructs introduced in ODF 1.2 (ISO 26300:2015)
 odf-1-3 = []       # constructs introduced in ODF 1.3 (OASIS 2021)
 extra-attrs = []
 extra-children = []
+# Umbrella convenience features: enable all reader or all writer modes at once.
+read = ["reader-ast", "reader-streaming", "reader-batch"]
+write = ["writer-builder", "writer-streaming"]
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone ODF library never pull in rescribe-core. Pulls in
+# translation code gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
 
 [dependencies]
 quick-xml.workspace = true
@@ -54,6 +61,8 @@ serde.workspace = true
 rescribe-format-api.workspace = true
 zip.workspace = true
 zip-fmt.workspace = true
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }
 
 [build-dependencies]
 ooxml-codegen.workspace = true

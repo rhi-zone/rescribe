@@ -1,13 +1,17 @@
 //! Org-mode parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-org` and `rescribe-write-org` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`,
+//! a thin adapter that translates [`OrgDoc`] to and from rescribe's
+//! `Document` IR.
 
 pub mod ast;
 pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export everything callers need.

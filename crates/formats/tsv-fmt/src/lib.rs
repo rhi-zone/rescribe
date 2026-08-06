@@ -1,11 +1,15 @@
 //! TSV (Tab-Separated Values) parser, AST, and emitter.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-tsv` and `rescribe-write-tsv` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `TsvDoc` to and from rescribe's `Document`
+//! IR.
 
 pub mod ast;
 pub mod emit;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 pub use ast::{Cell, Diagnostic, Row, Severity, Span, TsvDoc};
 pub use emit::emit;

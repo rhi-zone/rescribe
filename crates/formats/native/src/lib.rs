@@ -1,9 +1,14 @@
 //! Native format parser and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-native` and `rescribe-write-native` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`,
+//! a thin adapter that translates [`NativeDoc`] to and from rescribe's
+//! `Document` IR.
 
 use std::collections::BTreeMap;
+
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 

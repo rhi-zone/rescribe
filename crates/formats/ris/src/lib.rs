@@ -1,11 +1,15 @@
 //! RIS (Research Information Systems) citation format parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-ris` and `rescribe-write-ris` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`,
+//! a thin adapter that translates the RIS AST to and from rescribe's
+//! `Document` IR.
 
 pub mod ast;
 pub mod emit;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 pub use ast::*;
 pub use emit::emit;

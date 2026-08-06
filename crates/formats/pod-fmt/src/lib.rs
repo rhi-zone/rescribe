@@ -1,8 +1,9 @@
 //! POD (Plain Old Documentation) parser, emitter, and AST.
 //!
-//! Standalone crate with **no rescribe dependency** — usable as a general
-//! Rust POD library. `rescribe-read-pod` and `rescribe-write-pod` are thin
-//! adapter layers on top.
+//! Standalone crate with **no rescribe dependency by default** — usable as
+//! a general Rust POD library. The optional `rescribe` feature (default
+//! off) adds `crate::rescribe::{parse, emit}`, a thin adapter that
+//! translates [`PodDoc`] to and from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -58,6 +59,9 @@ pub mod batch;
 
 #[cfg(feature = "writer-streaming")]
 pub mod writer;
+
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 pub use ast::{Block, DefinitionItem, Diagnostic, Inline, PodDoc, Severity, Span};
 pub use emit::collect_inline_text;

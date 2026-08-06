@@ -5,3 +5,17 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "TSV (Tab-Separated Values) parser, AST, and builder — no rescribe dependency"
+
+[features]
+# tsv-fmt has no separate reader/writer API modes (parse/emit are always
+# compiled), so these are no-op umbrella features kept for interface
+# consistency with other -fmt crates' read/write features.
+read = []
+write = []
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone TSV library never pull in rescribe-core.
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
+
+[dependencies]
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }

@@ -13,9 +13,18 @@ reader-streaming = ["reader-ast"]
 reader-batch = []
 writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
+# Umbrella convenience features: enable all reader or all writer modes at once.
+read = ["reader-ast", "reader-streaming", "reader-batch"]
+write = ["writer-builder", "writer-streaming"]
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone TWiki library never pull in rescribe-core. Pulls in
+# translation code gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
 
 [dependencies]
 rescribe-format-api = { workspace = true }
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

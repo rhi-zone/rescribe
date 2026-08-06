@@ -1,7 +1,10 @@
 //! OpenDocument Format (ODF) document library.
 //!
 //! A standalone Rust library for reading and writing ODF documents
-//! (`.odt`, `.ods`, `.odp`). No rescribe dependency.
+//! (`.odt`, `.ods`, `.odp`). No rescribe dependency by default. The
+//! optional `rescribe` feature (default off) adds
+//! `crate::rescribe::{parse, emit}`, a thin adapter that translates
+//! [`OdfDocument`] to and from rescribe's `Document` IR.
 //!
 //! # Quick start
 //!
@@ -45,6 +48,8 @@ pub mod error;
 pub mod events;
 pub mod generated;
 pub mod parser;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 pub use ast::*;
@@ -57,7 +62,7 @@ pub use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, Stre
 // `Parse` and `Emit` wrap `parser::parse_lenient`/`writer::emit_lenient`,
 // diagnostic-and-continue variants added alongside the pre-existing
 // `Result`-returning `parser::parse`/`writer::emit` (still exported below,
-// still used by `rescribe-read-odt`/`rescribe-write-odt` and the batch
+// still used by `crate::rescribe` and the batch
 // API, which want the hard-`Result` for real I/O failures). The two
 // variants differ only in how a ZIP archive that fails to open at all is
 // handled — every other fallible-looking construct in `parser.rs`

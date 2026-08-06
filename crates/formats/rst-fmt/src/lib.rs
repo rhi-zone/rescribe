@@ -1,12 +1,16 @@
 //! reStructuredText (RST) parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-rst` and `rescribe-write-rst` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `rst_fmt::RstDoc` to and from rescribe's
+//! `Document` IR.
 
 #![allow(clippy::collapsible_if)]
 
 pub mod batch;
 pub mod events;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};

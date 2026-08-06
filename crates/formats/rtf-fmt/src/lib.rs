@@ -1,8 +1,9 @@
 //! RTF (Rich Text Format) tokenizer, AST, and builder.
 //!
-//! A standalone crate with **no rescribe dependency** — usable as a general
-//! Rust RTF library.  The `rescribe-read-rtf` and `rescribe-write-rtf` crates
-//! are thin adapter layers on top.
+//! A standalone crate with **no rescribe dependency by default** — usable as
+//! a general Rust RTF library. The optional `rescribe` feature (default off)
+//! adds `crate::rescribe::{parse, emit}`, a thin adapter that translates
+//! `rtf_fmt::RtfDoc` to and from rescribe's `Document` IR.
 //!
 //! # API layers
 //!
@@ -55,6 +56,8 @@ mod emit;
 mod events;
 mod incremental;
 mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 mod sem_events;
 pub mod sem_writer;
 mod tables;

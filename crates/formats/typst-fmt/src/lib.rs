@@ -1,11 +1,15 @@
 //! Typst markup parser, AST, and emitter.
 //!
-//! A standalone crate wrapping `typst-syntax` with **no rescribe
-//! dependency** — usable as a general Rust Typst library by anything that
+//! A standalone crate wrapping `typst-syntax` with **no rescribe dependency
+//! by default** — usable as a general Rust Typst library by anything that
 //! needs to read or write Typst markup: a static-site generator, a linter,
-//! a document-diffing tool, a search indexer. `rescribe-read-typst` and
-//! `rescribe-write-typst` are thin adapter layers on top that translate
-//! `typst_fmt::TypstDoc` to and from rescribe's IR.
+//! a document-diffing tool, a search indexer. The optional `rescribe`
+//! feature (default off) adds `crate::rescribe::{parse, emit}`, a thin
+//! adapter that translates `typst_fmt::TypstDoc` to and from rescribe's
+//! `Document` IR; the further optional `eval` feature (implies `rescribe`
+//! and `reader-ast`) adds `crate::rescribe::parse_evaluated`, which drives
+//! the full `typst` compiler (resolving `#let`/`#for`/`#if`/show rules,
+//! etc.) instead of the syntax-only parse.
 //!
 //! # API layers
 //!
@@ -82,6 +86,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
