@@ -1,11 +1,11 @@
-//! Jupyter notebook (ipynb) reader for rescribe.
+//! Jupyter notebook (ipynb) reader half of `rescribe-fmt-ipynb`.
 //!
 //! Parses Jupyter notebooks into rescribe's document IR.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use rescribe_read_ipynb::parse;
+//! use rescribe_fmt_ipynb::parse;
 //!
 //! let ipynb_content = r#"{"nbformat": 4, "cells": []}"#;
 //! let result = parse(ipynb_content)?;

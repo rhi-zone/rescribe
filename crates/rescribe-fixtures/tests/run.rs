@@ -440,7 +440,7 @@ fn fb2() {
 fn ipynb() {
     run_format_fixtures(&fixtures_root(), "ipynb", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_ipynb::parse(s)
+        rescribe_fmt_ipynb::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

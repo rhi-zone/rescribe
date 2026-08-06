@@ -350,11 +350,11 @@ pub mod icml {
 #[cfg(any(feature = "read-ipynb", feature = "write-ipynb"))]
 pub mod ipynb {
     #[cfg(feature = "read-ipynb")]
-    pub use rescribe_read_ipynb::parse;
+    pub use rescribe_fmt_ipynb::parse;
     #[cfg(feature = "read-ipynb")]
-    pub use rescribe_read_ipynb::parse_bytes;
+    pub use rescribe_fmt_ipynb::parse_bytes;
     #[cfg(feature = "write-ipynb")]
-    pub use rescribe_write_ipynb::emit;
+    pub use rescribe_fmt_ipynb::emit;
 }
 
 /// JATS (Journal Article Tag Suite) format support.

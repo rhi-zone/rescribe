@@ -117,8 +117,8 @@ format-html = ["read-html", "write-html"]
 write-icml = ["dep:rescribe-write-icml"]
 format-icml = ["write-icml"]
 
-read-ipynb = ["dep:rescribe-read-ipynb"]
-write-ipynb = ["dep:rescribe-write-ipynb"]
+read-ipynb = ["dep:rescribe-fmt-ipynb"]
+write-ipynb = ["dep:rescribe-fmt-ipynb"]
 format-ipynb = ["read-ipynb", "write-ipynb"]
 
 read-jats = ["dep:rescribe-read-jats"]
@@ -354,7 +354,7 @@ rescribe-read-latex = { workspace = true, optional = true }
 rescribe-read-org = { workspace = true, optional = true }
 rescribe-read-pdf = { workspace = true, optional = true }
 rescribe-read-docx = { workspace = true, optional = true }
-rescribe-read-ipynb = { workspace = true, optional = true }
+rescribe-fmt-ipynb = { workspace = true, optional = true }
 rescribe-read-xlsx = { workspace = true, optional = true }
 rescribe-read-epub = { workspace = true, optional = true }
 rescribe-read-djot = { workspace = true, optional = true }
@@ -410,7 +410,6 @@ rescribe-write-latex = { workspace = true, optional = true }
 rescribe-write-org = { workspace = true, optional = true }
 rescribe-write-plaintext = { workspace = true, optional = true }
 rescribe-write-docx = { workspace = true, optional = true }
-rescribe-write-ipynb = { workspace = true, optional = true }
 rescribe-write-epub = { workspace = true, optional = true }
 rescribe-write-djot = { workspace = true, optional = true }
 rescribe-write-mediawiki = { workspace = true, optional = true }

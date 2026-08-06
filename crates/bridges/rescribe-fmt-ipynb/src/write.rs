@@ -1,11 +1,11 @@
-//! Jupyter notebook (ipynb) writer for rescribe.
+//! Jupyter notebook (ipynb) writer half of `rescribe-fmt-ipynb`.
 //!
 //! Emits rescribe's document IR as Jupyter notebook JSON.
 //!
 //! # Example
 //!
 //! ```ignore
-//! use rescribe_write_ipynb::emit;
+//! use rescribe_fmt_ipynb::emit;
 //!
 //! let doc = Document::new();
 //! let result = emit(&doc)?;
