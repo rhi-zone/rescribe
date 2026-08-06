@@ -136,12 +136,17 @@ pub enum ApiState {
     /// fuller writeup.
     KnownFailure(&'static str),
     /// The `{format}-fmt` crate structurally does not have this API, for a
-    /// reason documented in `docs/format-audit.md` (e.g. html-fmt's
-    /// `events()`/`StreamingParser` — HTML5 tree construction makes
-    /// incremental delivery impossible per the spec, not a library choice;
-    /// commonmark-fmt's `StreamingParser` is a sanctioned pulldown-cmark
-    /// exemption per CLAUDE.md). This is the *only* path that may be used to
-    /// mean "this check will never exist" — it must cite the documented
+    /// reason documented in `docs/format-audit.md` (e.g. commonmark-fmt's
+    /// `StreamingParser` is a sanctioned pulldown-cmark exemption per
+    /// CLAUDE.md — pulldown-cmark requires the full input as `&str`).
+    /// html-fmt's `events()`/`StreamingParser` used to be this crate's
+    /// other example (HTML5 tree construction was believed to make
+    /// incremental delivery impossible) until the 2026-08 rework proved
+    /// that wrong via a bounded-correction-event `TreeSink` — see
+    /// `html-fmt`'s `sink`/`events` module docs — so html-fmt is `Wired`
+    /// below, not an example of this variant anymore. This is the *only*
+    /// path that may be used to mean "this check will never exist" — it
+    /// must cite the documented
     /// reason, not be used to dodge writing a check that should exist. A
     /// crate that simply hasn't built the API yet, with no structural
     /// barrier stopping it (e.g. csv-fmt/tsv-fmt/ris/native, all of which are
@@ -366,38 +371,26 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // harness) now confirms bytes reach the sink before finish().
         streaming_writer: ApiState::Wired,
     },
-    // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
-    // formats (pulldown-cmark, html5ever) out of scope for the "three
-    // independently optimal reader APIs" mandate, and html-fmt does not fail
-    // that mandate silently — it documents the reason in `batch.rs`'s module
-    // docs and `lib.rs`'s crate docs (quoted in tests/streaming_apis.rs above
-    // the html checks): the HTML5 spec mandates tree construction (foster
-    // parenting, implied elements, adoption agency), so incremental event
-    // delivery during `feed()` is not possible. The streaming writer is
-    // independent code and is fully checked.
+    // html-fmt (2026-08 rework): `events()`/`StreamingParser` are now
+    // genuinely incremental, driven by a custom `html5ever::TreeSink`
+    // (`crate::sink::IncrementalSink`) that emits events as the
+    // tokenizer/tree-builder produce them rather than after a full tree
+    // walk. HTML5's retroactive tree-construction operations (adoption
+    // agency, foster parenting) are handled via bounded correction events
+    // (`NodeReparented`/`ChildrenReparented`/`NodeDetached`) — verified
+    // against html5ever 0.36.1's `TreeSink` call sites to be bounded to
+    // nodes still on the stack of open elements, not the whole document.
+    // See `html-fmt`'s `sink`/`events` module docs for the full design and
+    // verified rationale, and `Event::EndElement`'s doc comment for one
+    // known, verified gap (EndElement does not fire for a node html5ever
+    // drops from the open-elements stack without calling `TreeSink::pop`,
+    // reachable via plain foster-parenting, not just adoption agency —
+    // does not affect tree correctness, since structure comes from
+    // parent/child links, not EndElement).
     FormatCapabilities {
         format: "html",
-        events: ApiState::NotApplicable(
-            "html-fmt's events() is `events_from_doc(&parse(input).0)` — a depth-first walk of \
-             the html5ever-built tree into a Vec<OwnedEvent> (lib.rs:55, events.rs:92). An \
-             events()-vs-AST-projection equivalence check would compare that walk against \
-             itself and pass by construction, so wiring one would misrepresent html-fmt as \
-             having an independent streaming reader. The derivation is documented, not \
-             accidental: lib.rs's crate docs state \"All three reader APIs build the full parse \
-             tree internally... This is a fundamental limitation of the HTML5 spec, not a \
-             library choice\", and CLAUDE.md puts html5ever-backed formats out of scope",
-        ),
-        streaming_parser: ApiState::NotApplicable(
-            "html-fmt's StreamingParser::feed() is a bare `buf.extend_from_slice(chunk)`; all \
-             parsing and handler dispatch happen in finish() (batch.rs:100-110). batch.rs's \
-             module docs state incremental event delivery \"is not possible without building \
-             the full tree first\" because the HTML5 algorithm can rearrange previously-seen \
-             nodes. The one property buffering can still get wrong — chunk-boundary integrity, \
-             including mid-UTF-8-character splits — IS checked over every html fixture by \
-             html_streaming_parser_buffering_survives_adversarial_chunking; that check is \
-             deliberately not claimed as a Wired streaming_parser capability, because it \
-             verifies buffering, not the incremental delivery html-fmt documents it cannot do",
-        ),
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {

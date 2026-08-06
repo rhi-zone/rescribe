@@ -15,46 +15,178 @@ use rescribe_format_api::{Emit, Events, Handler, Parse, StreamingParse, Streamin
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
-// html-fmt: events()/StreamingParser are documented tree-walk projections;
-// the streaming Writer is independent code and gets a real byte-identical check
+// html-fmt: `events()`/`StreamingParser` are genuinely incremental (2026-08
+// rework, replacing the earlier parse()-then-walk implementation)
 // ---------------------------------------------------------------------------
 //
-// html-fmt is html5ever-backed, and CLAUDE.md puts third-party-library-backed
-// formats (pulldown-cmark, html5ever) out of scope for the "three independently
-// optimal reader APIs" mandate. The crate does not merely fail that mandate
-// silently — it documents the reason at module and crate level:
+// html-fmt is html5ever-backed, but unlike the general "third-party-library-
+// backed formats are out of scope for the independent-APIs mandate" carve-out
+// CLAUDE.md allows, html-fmt does not need it: `events()` and
+// `StreamingParser` are driven directly by a custom `html5ever::TreeSink`
+// (`html_fmt::sink::IncrementalSink`) that emits events as the
+// tokenizer/tree-builder produce them, not after a full tree walk. HTML5's
+// retroactive tree-construction operations (foster parenting, adoption
+// agency) are handled via bounded correction events
+// (`NodeReparented`/`ChildrenReparented`/`NodeDetached`) rather than by
+// buffering the whole document — see `html-fmt`'s `sink`/`events` module
+// docs for the verified html5ever 0.36.1 call-site trace this rests on.
 //
-//   crates/formats/html-fmt/src/batch.rs (module docs):
-//     "The HTML5 parsing algorithm requires tree construction for correctness —
-//      the spec mandates operations like foster parenting, implied element
-//      insertion, and adoption agency that can rearrange previously-seen nodes.
-//      This means truly incremental event delivery (events emitted during
-//      `feed()`) is not possible without building the full tree first."
+// Because every content event carries its own [`html_fmt::NodeId`] plus an
+// explicit parent (assigned at node-*creation* time, not at final-tree-
+// position time), a real `events()` run and a hand-written "walk the
+// resolved AST in document order" projection do **not** produce identical
+// `Vec<Event>` even for a document with zero corrections — creation order
+// and final sibling order can differ (foster parenting, absorbed via
+// `before_sibling` positioning without any correction event, is enough to
+// cause this: a foster-parented node's id is allocated after its later
+// sibling's but attaches *before* it). So the meaningful equivalence check
+// here is structural, matching the pattern html-fmt's own crate tests use
+// (`smoke_events_incremental_matches_parse` in `lib.rs`): apply every event,
+// including corrections, via `html_fmt::collect_doc` and compare the
+// resulting tree to `parse()`'s, rather than a generic `Event`-list
+// projection (`rescribe_fixtures::streaming_harness`'s module docs note this
+// generic-projection pattern is the default, not the only valid shape — see
+// there for why one size doesn't fit every format's event design).
 //
-//   crates/formats/html-fmt/src/lib.rs (crate docs):
-//     "All three reader APIs build the full parse tree internally. `events()`
-//      and `StreamingParser` walk the tree to produce events after
-//      construction. This is a fundamental limitation of the HTML5 spec, not a
-//      library choice."
+// Four checks below:
 //
-// Concretely: `html_fmt::events()` is `events_from_doc(&parse(input).0)` — a
-// depth-first walk of the finished tree into a `Vec<OwnedEvent>` — and
-// `StreamingParser::feed()` is a bare `buf.extend_from_slice(chunk)` with all
-// parsing and handler dispatch deferred to `finish()`. An
-// "events() == ast_to_events(parse())" equivalence check would therefore be
-// tautological (both sides are literally the same tree walk) and carry zero
-// signal, which is why those two APIs are declared `NotApplicable` with the
-// citations above rather than given a check that would pass by construction and
-// misrepresent html-fmt as having independent streaming readers.
-//
-// Two checks below still carry real signal:
-//
-//  * the streaming `Writer` (`writer.rs`) writes bytes to its sink directly and
-//    shares nothing with `emit.rs`'s `Emitter` except the two escaping helpers,
-//    so byte-identity against `emit()` is a genuine cross-implementation check;
-//  * `StreamingParser`'s chunk buffering is checked for byte-boundary
-//    correctness (a mid-UTF-8-character split must not corrupt the buffer),
-//    which is the one property `feed()` can actually get wrong.
+//  * `collect_doc(events())` matches `parse()` over every fixture — the
+//    reader-side genuine-incrementality claim, checked at fixture-suite
+//    scale (html-fmt's own crate tests check this on a handful of
+//    hand-written cases; this is the same check over the whole corpus);
+//  * `StreamingParser` (chunk-fed) reconstructs the same tree as bulk
+//    `events()`, under adversarial chunkings including a mid-UTF-8-character
+//    split — a structural comparison, not `Vec<OwnedEvent>` equality, since
+//    genuine incremental delivery legitimately splits text runs at finer
+//    granularity when fed smaller chunks (see the test's own doc comment);
+//  * `StreamingParser::feed()` delivers events to the handler before
+//    `finish()` is called — the genuine-incrementality probe that would
+//    catch a regression back to "buffer everything, dispatch at finish()";
+//  * the streaming `Writer` (`writer.rs`) still gets its own byte-identical-
+//    to-`emit()` check — independent code, unaffected by the reader-side
+//    rework.
+
+/// `collect_doc(events(input))` (i.e. the incremental reader's own output,
+/// with every correction event applied) must reconstruct the exact same
+/// tree as `parse()` (the non-streaming, html5ever-`RcDom`-backed path),
+/// for every html fixture. This is the fixture-suite-scale version of the
+/// claim `html-fmt`'s own crate tests
+/// (`smoke_events_incremental_matches_parse`,
+/// `foster_parenting_incremental_matches_parse_no_corrections`,
+/// `adoption_agency_fires_correction_events_and_matches_parse`) check on a
+/// handful of hand-written adversarial cases.
+#[test]
+fn html_events_incremental_matches_parse_over_all_fixtures() {
+    let root = fixtures_root().join("html");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/html dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc1, _) = html_fmt::HtmlDoc::parse(&input);
+        let evts: Vec<_> = html_fmt::HtmlDoc::events(&input).collect();
+        let doc2 = html_fmt::collect_doc(evts);
+
+        checked += 1;
+        if doc1.strip_spans() != doc2.strip_spans() && result.is_ok() {
+            result = Err(format!(
+                "incremental events() did not reconstruct the same tree as parse() for fixture \
+                 {}",
+                path.display(),
+            ));
+        }
+    }
+    assert!(
+        checked > 50,
+        "expected to check a substantial number of html fixtures, got {checked}"
+    );
+    assert_or_known_failure("html", "events", result);
+}
+
+/// `StreamingParser` (chunk-fed) must reconstruct the exact same tree as
+/// bulk `events()` over the whole input, under every adversarial chunking —
+/// including a split landing inside a multi-byte UTF-8 character.
+///
+/// This is a structural comparison (`collect_doc`), not a `Vec<OwnedEvent>`
+/// equality check: genuine incremental delivery means text-run granularity
+/// tracks *feed()* granularity, not just tokenizer-internal chunking — a
+/// text node fed one byte at a time legitimately arrives as one `Text` plus
+/// several `TextAppended` events rather than a single merged `Text` (see
+/// `IncrementalEventIter`'s own `DEFAULT_CHUNK_SIZE`-driven feeding in
+/// `crate::sink`, which is coarser than `single_byte` chunking and so
+/// produces fewer, larger events for the same content). That's the correct
+/// behavior for a real streaming reader — a `Vec<OwnedEvent>` identity check
+/// would be the wrong invariant and was replaced with this one after
+/// `adv-deeply-nested` demonstrated the legitimate split under
+/// `single_byte` chunking. Node ids, however, are stable regardless of
+/// chunking (allocation is a function of token processing order only), so
+/// `collect_doc`'s parent/child reconstruction is unaffected either way.
+#[test]
+fn html_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("html");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/html dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<html_fmt::OwnedEvent> = html_fmt::HtmlDoc::events(&input).collect();
+        let bulk_doc = html_fmt::collect_doc(bulk);
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                html_fmt::StreamingParser::new(|e: html_fmt::OwnedEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            let streamed_doc = html_fmt::collect_doc(streamed);
+            assert_eq!(
+                bulk_doc.strip_spans(),
+                streamed_doc.strip_spans(),
+                "StreamingParser reconstructed a different tree than events() for fixture {} \
+                 under chunking {chunking_name}",
+                path.display()
+            );
+        }
+    }
+    assert!(
+        checked > 50,
+        "expected to check a substantial number of html fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser::feed()` must deliver events to the handler as soon as
+/// they're available, not buffer everything until `finish()`. Feeds a
+/// complete-prefix-then-incomplete-trailing-content input (an open `<p>`
+/// with no closing tag or end-of-document) and checks the handler already
+/// received events before `finish()` is ever called — the probe that would
+/// catch a regression back to the old "parse the whole buffer at
+/// `finish()`" implementation.
+#[test]
+fn html_streaming_parser_feed_is_incremental() {
+    let delivered = std::rc::Rc::new(std::cell::RefCell::new(Vec::<html_fmt::OwnedEvent>::new()));
+    let delivered_for_handler = delivered.clone();
+    let mut parser = html_fmt::StreamingParser::new(move |e: html_fmt::OwnedEvent| {
+        delivered_for_handler.borrow_mut().push(e)
+    });
+    parser.feed(b"<html><body><p>hello world, this element is deliberately left unclosed");
+    let delivered_before_finish = !delivered.borrow().is_empty();
+    parser.finish();
+    assert_streaming_parser_is_incremental("html", delivered_before_finish).unwrap();
+}
 
 /// The streaming `Writer` must produce byte-identical output to builder
 /// `emit()` over every html fixture.
@@ -105,53 +237,4 @@ fn html_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
         "expected to check a substantial number of html fixtures, got {checked}"
     );
     assert_or_known_failure("html", "streaming_writer", result);
-}
-
-/// `StreamingParser` buffers all input and dispatches at `finish()` (see the
-/// module comment above). The one property that buffering can still get wrong
-/// is chunk-boundary handling, so this feeds every html fixture under the
-/// adversarial chunkings — including a split landing inside a multi-byte UTF-8
-/// character — and requires the delivered event sequence to equal `events()`
-/// over the whole input at once.
-///
-/// This is deliberately *not* claimed as a `Wired` `streaming_parser`
-/// capability: it verifies buffering integrity, not the incremental event
-/// delivery html-fmt documents it cannot provide.
-#[test]
-fn html_streaming_parser_buffering_survives_adversarial_chunking() {
-    let root = fixtures_root().join("html");
-    let mut checked = 0;
-    for entry in std::fs::read_dir(&root).expect("fixtures/html dir") {
-        let path = entry.unwrap().path();
-        if !path.is_dir() {
-            continue;
-        }
-        let Some(input_path) = find_input(&path) else {
-            continue;
-        };
-        let input = std::fs::read(&input_path).expect("read fixture input");
-        let bulk: Vec<html_fmt::OwnedEvent> = html_fmt::HtmlDoc::events(&input).collect();
-        checked += 1;
-
-        for (chunking_name, chunks) in adversarial_chunkings(&input) {
-            let mut streamed = Vec::new();
-            let mut parser =
-                html_fmt::StreamingParser::new(|e: html_fmt::OwnedEvent| streamed.push(e));
-            for chunk in chunks {
-                parser.feed(&chunk);
-            }
-            parser.finish();
-            assert_eq!(
-                bulk,
-                streamed,
-                "StreamingParser chunk buffering corrupted input for fixture {} under \
-                 chunking {chunking_name}",
-                path.display()
-            );
-        }
-    }
-    assert!(
-        checked > 50,
-        "expected to check a substantial number of html fixtures, got {checked}"
-    );
 }
