@@ -145,43 +145,52 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
 - Format crate design decisions (AST shape, event types, error model, span semantics)
   must be made for the widest plausible user, not the narrowest known consumer.
 
-### The adapter layer must never contain parsing or writing logic
+### The `rescribe` feature module must never contain parsing or writing logic
 
-**`rescribe-read-{format}` and `rescribe-write-{format}` are not the format library.**
-They are translators between the format's native `Ast` and rescribe's `Document`.
-All parsing and writing logic belongs in `{format}-fmt`.
+**Target architecture (decided 2026-08-05 — not yet the state of the existing ~44
+format crates; see "Adapter architecture: feature-flag migration" in TODO.md for
+migration status).** There is no separate `rescribe-read-{format}` /
+`rescribe-write-{format}` crate. Each standalone `{format}-fmt` crate carries an
+optional `rescribe` Cargo feature (default **off**) that pulls in `rescribe-core` as
+an optional dependency and exposes the AST↔`Document` translation directly, gated
+behind that feature — typically a `rescribe` module inside the crate
+(`src/rescribe.rs` or `src/rescribe/`). With the feature off, the crate has zero
+rescribe-awareness and does not pull in `rescribe-core` even as an unused optional
+dep — a consumer who never enables `rescribe` never sees it.
 
-**Rule:** Before writing a single line of `rescribe-read-{format}` or
-`rescribe-write-{format}`, the `{format}-fmt` standalone crate must already exist (or
-be created first in the same vertical). The adapter crate's only job is:
+The module is a translator between the format's native `Ast` and rescribe's
+`Document`. All parsing and writing logic still belongs in the crate's core
+(non-feature-gated) parser/emitter code — the `rescribe` module only ever calls into
+that code, it never tokenizes, parses, or emits format bytes itself:
 ```
-rescribe-read-{fmt}: {fmt}-fmt::parse(bytes) → {fmt}_fmt::Ast → rescribe Document
-rescribe-write-{fmt}: rescribe Document → {fmt}_fmt::Ast → {fmt}-fmt::emit(ast) → bytes
+{fmt}-fmt (feature = "rescribe"): to_document(bytes) → crate::parse(bytes) → crate::Ast → rescribe Document
+{fmt}-fmt (feature = "rescribe"): from_document(doc) → rescribe Document → crate::Ast → crate::emit(ast) → bytes
 ```
 
-**The violation is format parsing in production adapter code, not line count.**
-An adapter that does only AST→IR translation can legitimately be 500+ lines for a
-complex format (DOCX, PPTX). A 50-line adapter that calls `quick_xml::Reader` is
-broken regardless of its size. The correct test:
+**The violation is format parsing in the `rescribe`-feature module, not line count.**
+A `rescribe` module that does only AST→IR translation can legitimately be 500+ lines
+for a complex format (DOCX, PPTX). A 50-line `rescribe` module that calls
+`quick_xml::Reader` directly is broken regardless of its size. The correct test:
 
-> Does the adapter's **production code** contain any tokenizing, parsing, or emitting
-> of format bytes? If yes, that code belongs in the `-fmt` crate.
+> Does the `rescribe`-feature module's **production code** contain any tokenizing,
+> parsing, or emitting of format bytes? If yes, that code belongs in the crate's core
+> parser/emitter, not the `rescribe` module.
 
-**What counts as parsing/writing logic in production code:**
+**What counts as parsing/writing logic in the `rescribe` module's production code:**
 - Any `quick_xml::Reader`, `quick_xml::Writer`, `regex::Regex`, `zip::ZipArchive`, etc.
   called from functions that are not `#[cfg(test)]` and not in `[[bin]]` tools
-- A `parse_something_xml()` helper in the adapter that reads raw bytes
+- A `parse_something_xml()` helper in the module that reads raw bytes
 - Format-specific state machines, tokenizers, or emitters
 
 **What does NOT count as a violation:**
-- Large adapters doing complex AST→IR translation (DOCX, PPTX are genuinely complex)
+- Large `rescribe` modules doing complex AST→IR translation (DOCX, PPTX are genuinely complex)
 - `[[bin]]` binaries (e.g., `gen_fixtures`) using `zip` or `quick-xml` to construct test fixtures
 - `#[cfg(test)]` blocks using any dep to build test inputs
 
-**Catch it by reading the production functions:** open `src/lib.rs`, find non-test
-functions, check their imports. If you see `quick_xml::Reader`, that's a violation.
-`Cargo.toml` is a weaker signal because `[[bin]]` tools and tests legitimately need
-format-parser crates.
+**Catch it by reading the production functions:** open the `rescribe` module, find
+non-test functions, check their imports. If you see `quick_xml::Reader`, that's a
+violation. `Cargo.toml` is a weaker signal because `[[bin]]` tools and tests
+legitimately need format-parser crates.
 
 **This mistake is insidious because it "works" locally** — the rescribe tests pass. But
 it means the Rust ecosystem gets no reusable FB2/ODT/etc. library. Every Rust project
@@ -221,23 +230,27 @@ upstream. The ooxml-* crates are ours and held to the same standard.
 
 ## Architecture
 
+**Target state (decided 2026-08-05).** Existing crates have not all been migrated yet
+— see "Adapter architecture: feature-flag migration" in TODO.md.
+
 ```
 crates/
 ├── rescribe-core/           # Core IR only: Document, Node, Properties, Resource, traits
 ├── nodes/
 │   ├── rescribe-std/        # Standard node kinds (paragraph, heading, list, etc.)
 │   └── rescribe-math/       # Math node kinds (math_inline, fraction, matrix, etc.)
-├── readers/
-│   ├── rescribe-read-markdown/
-│   ├── rescribe-read-html/
-│   └── ...
-├── writers/
-│   ├── rescribe-write-markdown/
-│   ├── rescribe-write-html/
-│   └── ...
+├── formats/
+│   ├── markdown-fmt/        # rescribe feature (default off) exposes AST↔Document
+│   ├── html-fmt/            # rescribe feature (default off) exposes AST↔Document
+│   └── ...                  # one crate per format; no separate read/write adapter crates
 ├── rescribe-transforms/     # Standard transformers
 └── rescribe-cli/            # CLI tool
 ```
+
+There is no `readers/`/`writers/` split. A `{format}-fmt` crate is the format library
+first; enabling its `rescribe` feature adds the `Document` translation on top, in the
+same crate. See "The `rescribe` feature module must never contain parsing or writing
+logic" above.
 
 ## Key Types (in rescribe-core)
 
@@ -415,8 +428,12 @@ No new feature without a fixture.
 
 ## Conventions
 
-- Crate names: `rescribe-{name}` (no rhi prefix per ecosystem convention)
-- Reader/writer crates: `rescribe-read-{format}`, `rescribe-write-{format}`
+- Crate names: `rescribe-{name}` (no rhi prefix per ecosystem convention) for core/
+  transform/CLI crates; format crates are named `{format}` or `{format}-fmt` (see
+  "Naming convention" in TODO.md's "Architecture: Format Crate Split" section) and
+  carry the AST↔`Document` translation behind their own `rescribe` feature — there is
+  no separate `rescribe-read-{format}`/`rescribe-write-{format}` crate (target
+  architecture decided 2026-08-05; existing crates mid-migration, see TODO.md)
 - Node kinds: lowercase with underscores (`code_block`)
 - Format-specific kinds: `{format}:{name}` (`html:div`)
 - Properties: lowercase, colons for namespacing
@@ -465,7 +482,8 @@ Each standalone format crate must satisfy all of:
 - Skip for formats Pandoc cannot read (e.g. AsciiDoc)
 
 **Rescribe integration:**
-- Thin adapter ≤300 lines each side
+- `rescribe` feature (default off, optional `rescribe-core` dep): translation module
+  ≤300 lines each direction (to-`Document` / from-`Document`)
 - **100% construct coverage**
 
 See `docs/format-library-design.md` for the full spec.
@@ -531,9 +549,12 @@ Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`. Scope is optional but
   problem. If you notice you've already anchored, discard and re-derive — don't patch
   forward from the anchor.
 - Commit completed work in the same turn it finishes. Uncommitted work is lost work.
-- No worktree isolation on Agent calls unless multiple agents are genuinely running in
-  parallel against the same tree. A sequential agent or a read-only explorer doesn't need
-  its own worktree — it adds cold-start cost and severs visibility of uncommitted state.
+- No worktree isolation on Agent calls, full stop — no exception for parallel agents.
+  Isolation doesn't solve shared-file collisions, it only defers them to merge time. It
+  also forfeits any build/tool cache keyed on absolute source path — for a Rust project
+  specifically, cargo/rustc's incremental-compilation cache bakes in the checkout path, so
+  identical code built from two different worktrees can never share that cache: a
+  structural, unfixable cost, not an inconvenience.
 
 ## Disposition
 

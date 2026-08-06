@@ -475,16 +475,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codebook-tree-sitter-latex"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3ab764ede0961a43ee3121cd8a71dd01d355f836181ebf2ede04f4c24636ca0"
-dependencies = [
- "cc",
- "tree-sitter-language",
-]
-
-[[package]]
 name = "codex"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1908,6 +1898,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "latex-fmt"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-format-api",
+ "rescribe-std",
+]
+
+[[package]]
 name = "libbz2-rs-sys"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3011,6 +3010,7 @@ dependencies = [
  "jaq-std",
  "jats-fmt",
  "jira-fmt",
+ "latex-fmt",
  "man-fmt",
  "markua",
  "mediawiki-fmt",
@@ -3032,7 +3032,6 @@ dependencies = [
  "rescribe-math",
  "rescribe-read-commonmark",
  "rescribe-read-gfm",
- "rescribe-read-latex",
  "rescribe-read-markdown",
  "rescribe-read-markdown-strict",
  "rescribe-std",
@@ -3043,7 +3042,6 @@ dependencies = [
  "rescribe-write-dzslides",
  "rescribe-write-gfm",
  "rescribe-write-icml",
- "rescribe-write-latex",
  "rescribe-write-markdown",
  "rescribe-write-markdown-strict",
  "rescribe-write-ms",
@@ -3111,6 +3109,7 @@ dependencies = [
  "html-fmt",
  "jats-fmt",
  "jira-fmt",
+ "latex-fmt",
  "man-fmt",
  "markua",
  "mediawiki-fmt",
@@ -3135,7 +3134,6 @@ dependencies = [
  "rescribe-format-api",
  "rescribe-read-commonmark",
  "rescribe-read-gfm",
- "rescribe-read-latex",
  "rescribe-read-markdown",
  "rescribe-write-beamer",
  "rescribe-write-chunkedhtml",
@@ -3144,7 +3142,6 @@ dependencies = [
  "rescribe-write-dzslides",
  "rescribe-write-gfm",
  "rescribe-write-icml",
- "rescribe-write-latex",
  "rescribe-write-markdown",
  "rescribe-write-ms",
  "rescribe-write-revealjs",
@@ -3282,17 +3279,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rescribe-read-latex"
-version = "0.1.0"
-dependencies = [
- "codebook-tree-sitter-latex",
- "rescribe-core",
- "rescribe-std",
- "rescribe-write-latex",
- "tree-sitter",
-]
-
-[[package]]
 name = "rescribe-read-markdown"
 version = "0.1.0"
 dependencies = [
@@ -3381,14 +3367,6 @@ dependencies = [
 
 [[package]]
 name = "rescribe-write-icml"
-version = "0.1.0"
-dependencies = [
- "rescribe-core",
- "rescribe-std",
-]
-
-[[package]]
-name = "rescribe-write-latex"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
@@ -3640,7 +3618,6 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
- "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -3792,12 +3769,6 @@ dependencies = [
  "psm",
  "windows-sys",
 ]
-
-[[package]]
-name = "streaming-iterator"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
 name = "strict-num"
@@ -4170,26 +4141,6 @@ name = "toml_write"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
-
-[[package]]
-name = "tree-sitter"
-version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af1c71c1c4cc0920b20d6b0f6572e7682cd07a6a2faec71067a31fa394c586df"
-dependencies = [
- "cc",
- "regex",
- "regex-syntax",
- "serde_json",
- "streaming-iterator",
- "tree-sitter-language",
-]
-
-[[package]]
-name = "tree-sitter-language"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 
 [[package]]
 name = "tsv-fmt"
