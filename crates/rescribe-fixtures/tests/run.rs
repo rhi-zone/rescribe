@@ -159,9 +159,13 @@ fn mediawiki() {
 
 #[test]
 fn latex() {
+    // See fixtures/latex/COVERAGE.md for why the fixture suite's
+    // expectations look different from a typical format (raw_block-heavy:
+    // no built-in "standard commands" table, see crate::parse's
+    // resolution model).
     run_format_fixtures(&fixtures_root(), "latex", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_latex::parse(s)
+        latex_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
@@ -801,7 +805,7 @@ fn html_writer() {
 #[test]
 fn latex_writer() {
     run_format_writer_fixtures(&fixtures_root(), "latex", |doc| {
-        rescribe_write_latex::emit(doc)
+        latex_fmt::rescribe::emit(doc)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

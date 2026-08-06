@@ -1782,15 +1782,20 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 pub const NOT_YET_AUDITED: &[&str] = &[
     // No {format}-fmt crate exists at all — confirmed by directory listing
     // `crates/formats/` (2026-07-31): only `rescribe-read-{format}`/
-    // `rescribe-write-{format}` adapter crates exist for these ten. There is
-    // no standalone library to audit against the five-API contract this
-    // harness checks. `latex` is the sharpest case: `rescribe-read-latex`
-    // contains a 895-line hand-rolled parser (src/handwritten.rs) plus a
-    // separate 662-line tree-sitter-backed parser (src/treesitter.rs)
-    // directly in the adapter crate — confirmed by reading both files — a
-    // CLAUDE.md "adapter layer must never contain parsing or writing logic"
-    // violation, tracked in TODO.md, but out of scope to fix here (that
-    // requires extracting a real latex-fmt crate, not a harness-wiring task).
+    // `rescribe-write-{format}` adapter crates exist for these formats.
+    // There is no standalone library to audit against the five-API
+    // contract this harness checks.
+    //
+    // `latex` is no longer in this situation as of 2026-08-07: a real
+    // `latex-fmt` crate now exists (`crates/formats/latex-fmt`) exposing
+    // `parse()`/`events()`/`StreamingParser`/`emit()`/streaming `Writer`,
+    // replacing the former `rescribe-read-latex`/`rescribe-write-latex`
+    // adapter crates (deleted) that had the parsing/writing-logic-in-the-
+    // adapter violation this comment used to describe. It stays in this
+    // list, not `CAPABILITIES` below, only because *this specific
+    // harness's* per-API-mode audit criteria haven't been individually
+    // re-run against it yet — a narrower, accurate "not yet audited by
+    // this harness" rather than "no crate exists to audit."
     "latex",
     "csl-json",
     "pandoc-json",

@@ -380,16 +380,16 @@ pub mod jira {
 /// LaTeX format support.
 #[cfg(any(feature = "read-latex", feature = "write-latex"))]
 pub mod latex {
+    #[cfg(feature = "write-latex")]
+    pub use latex_fmt::rescribe::emit;
+    #[cfg(feature = "write-latex")]
+    pub use latex_fmt::rescribe::emit_full_document;
+    #[cfg(feature = "write-latex")]
+    pub use latex_fmt::rescribe::emit_with_options;
     #[cfg(feature = "read-latex")]
-    pub use rescribe_read_latex::parse;
+    pub use latex_fmt::rescribe::parse;
     #[cfg(feature = "read-latex")]
-    pub use rescribe_read_latex::parse_with_options;
-    #[cfg(feature = "write-latex")]
-    pub use rescribe_write_latex::emit;
-    #[cfg(feature = "write-latex")]
-    pub use rescribe_write_latex::emit_full_document;
-    #[cfg(feature = "write-latex")]
-    pub use rescribe_write_latex::emit_with_options;
+    pub use latex_fmt::rescribe::parse_with_options;
 }
 
 /// Man page (roff/troff) format support.

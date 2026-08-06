@@ -179,10 +179,36 @@ for both formats.
 | tei | 4 | 2 | U | quick-xml (tei-fmt) | production | – |
 | opml | 4 | 2 | U | quick-xml (opml-fmt) | – | harness |
 | ipynb | 4† | 2† | U | serde_json | production | harness |
-| latex | 4 | 2 | U | hand | production | harness |
+| latex | 2* | 2* | U | hand (`latex-fmt`) | fuzz (real cargo-fuzz run) | fuzz (real cargo-fuzz run) |
 
 ‡ Pandoc cannot read TEI (`--from tei` unsupported, output-only per
 `pandoc --list-input-formats`); oracle-harness stage is N/A, same as AsciiDoc.
+
+**latex `*` note (2026-08-07):** the crate was rebuilt from scratch this session as a
+standalone `latex-fmt` crate (catcode-driven tokenizer, `parse()`/`events()`/
+`StreamingParser`/`emit()`/streaming `Writer`, `rescribe` feature), replacing the former
+`rescribe-read-latex`/`rescribe-write-latex` adapter crates — see `crates/formats/latex-fmt/src/parse.rs`'s
+module docs for the full resolution model. This is a genuine architecture change, not a
+relocation: the new crate resolves a control sequence's structural meaning **only** from an
+in-document `\def`/`\newcommand`-family definition (real TeX grouping-scope semantics), with
+**no built-in "standard commands" table** — `\section`/`\textbf`/`\cite`/etc. raw-preserve with
+a fidelity warning unless the document itself locally defines them, which is virtually never
+the case in real documents. `fixtures/latex/` and `fixtures/writers/latex/` were rewritten to
+match (see `fixtures/latex/COVERAGE.md`'s "Scope of this suite" section) — 22 reader fixtures +
+4 pre-existing writer fixtures pass. `R`/`W` are marked `2` (fixtures authored and passing)
+rather than higher: no oracle-harness run against Pandoc yet for the new model, and the
+no-panic/roundtrip fuzz targets (`fuzz_latex_fmt_reader`/`fuzz_latex_fmt_roundtrip`) exist and
+were validated via a **standalone throwaway harness** (1.5M pseudo-random iterations, found and
+fixed one real bug — see commit `f001b1dd01`) rather than the actual `cargo fuzz`/libfuzzer
+infrastructure, which currently cannot build for this checkout's `fuzz/` crate at all due to a
+pre-existing, unrelated broken path dependency (`rescribe-read-ansi`, predates this session —
+confirmed via `git diff` against the commit before this session's changes). Resolving that
+breakage and running the real fuzz harness is what would justify `4-Fuzz`. Full `.cls`/`.sty`
+package resolution (so `\section` etc. would resolve the way a real LaTeX engine sees them) is
+a separate, much larger, explicitly deferred effort — build-time-vendored per-package-license-
+verified corpus + local-TeX-install probe + network fetch, bounded macro-expansion, persistent
+cache, all behind an additional opt-in feature — tracked in `TODO.md`, not started as of this
+entry.
 
 **docbook/jats/tei `CC:U` note:** these three are the formats the 2026-07-28 audit actually
 touched — the ones with a *measured* denominator swing (94→105→117, 106→109→133) and a
@@ -662,7 +688,7 @@ This section supersedes the "Formats still needing a standalone crate" line abov
 is the single inventory for this dimension; `TODO.md`'s DEBT section links here rather
 than repeating it.
 
-### Clean (41) — adapter is a thin AST↔IR translator on both sides
+### Clean (42) — adapter is a thin AST↔IR translator on both sides
 
 Backed by a repo-local `crates/formats/` crate: org, rst, asciidoc, textile, muse, t2t,
 markua, fountain, texinfo, bbcode, pod, haddock, man, mediawiki, creole, dokuwiki,
@@ -670,7 +696,8 @@ vimwiki, zimwiki, xwiki, twiki, tikiwiki, jira, docx (`ooxml-wml`), pptx (`ooxml
 xlsx (`ooxml-sml`), odt (`odf-fmt`), fb2 (`fb2-fmt`), docbook (`docbook-fmt`),
 jats (`jats-fmt`), tei (`tei-fmt`), opml (`opml-fmt`), endnotexml (`endnotexml-fmt`,
 2026-08-04), multimarkdown (`multimarkdown-fmt`, 2026-08-04), html (`html-fmt`),
-rtf (`rtf-fmt`), ris (`ris`), csv (`csv-fmt`), tsv (`tsv-fmt`), native (`native`).
+rtf (`rtf-fmt`), ris (`ris`), csv (`csv-fmt`), tsv (`tsv-fmt`), native (`native`),
+latex (`latex-fmt`, 2026-08-07).
 
 Backed by a sanctioned third-party library with no hand-rolled logic layered on top:
 epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
@@ -678,7 +705,7 @@ epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
 Residual `zip::` usage in `rescribe-read-odt` and `rescribe-fmt-ooxml`'s pptx module is
 confined to `#[cfg(test)]` fixture builders — verified, not a violation.
 
-### Violating (11)
+### Violating (10)
 
 `-fmt?` = a usable standalone crate exists in `crates/formats/`. `R`/`W` = reader /
 writer adapter contains parsing / emitting logic. Tier is eyeballed from adapter line
@@ -692,10 +719,20 @@ count and the fraction that is format syntax rather than AST↔IR translation.
 | markdown | yes | no | **yes** | large | reader dispatches to `commonmark_fmt`/`pulldown_cmark`; writer (1606 ln) fully hand-rolled |
 | gfm | (pulldown) | no | **yes** | large | reader walks `pulldown_cmark` events (sanctioned); writer (350 ln) hand-rolled with no backing crate |
 | markdown-strict | (pulldown) | no | **yes** | large | same shape as gfm; writer 377 ln |
-| latex | **no** | **yes** | **yes** | large | worst case: `handwritten.rs` (895 ln) is a full recursive-descent LaTeX parser *inside the reader adapter*, plus a 662-ln tree-sitter backend; writer `builder.rs` (717 ln) is a hand-written emitter |
 | bibtex | **no** | **yes** | no | medium | reader calls third-party `biblatex::Bibliography::parse` directly (still no standalone `bibtex-fmt` wrapper crate — R violation stands); writer's hand-rolled BibTeX syntax + escaping **removed 2026-08-04** — now builds a `biblatex::Entry`/`Bibliography` and delegates emission to `Entry::to_bibtex_string()`/`Bibliography::to_bibtex_string()` |
 | biblatex | **no** | **yes** | no | medium | same as bibtex: reader still calls `biblatex::Bibliography::parse` directly; writer delegates to `Entry::to_biblatex_string()`/`Bibliography::to_biblatex_string()` as of 2026-08-04 |
 | csl-json | **no** | **yes** | **yes** | large | the CSL-JSON *schema* (`CslItem`/`CslName`/`CslDate`) lives in the adapter, both sides, over raw `serde_json` |
+
+`latex` moved to Clean 2026-08-07: `latex-fmt` built from scratch (catcode-driven
+tokenizer, own AST, `parse()`/`events()`/`StreamingParser`/`emit()`/streaming `Writer`),
+replacing `rescribe-read-latex` (895-ln `handwritten.rs` + 662-ln tree-sitter backend) and
+`rescribe-write-latex` (717-ln hand-written `builder.rs`) — both deleted. `rescribe-read-latex`'s
+handwritten backend used a built-in "standard LaTeX commands" table (`\section` →
+`heading`, `\textbf` → `strong`, etc.); `latex-fmt`'s resolution model deliberately has
+none (see this file's `latex *` note above and `crates/formats/latex-fmt/src/parse.rs`) —
+a genuine capability trade **and** a genuine losslessness improvement (nothing is ever
+silently dropped or guessed at without either an in-document definition backing it or a
+raw-preserved fallback with a fidelity warning), not a straightforward like-for-like port.
 
 `endnotexml` moved to Clean 2026-08-04: `endnotexml-fmt` extracted (see TODO.md), both
 adapters rewritten as thin `endnotexml_fmt::EndNoteDoc` <-> IR translators, no `quick_xml`

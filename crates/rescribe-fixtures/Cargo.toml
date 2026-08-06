@@ -22,7 +22,7 @@ rescribe-read-gfm = { workspace = true }
 
 # Pandoc corpus harness (tests/pandoc.rs)
 rescribe-fmt-pandoc-json = { workspace = true }
-rescribe-read-latex = { workspace = true }
+latex-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 typst-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 rescribe-fmt-ipynb = { workspace = true }
 rescribe-fmt-csl-json = { workspace = true }
@@ -85,7 +85,6 @@ zip = { workspace = true }
 rescribe-write-markdown = { workspace = true }
 rescribe-write-commonmark = { workspace = true }
 rescribe-write-gfm = { workspace = true }
-rescribe-write-latex = { workspace = true }
 
 # Tier D presentation writers (tests/run.rs writer smoke tests)
 rescribe-write-beamer = { workspace = true }

@@ -50,10 +50,11 @@
 //! Similarly, `~` (TeX catcode 13, "active") and `^`/`_` (catcodes 7/8,
 //! meaningful only inside math mode) are tokenized as ordinary [`Tok::Text`]
 //! characters rather than modeled as distinct catcode classes: math content
-//! is captured as a raw source span by the semantic layer (matching this
-//! codebase's existing `rescribe-read-latex` precedent — see
-//! `crates/readers/rescribe-read-latex`), so no consumer needs the
-//! tokenizer to resolve math-internal catcodes.
+//! is captured as a raw source span by the semantic layer (matching the
+//! precedent set by the former `rescribe-read-latex` adapter crate, since
+//! deleted and replaced by this crate — see `crate::rescribe`'s module
+//! docs), so no consumer needs the tokenizer to resolve math-internal
+//! catcodes.
 //!
 //! # Zero-copy contract
 //!

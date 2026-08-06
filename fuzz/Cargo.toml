@@ -19,9 +19,6 @@ features = ["pulldown"]
 path = "../crates/formats/html-fmt"
 features = ["rescribe", "read", "write"]
 
-[dependencies.rescribe-read-latex]
-path = "../crates/readers/rescribe-read-latex"
-
 [dependencies.rescribe-read-org]
 path = "../crates/readers/rescribe-read-org"
 
@@ -339,13 +336,6 @@ bench = false
 [[bin]]
 name = "fuzz_html_reader"
 path = "fuzz_targets/html_reader.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "fuzz_latex_reader"
-path = "fuzz_targets/latex_reader.rs"
 test = false
 doc = false
 bench = false

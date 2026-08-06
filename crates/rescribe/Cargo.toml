@@ -129,8 +129,8 @@ read-jira = ["dep:jira-fmt", "jira-fmt/rescribe", "jira-fmt/read"]
 write-jira = ["dep:jira-fmt", "jira-fmt/rescribe", "jira-fmt/write"]
 format-jira = ["read-jira", "write-jira"]
 
-read-latex = ["dep:rescribe-read-latex"]
-write-latex = ["dep:rescribe-write-latex"]
+read-latex = ["dep:latex-fmt", "latex-fmt/rescribe", "latex-fmt/read"]
+write-latex = ["dep:latex-fmt", "latex-fmt/rescribe", "latex-fmt/write"]
 format-latex = ["read-latex", "write-latex"]
 
 read-man = ["dep:man-fmt", "man-fmt/rescribe", "man-fmt/read"]
@@ -350,7 +350,7 @@ rescribe-math = { workspace = true, optional = true }
 # Readers (optional)
 rescribe-read-markdown = { workspace = true, optional = true }
 html-fmt = { workspace = true, optional = true }
-rescribe-read-latex = { workspace = true, optional = true }
+latex-fmt = { workspace = true, optional = true }
 org-fmt = { workspace = true, optional = true }
 rescribe-fmt-pdf = { workspace = true, optional = true }
 rescribe-fmt-ipynb = { workspace = true, optional = true }
@@ -408,7 +408,6 @@ rescribe-fmt-pandoc-json = { workspace = true, optional = true }
 
 # Writers (optional)
 rescribe-write-markdown = { workspace = true, optional = true }
-rescribe-write-latex = { workspace = true, optional = true }
 rescribe-write-plaintext = { workspace = true, optional = true }
 rescribe-write-revealjs = { workspace = true, optional = true }
 rescribe-write-slidy = { workspace = true, optional = true }

@@ -75,7 +75,7 @@ fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
         "html" => html_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
-        "latex" => rescribe_read_latex::parse(s)
+        "latex" => latex_fmt::rescribe::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
         "org" => org_fmt::rescribe::parse(s)
