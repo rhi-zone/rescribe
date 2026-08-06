@@ -1,7 +1,9 @@
 //! ANSI terminal escape sequence parser, emitter, and AST.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-ansi` and `rescribe-write-ansi` as thin adapter layers.
+//! Standalone crate with no rescribe dependency by default. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `ansi_fmt::AnsiDoc` to and from rescribe's
+//! `Document` IR.
 //!
 //! # API
 //!
@@ -59,6 +61,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export the most-used types at the crate root.

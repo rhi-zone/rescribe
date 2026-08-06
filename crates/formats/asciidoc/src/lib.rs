@@ -1,7 +1,9 @@
 //! AsciiDoc parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-asciidoc` and `rescribe-write-asciidoc` as thin adapter layers.
+//! Standalone crate with **no rescribe dependency by default**. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `asciidoc::AsciiDoc` to and from rescribe's
+//! `Document` IR.
 //!
 //! # API layers
 //!
@@ -53,6 +55,8 @@ pub mod batch;
 mod emit;
 mod events;
 mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-exports

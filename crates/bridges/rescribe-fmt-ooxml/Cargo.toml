@@ -1,0 +1,82 @@
+[package]
+name = "rescribe-fmt-ooxml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "DOCX/PPTX/XLSX (OOXML) reader+writer IR adapters for rescribe"
+
+[features]
+default = ["docx", "pptx", "xlsx"]
+# Each feature gates one format's read+write translation logic (AST <->
+# rescribe Document). Default on: unlike opml-fmt's `rescribe` feature (off
+# by default, because opml-fmt is a general-purpose non-rescribe library),
+# this crate has no non-rescribe purpose — it exists solely as rescribe's
+# OOXML IR adapter, wrapping the workspace's own ooxml-* schema crates.
+# There is no consumer who wants this crate without its translation logic,
+# so gating it off by default would only add friction. Each feature still
+# exists (rather than one flat "on" switch) so a caller who only needs docx
+# doesn't pull in ooxml-pml/ooxml-dml/ooxml-sml.
+#
+# `serde_json` and `zip` are pulled in per-format too: both are used only by
+# fixture-generation `[[bin]]` tools (not the reader/writer production code),
+# and `[[bin]]` targets can't draw on `[dev-dependencies]` (only examples/
+# tests/benches can), so they're modelled as optional regular deps gated by
+# the feature whose bin actually uses them, matching real usage below.
+docx = ["dep:ooxml-wml"]
+pptx = ["dep:ooxml-pml", "dep:ooxml-dml", "dep:serde_json", "dep:zip"]
+xlsx = ["dep:ooxml-sml", "dep:serde_json"]
+
+[dependencies]
+# rescribe-core/rescribe-std are unconditional (not optional-per-format):
+# this crate is inherently rescribe-specific (it is rescribe's IR adapter
+# layer for OOXML, not a standalone format library), so there is no
+# non-rescribe consumer to gate rescribe-core away from — same reasoning
+# as the bibtex/pdf/csl-json rescribe-fmt-* consolidation.
+rescribe-core.workspace = true
+rescribe-std.workspace = true
+
+# ooxml-wml is used only by the docx reader/writer (word/paragraph/run
+# types) — optional, activated only by the `docx` feature so an xlsx- or
+# pptx-only caller never links it.
+ooxml-wml = { workspace = true, optional = true }
+# ooxml-pml (slide/shape types) and ooxml-dml (DrawingML text run/paragraph
+# types used inside slides) are both used only by the pptx reader/writer —
+# optional, activated only by the `pptx` feature.
+ooxml-pml = { workspace = true, optional = true }
+ooxml-dml = { workspace = true, optional = true }
+# ooxml-sml is used only by the xlsx reader/writer — optional, activated
+# only by the `xlsx` feature.
+ooxml-sml = { workspace = true, optional = true }
+
+# Used by the pptx test module (zip-patching an XML slide part) and by the
+# gen_pptx_fixtures bin (zip-patching for bullet/numbered-list fixtures).
+zip = { workspace = true, optional = true }
+# Used by the gen_pptx_fixtures and gen_xlsx_fixtures bins to serialise
+# fixture `expected.json` files.
+serde_json = { workspace = true, optional = true }
+
+[[example]]
+name = "docx_probe_fixtures"
+path = "examples/docx_probe_fixtures.rs"
+required-features = ["docx"]
+
+[[example]]
+name = "gen_docx_fixtures"
+path = "examples/gen_docx_fixtures.rs"
+required-features = ["docx"]
+
+[[example]]
+name = "docx_gen_fixtures"
+path = "examples/docx_gen_fixtures.rs"
+required-features = ["docx"]
+
+[[bin]]
+name = "gen_pptx_fixtures"
+path = "src/bin/gen_pptx_fixtures.rs"
+required-features = ["pptx"]
+
+[[bin]]
+name = "gen_xlsx_fixtures"
+path = "src/bin/gen_xlsx_fixtures.rs"
+required-features = ["xlsx"]

@@ -5,3 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "CSV parser, AST, and builder — no rescribe dependency"
+
+[features]
+# AST<->rescribe::Document translation. Off by default so consumers who only
+# want the standalone CSV library never pull in rescribe-core. csv-fmt has no
+# per-API-mode features yet (unlike the other format crates), so this feature
+# gates the whole translation module on its own — no `read`/`write` umbrella
+# features exist to compose it from.
+rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
+
+[dependencies]
+rescribe-core = { workspace = true, optional = true }
+rescribe-std = { workspace = true, optional = true }

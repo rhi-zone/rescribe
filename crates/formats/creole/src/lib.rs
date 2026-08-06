@@ -1,7 +1,9 @@
 //! Creole wiki parser, AST, and builder.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-creole` and `rescribe-write-creole` as thin adapter layers.
+//! Standalone crate with **no rescribe dependency by default**. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `creole::CreoleDoc` to and from rescribe's
+//! `Document` IR.
 
 pub mod ast;
 pub mod emit;
@@ -12,6 +14,9 @@ pub mod events;
 
 #[cfg(feature = "reader-batch")]
 pub mod batch;
+
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 #[cfg(feature = "writer-streaming")]
 pub mod writer;

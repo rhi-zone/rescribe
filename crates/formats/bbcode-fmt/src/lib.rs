@@ -6,8 +6,10 @@
 //! `Cow`-bearing variant added without updating this function is a compile
 //! error rather than a silent soundness hazard. See `src/events.rs`.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-bbcode` and `rescribe-write-bbcode` as thin adapter layers.
+//! Standalone crate with **no rescribe dependency by default**. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `bbcode_fmt::BbcodeDoc` to and from
+//! rescribe's `Document` IR.
 //!
 //! # Public API
 //!
@@ -26,6 +28,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 pub mod writer;
 
 // Re-export the most-used public types at crate root for convenience.

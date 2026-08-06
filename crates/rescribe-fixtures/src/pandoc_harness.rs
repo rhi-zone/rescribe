@@ -551,9 +551,7 @@ pub fn run_entry(
             match pandoc_to_json(pbin, entry.pandoc_from, &file) {
                 None => (None, 0, 0, vec![]),
                 Some(json) => {
-                    let ref_doc = rescribe_fmt_pandoc_json::parse(&json)
-                        .map(|r| r.value)
-                        .ok();
+                    let ref_doc = rescribe_fmt_pandoc_json::parse(&json).map(|r| r.value).ok();
                     match ref_doc {
                         None => (None, 0, 0, vec![]),
                         Some(ref_doc) => {

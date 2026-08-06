@@ -1,11 +1,15 @@
 //! CSV (Comma-Separated Values) parser, AST, and emitter.
 //!
-//! Standalone crate with no rescribe dependency.
-//! Used by `rescribe-read-csv` and `rescribe-write-csv` as thin adapter layers.
+//! Standalone crate with **no rescribe dependency by default**. The optional
+//! `rescribe` feature (default off) adds `crate::rescribe::{parse, emit}`, a
+//! thin adapter that translates `csv_fmt::CsvDoc` to and from rescribe's
+//! `Document` IR.
 
 pub mod ast;
 pub mod emit;
 pub mod parse;
+#[cfg(feature = "rescribe")]
+pub mod rescribe;
 
 pub use ast::{Cell, CsvDoc, Diagnostic, Row, Severity, Span};
 pub use emit::emit;
