@@ -1,10 +1,10 @@
 [package]
-name = "rescribe-write-bibtex"
+name = "rescribe-fmt-bibtex"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "BibTeX writer for rescribe"
+description = "BibTeX reader and writer for rescribe"
 
 [dependencies]
 biblatex = "0.11"

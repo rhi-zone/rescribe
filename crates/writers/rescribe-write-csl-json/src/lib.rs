@@ -30,7 +30,7 @@ fn collect_items(node: &Node, items: &mut Vec<CslItem>) {
 
     // Legacy shapes, kept for backwards compatibility with documents built
     // by hand or by an older reader version (not produced by
-    // `rescribe-read-csl-json`/`rescribe-read-bibtex` any more).
+    // `rescribe-read-csl-json`/`rescribe-fmt-bibtex` any more).
     if node.kind.as_str() == "csl:item"
         && let Some(item) = extract_csl_item(node)
     {

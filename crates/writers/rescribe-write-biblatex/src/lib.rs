@@ -6,7 +6,7 @@
 //! Actual BibLaTeX syntax (entry headers, field escaping, brace wrapping) is
 //! produced by the `biblatex` crate's own `Entry::to_biblatex_string()` /
 //! `Bibliography::to_biblatex_string()` (the same crate `rescribe-read-biblatex`
-//! and `rescribe-read-bibtex` use to parse). This adapter's only job is
+//! and `rescribe-fmt-bibtex` use to parse). This adapter's only job is
 //! building a `biblatex::Entry` from the rescribe IR shapes it accepts — it
 //! does not hand-roll escaping or field/entry syntax itself.
 

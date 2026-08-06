@@ -92,7 +92,7 @@ Plus `field:scheme` (identifier scheme, e.g. `doi`/`isbn`/`issn`/`url`, for fiel
 
 ## Amendment (2026-07-28): four pre-existing readers migrated after the fact
 
-`rescribe-read-bibtex`, `rescribe-read-csl-json`, `rescribe-read-ris`, and
+`rescribe-fmt-bibtex`, `rescribe-read-csl-json`, `rescribe-read-ris`, and
 `rescribe-read-endnotexml` (plus their writers) predated this decision and used an unrelated
 flat `definition_list` + string-properties shape, discovered as a gap while the DocBook/JATS/
 TEI verticals were being wired up (see TODO.md's "Discovered gap: pre-existing bibliography

@@ -1,5 +1,5 @@
 {
-  "description": "EDTF uncertain-date marker (?) on a single `date` field is captured both as bibtex:date-uncertain and verbatim as bibtex:raw-date, so rescribe-write-bibtex can splice the marker back into year/month/day fields on emission",
+  "description": "EDTF uncertain-date marker (?) on a single `date` field is captured both as bibtex:date-uncertain and verbatim as bibtex:raw-date, so rescribe-fmt-bibtex can splice the marker back into year/month/day fields on emission",
   "category": "rare",
   "assertions": [
     { "path": "/0",   "kind": "bibliography" },

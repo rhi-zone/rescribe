@@ -1,4 +1,4 @@
-//! BibTeX writer for rescribe.
+//! BibTeX writer implementation.
 //!
 //! Emits `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes
 //! (see `rescribe_std::node` and ADR 0005 in the rescribe repo) as BibTeX
@@ -6,10 +6,10 @@
 //!
 //! Actual BibTeX syntax (entry headers, field escaping, brace wrapping) is
 //! produced by the `biblatex` crate's own `Entry::to_bibtex_string()` /
-//! `Bibliography::to_bibtex_string()` (the same crate `rescribe-read-bibtex`
-//! uses to parse). This adapter's only job is building a `biblatex::Entry`
-//! from the rescribe IR shapes it accepts — it does not hand-roll escaping
-//! or field/entry syntax itself.
+//! `Bibliography::to_bibtex_string()` (the same crate the `read` module uses
+//! to parse). This adapter's only job is building a `biblatex::Entry` from
+//! the rescribe IR shapes it accepts — it does not hand-roll escaping or
+//! field/entry syntax itself.
 
 use biblatex::{Bibliography, Chunk, Date, DateValue, Datetime, Entry, EntryType, Spanned};
 use rescribe_core::{
@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 /// Legacy flat entry kind, still accepted for backwards compatibility with
 /// documents built by hand or by an older reader version (not produced by
-/// `rescribe-read-bibtex` any more, which now emits `bibliography_entry`).
+/// the `read` module any more, which now emits `bibliography_entry`).
 const BIBTEX_ENTRY: &str = "bibtex:entry";
 
 /// Emit a document as BibTeX.
@@ -247,8 +247,8 @@ fn biblatex_only_misc_downgrade_warning(ty: &EntryType, name: &str) -> Option<Fi
 /// Set a field to a single plain (non-verbatim) chunk if `value` is
 /// non-empty. Using `Chunk::Normal` (rather than `Entry::set_as::<String>`,
 /// which produces `Chunk::Verbatim` and gets double-braced by `biblatex`'s
-/// writer) matches the brace/escaping style `rescribe-read-bibtex` reads
-/// back via `format_verbatim()` either way.
+/// writer) matches the brace/escaping style the `read` module reads back via
+/// `format_verbatim()` either way.
 fn set_field(entry: &mut Entry, name: &str, value: &str) {
     if value.is_empty() {
         return;
@@ -394,8 +394,8 @@ fn is_bibtex_type(s: &str) -> bool {
     )
 }
 
-/// Build a `biblatex::Entry` from a `bibliography_entry` node (see
-/// `rescribe-read-bibtex`'s `convert_entry`). `bibtex:field` on each
+/// Build a `biblatex::Entry` from a `bibliography_entry` node (see the
+/// `read` module's `convert_entry`). `bibtex:field` on each
 /// `bibliography_field` child (set by every field-producing arm of the
 /// reader) names the exact source field; `field:role` is the fallback for a
 /// field built by a non-BibTeX producer (a cross-format conversion into
@@ -462,9 +462,9 @@ fn build_bibliography_entry(node: &Node) -> (Entry, EntrySplice, Option<Fidelity
 }
 
 /// Join an `author`/`editor` field's direct `TEXT` children (given name,
-/// prefix, family name, suffix — see `rescribe-read-bibtex`'s
-/// `person_field`, which emits one `TEXT` node per non-empty `Person` part)
-/// with spaces, the inverse of that same split.
+/// prefix, family name, suffix — see the `read` module's `person_field`,
+/// which emits one `TEXT` node per non-empty `Person` part) with spaces, the
+/// inverse of that same split.
 fn person_field_text(node: &Node) -> String {
     node.children
         .iter()
@@ -480,8 +480,8 @@ fn person_field_text(node: &Node) -> String {
 /// Concatenate a field's descendant `TEXT` node content (depth-first).
 /// `bibliography_field` children are always ordinary inline nodes (see
 /// ADR 0005), but `biblatex` doesn't parse LaTeX markup into structured
-/// chunks in the first place (`rescribe-read-bibtex` only ever produces a
-/// single `TEXT` child per field), so flattening is lossless for BibTeX
+/// chunks in the first place (the `read` module only ever produces a single
+/// `TEXT` child per field), so flattening is lossless for BibTeX
 /// specifically even though the IR shape supports richer nesting.
 fn flatten_field_text(node: &Node) -> String {
     let mut out = String::new();

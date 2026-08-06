@@ -1,5 +1,5 @@
 {
-  "description": "A non-standard entry type (@preprint, not in biblatex::EntryType's known vocabulary) is captured verbatim as biblatex:type. Previously this used biblatex::EntryType's Debug rendering of the Unknown variant (\"unknown(\\\"preprint\\\")\") instead of the literal name — fixed to match rescribe-read-bibtex's entry_type_string handling",
+  "description": "A non-standard entry type (@preprint, not in biblatex::EntryType's known vocabulary) is captured verbatim as biblatex:type. Previously this used biblatex::EntryType's Debug rendering of the Unknown variant (\"unknown(\\\"preprint\\\")\") instead of the literal name — fixed to match rescribe-fmt-bibtex's entry_type_string handling",
   "category": "rare",
   "assertions": [
     { "path": "/0",   "kind": "definition_list" },

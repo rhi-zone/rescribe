@@ -121,7 +121,7 @@ impl StringOrInt {
 
 /// CSL-JSON variable names with no `field:role` equivalent, mapped to a
 /// `misc` field tagged with the original variable name via `csl:field` (the
-/// same round-trip mechanism as `rescribe-read-bibtex`'s `bibtex:field`).
+/// same round-trip mechanism as `rescribe-fmt-bibtex`'s `bibtex:field`).
 /// Everything not explicitly modeled (author/editor/title/container-
 /// title/publisher/publisher-place/edition/volume/issue/page/DOI/URL/ISBN/
 /// ISSN/issued) goes through this generic path.
@@ -290,7 +290,7 @@ enum DateResult {
 /// map. `date-parts` is `[[year, month, day]]` for a single date (a second
 /// inner array makes it a range, with no single date to extract — kept as
 /// text instead of guessing which end is "the" date, same as
-/// `rescribe-read-bibtex`'s date-range handling); `literal`/`raw` free-text
+/// `rescribe-fmt-bibtex`'s date-range handling); `literal`/`raw` free-text
 /// dates (e.g. `"circa 1850"`) have no structured parse and stay as text.
 fn convert_date(date: &CslDate) -> DateResult {
     if let Some(parts) = &date.date_parts {

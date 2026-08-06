@@ -124,10 +124,12 @@ pub mod biblatex {
 /// BibTeX format support.
 #[cfg(any(feature = "read-bibtex", feature = "write-bibtex"))]
 pub mod bibtex {
-    #[cfg(feature = "read-bibtex")]
-    pub use rescribe_read_bibtex::parse;
     #[cfg(feature = "write-bibtex")]
-    pub use rescribe_write_bibtex::emit;
+    pub use rescribe_fmt_bibtex::emit;
+    #[cfg(feature = "write-bibtex")]
+    pub use rescribe_fmt_bibtex::emit_with_options;
+    #[cfg(feature = "read-bibtex")]
+    pub use rescribe_fmt_bibtex::parse;
 }
 
 /// Chunked HTML format support (writer only).

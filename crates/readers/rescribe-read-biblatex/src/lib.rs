@@ -196,7 +196,7 @@ fn convert_entry(entry: &biblatex::Entry, _warnings: &mut Vec<FidelityWarning>) 
 /// `biblatex::EntryType::new`) custom type name, which `Display` doesn't use
 /// — `format!("{:?}", ...)` (the previous implementation here) fell through
 /// to `Debug`, producing `"unknown(\"dataset\")"` instead of `"dataset"` for
-/// any custom entry type. Mirrors `rescribe-read-bibtex`'s
+/// any custom entry type. Mirrors `rescribe-fmt-bibtex`'s
 /// `entry_type_string`.
 fn entry_type_string(entry_type: &EntryType) -> String {
     match entry_type {

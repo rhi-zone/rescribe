@@ -1,26 +1,4 @@
-//! BibTeX reader for rescribe.
-//!
-//! Parses BibTeX/BibLaTeX bibliography files into rescribe's document IR,
-//! using the `bibliography`/`bibliography_entry`/`bibliography_field` node
-//! kinds (see `rescribe_std::node` and ADR 0005 in the rescribe repo).
-//!
-//! # Example
-//!
-//! ```
-//! use rescribe_read_bibtex::parse;
-//!
-//! let bibtex = r#"
-//! @article{smith2020,
-//!   author = {John Smith},
-//!   title = {A Great Paper},
-//!   journal = {Nature},
-//!   year = {2020},
-//! }
-//! "#;
-//!
-//! let result = parse(bibtex).unwrap();
-//! let doc = result.value;
-//! ```
+//! BibTeX reader implementation.
 
 use biblatex::{ChunksExt, DateValue, EntryType, PermissiveType, Person};
 use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
@@ -130,8 +108,8 @@ fn convert_entry(entry: &biblatex::Entry, warnings: &mut Vec<FidelityWarning>) -
                 // fields), markers and all. Not required for the writer to
                 // round-trip `bibtex:date-uncertain`/`bibtex:date-approximate`
                 // (those two booleans already fully determine the `?`/`~`/`%`
-                // marker `rescribe-write-bibtex` re-emits), but kept for any
-                // consumer that wants the exact original text.
+                // marker the writer re-emits), but kept for any consumer that
+                // wants the exact original text.
                 if let Some(chunks) = entry.get("date") {
                     entry_node = entry_node.prop("bibtex:raw-date", chunks.format_verbatim());
                 }

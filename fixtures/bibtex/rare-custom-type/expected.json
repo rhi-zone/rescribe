@@ -1,5 +1,5 @@
 {
-  "description": "A non-standard entry type (@preprint, not in biblatex::EntryType's known vocabulary) is captured verbatim as bibtex:entry-type, so rescribe-write-bibtex can splice it back over the @misc{ header biblatex::Entry::to_bibtex_string() would otherwise collapse it to",
+  "description": "A non-standard entry type (@preprint, not in biblatex::EntryType's known vocabulary) is captured verbatim as bibtex:entry-type, so rescribe-fmt-bibtex can splice it back over the @misc{ header biblatex::Entry::to_bibtex_string() would otherwise collapse it to",
   "category": "rare",
   "assertions": [
     { "path": "/0",   "kind": "bibliography" },
