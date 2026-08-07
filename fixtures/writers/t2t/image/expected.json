@@ -1,0 +1,4 @@
+{
+  "description": "An image emits with its URL",
+  "output_contains": ["photo.png"]
+}

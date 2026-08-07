@@ -1,0 +1,4 @@
+{
+  "description": "A blockquote emits tab-indented",
+  "output_contains": ["quoted text"]
+}

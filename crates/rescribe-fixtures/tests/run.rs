@@ -963,3 +963,12 @@ fn pod_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn t2t_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "t2t", |doc| {
+        t2t::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

@@ -1,0 +1,4 @@
+{
+  "description": "A link emits as [label url]",
+  "output_contains": ["[click http://example.com]"]
+}

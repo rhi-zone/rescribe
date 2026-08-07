@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits with matching == delimiters",
+  "output_contains": ["== Subtitle =="]
+}

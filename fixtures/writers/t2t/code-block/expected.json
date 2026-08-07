@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits fenced with triple backticks",
+  "output_contains": ["```", "fn main() {}"]
+}
