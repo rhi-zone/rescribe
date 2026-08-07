@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits as a fenced code block with the language tag preserved",
+  "output_contains": ["```rust", "fn main() {}", "```"]
+}

@@ -33,7 +33,7 @@ ooxml-sml = { workspace = true }
 ooxml-wml = { workspace = true }
 ooxml-pml = { workspace = true }
 rescribe-fmt-pdf = { workspace = true }
-multimarkdown-fmt = { workspace = true, features = ["rescribe", "read"] }
+multimarkdown-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 
 # Cross-API harness (tests/streaming_apis.rs): drives events()/StreamingParser/
 # streaming-writer directly against the standalone -fmt crates, not just the

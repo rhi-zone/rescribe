@@ -1,0 +1,4 @@
+{
+  "description": "A footnote reference and its definition emit MultiMarkdown footnote markup",
+  "output_contains": ["Footnote text"]
+}

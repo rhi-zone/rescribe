@@ -364,7 +364,9 @@ mod write {
         };
 
         let mut warnings = Vec::new();
-        let blocks = nodes_to_blocks(&doc.content.children, &mut warnings);
+        let mut footnotes = Vec::new();
+        let mut blocks = nodes_to_blocks(&doc.content.children, &mut warnings, &mut footnotes);
+        blocks.extend(footnotes);
 
         let mmd_doc = MmdDoc {
             metadata,
@@ -385,19 +387,30 @@ mod write {
         ));
     }
 
-    fn nodes_to_blocks(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<MmdBlock> {
-        nodes.iter().map(|n| node_to_block(n, warnings)).collect()
+    fn nodes_to_blocks(
+        nodes: &[Node],
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> Vec<MmdBlock> {
+        nodes
+            .iter()
+            .map(|n| node_to_block(n, warnings, footnotes))
+            .collect()
     }
 
-    fn node_to_block(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdBlock {
+    fn node_to_block(
+        n: &Node,
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> MmdBlock {
         match n.kind.as_str() {
             "paragraph" => MmdBlock::Paragraph {
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "heading" => MmdBlock::Heading {
                 level: n.props.get_int(prop::LEVEL).unwrap_or(1) as u8,
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 anchor: n.props.get_str(prop::ID).map(str::to_string),
                 span: Span::NONE,
             },
@@ -411,7 +424,7 @@ mod write {
                 span: Span::NONE,
             },
             "blockquote" => MmdBlock::Blockquote {
-                blocks: nodes_to_blocks(&n.children, warnings),
+                blocks: nodes_to_blocks(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "list" => {
@@ -421,7 +434,7 @@ mod write {
                     .iter()
                     .filter(|c| c.kind.as_str() == node::LIST_ITEM)
                     .map(|item| MmdListItem {
-                        blocks: nodes_to_blocks(&item.children, warnings),
+                        blocks: nodes_to_blocks(&item.children, warnings, footnotes),
                         span: Span::NONE,
                         checked: item.props.get_bool(prop::CHECKED),
                     })
@@ -448,12 +461,12 @@ mod write {
                     .filter(|c| c.kind.as_str() == node::TABLE_ROW);
                 let head = rows
                     .next()
-                    .map(|r| table_row(r, warnings))
+                    .map(|r| table_row(r, warnings, footnotes))
                     .unwrap_or(MmdTableRow {
                         cells: Vec::new(),
                         span: Span::NONE,
                     });
-                let rows = rows.map(|r| table_row(r, warnings)).collect();
+                let rows = rows.map(|r| table_row(r, warnings, footnotes)).collect();
                 MmdBlock::Table {
                     alignments: Vec::new(),
                     head,
@@ -463,7 +476,7 @@ mod write {
             }
             "footnote_def" => MmdBlock::FootnoteDefinition {
                 label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
-                blocks: nodes_to_blocks(&n.children, warnings),
+                blocks: nodes_to_blocks(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "definition_list" => {
@@ -471,14 +484,17 @@ mod write {
                 for child in &n.children {
                     match child.kind.as_str() {
                         "definition_term" => items.push(MmdDefinitionListItem {
-                            term: nodes_to_inlines(&child.children, warnings),
+                            term: nodes_to_inlines(&child.children, warnings, footnotes),
                             definitions: Vec::new(),
                             span: Span::NONE,
                         }),
                         "definition_desc" => {
                             if let Some(last) = items.last_mut() {
-                                last.definitions
-                                    .push(nodes_to_blocks(&child.children, warnings));
+                                last.definitions.push(nodes_to_blocks(
+                                    &child.children,
+                                    warnings,
+                                    footnotes,
+                                ));
                             }
                         }
                         _ => {}
@@ -492,26 +508,30 @@ mod write {
             }
             "mmd:citation_def" => MmdBlock::CitationDefinition {
                 label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
-                content: nodes_to_inlines(&n.children, warnings),
+                content: nodes_to_inlines(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             other => {
                 unsupported(other, warnings);
                 MmdBlock::Paragraph {
-                    inlines: nodes_to_inlines(&n.children, warnings),
+                    inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                     span: Span::NONE,
                 }
             }
         }
     }
 
-    fn table_row(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdTableRow {
+    fn table_row(
+        n: &Node,
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> MmdTableRow {
         MmdTableRow {
             cells: n
                 .children
                 .iter()
                 .map(|c| MmdTableCell {
-                    inlines: nodes_to_inlines(&c.children, warnings),
+                    inlines: cell_inlines(&c.children, warnings, footnotes),
                     span: Span::NONE,
                 })
                 .collect(),
@@ -519,11 +539,45 @@ mod write {
         }
     }
 
-    fn nodes_to_inlines(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<MmdInline> {
-        nodes.iter().map(|n| node_to_inline(n, warnings)).collect()
+    /// Flatten a table cell's children into inlines, unwrapping a `paragraph`
+    /// wrapper (rescribe-fmt-pandoc-json wraps every table cell's block
+    /// content — including single-`Plain`-block cells — in a `paragraph`
+    /// node; this crate's own reader, and MultiMarkdown's cell model, treat
+    /// a cell as inline-only content with no block wrapper). Without this,
+    /// `nodes_to_inlines` would hit the `paragraph`-has-no-inline-mapping
+    /// fallback and drop every cell's content.
+    fn cell_inlines(
+        nodes: &[Node],
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> Vec<MmdInline> {
+        let mut out = Vec::new();
+        for n in nodes {
+            if n.kind.as_str() == node::PARAGRAPH {
+                out.extend(cell_inlines(&n.children, warnings, footnotes));
+            } else {
+                out.push(node_to_inline(n, warnings, footnotes));
+            }
+        }
+        out
     }
 
-    fn node_to_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> MmdInline {
+    fn nodes_to_inlines(
+        nodes: &[Node],
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> Vec<MmdInline> {
+        nodes
+            .iter()
+            .map(|n| node_to_inline(n, warnings, footnotes))
+            .collect()
+    }
+
+    fn node_to_inline(
+        n: &Node,
+        warnings: &mut Vec<FidelityWarning>,
+        footnotes: &mut Vec<MmdBlock>,
+    ) -> MmdInline {
         match n.kind.as_str() {
             "text" => MmdInline::Text {
                 content: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
@@ -532,15 +586,15 @@ mod write {
             "soft_break" => MmdInline::SoftBreak { span: Span::NONE },
             "line_break" => MmdInline::HardBreak { span: Span::NONE },
             "emphasis" => MmdInline::Emphasis {
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "strong" => MmdInline::Strong {
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "strikeout" => MmdInline::Strikethrough {
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 span: Span::NONE,
             },
             "code" => MmdInline::Code {
@@ -552,7 +606,7 @@ mod write {
                 span: Span::NONE,
             },
             "link" => MmdInline::Link {
-                inlines: nodes_to_inlines(&n.children, warnings),
+                inlines: nodes_to_inlines(&n.children, warnings, footnotes),
                 url: n.props.get_str(prop::URL).unwrap_or("").to_string(),
                 title: n.props.get_str(prop::TITLE).map(str::to_string),
                 span: Span::NONE,
@@ -567,6 +621,34 @@ mod write {
                 label: n.props.get_str(prop::ID).unwrap_or("").to_string(),
                 span: Span::NONE,
             },
+            // A `footnote_def` found in inline position (e.g. from
+            // rescribe-fmt-pandoc-json, which nests `Note` content directly
+            // where it occurs rather than splitting it into a separate
+            // ref/def pair like this crate's own reader does) has no
+            // MultiMarkdown-native inline representation — MMD footnotes are
+            // always a `[^label]` reference plus a same-labeled block-level
+            // definition. Rather than dropping the content (the previous
+            // behavior, via the `other` fallback below), synthesize a
+            // sequential label, emit a reference here, and queue the
+            // definition to be appended as a top-level block by the caller.
+            "footnote_def" => {
+                let label = {
+                    let existing = n.props.get_str(prop::ID).filter(|s| !s.is_empty());
+                    existing
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("fn{}", footnotes.len() + 1))
+                };
+                let blocks = nodes_to_blocks(&n.children, warnings, footnotes);
+                footnotes.push(MmdBlock::FootnoteDefinition {
+                    label: label.clone(),
+                    blocks,
+                    span: Span::NONE,
+                });
+                MmdInline::FootnoteReference {
+                    label,
+                    span: Span::NONE,
+                }
+            }
             "math_inline" => MmdInline::InlineMath {
                 source: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
                 span: Span::NONE,

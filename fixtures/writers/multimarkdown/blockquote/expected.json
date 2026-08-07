@@ -1,0 +1,4 @@
+{
+  "description": "A blockquote emits with a > prefix",
+  "output_contains": ["> quoted text"]
+}

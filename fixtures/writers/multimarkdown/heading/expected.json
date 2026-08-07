@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits with two leading hashes",
+  "output_contains": ["## Section"]
+}

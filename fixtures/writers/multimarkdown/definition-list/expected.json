@@ -1,0 +1,4 @@
+{
+  "description": "A definition list emits with the term and its definition",
+  "output_contains": ["Term", "Definition"]
+}
