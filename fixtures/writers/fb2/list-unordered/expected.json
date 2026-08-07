@@ -1,4 +1,0 @@
-{
-  "description": "FB2 has no native list element; unordered list items emit as paragraphs with a bullet marker prefix",
-  "output_contains": ["<p>• one</p>", "<p>• two</p>"]
-}

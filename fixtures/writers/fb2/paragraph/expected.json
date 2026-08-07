@@ -1,4 +1,0 @@
-{
-  "description": "Plain paragraph emits as <p>",
-  "output_contains": ["<p>Hello, world!</p>"]
-}

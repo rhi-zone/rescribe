@@ -1,4 +1,0 @@
-{
-  "description": "Strong text emits wrapped in <strong>",
-  "output_contains": ["<strong>bold</strong>"]
-}

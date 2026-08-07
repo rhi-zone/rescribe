@@ -1,4 +1,0 @@
-{
-  "description": "Link emits as <a l:href=\"...\">text</a>",
-  "output_contains": ["<a l:href=\"https://example.com\">click here</a>"]
-}

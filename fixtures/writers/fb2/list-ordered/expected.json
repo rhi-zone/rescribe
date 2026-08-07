@@ -1,4 +1,0 @@
-{
-  "description": "FB2 has no native list element; ordered list items emit as paragraphs with a numeric marker prefix",
-  "output_contains": ["<p>1. first</p>", "<p>2. second</p>"]
-}

@@ -767,8 +767,6 @@ mod write {
                     };
                     content.push(SectionContent::Image(Image {
                         href,
-                        alt: node.props.get_str(prop::ALT).map(|s| s.to_string()),
-                        title: node.props.get_str(prop::TITLE).map(|s| s.to_string()),
                         ..Default::default()
                     }));
                 }
@@ -998,8 +996,6 @@ mod write {
                 };
                 InlineElement::Image(Image {
                     href,
-                    alt: node.props.get_str(prop::ALT).map(|s| s.to_string()),
-                    title: node.props.get_str(prop::TITLE).map(|s| s.to_string()),
                     ..Default::default()
                 })
             }
