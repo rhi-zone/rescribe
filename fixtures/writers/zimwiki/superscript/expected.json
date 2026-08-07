@@ -1,0 +1,4 @@
+{
+  "description": "Superscript text emits wrapped in ^{ }",
+  "output_contains": ["^{up}"]
+}

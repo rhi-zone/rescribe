@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits with inverted-level = delimiters (5 signs)",
+  "output_contains": ["===== Title ====="]
+}

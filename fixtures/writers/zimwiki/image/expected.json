@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as {{url}} (zimwiki's AST does not carry alt text)",
+  "output_contains": ["{{http://example.com/pic.png}}"]
+}

@@ -279,6 +279,23 @@ mod write {
         Ok(ConversionResult::ok(output))
     }
 
+    /// Extract inlines from a node's children where those children may be
+    /// either inline nodes directly (this crate's own reader shape) or block
+    /// nodes such as `paragraph` wrapping the inlines (e.g.
+    /// rescribe-fmt-pandoc-json wraps table-cell content in a block, since
+    /// table cells are block content in Pandoc's AST). Handle both shapes.
+    fn block_content_to_inlines(children: &[Node]) -> Vec<Inline> {
+        let mut inlines = Vec::new();
+        for child in children {
+            if child.kind.as_str() == node::PARAGRAPH {
+                inlines.extend(child.children.iter().filter_map(convert_inline));
+            } else if let Some(inline) = convert_inline(child) {
+                inlines.push(inline);
+            }
+        }
+        inlines
+    }
+
     fn convert_node(node: &Node) -> Option<Block> {
         match node.kind.as_str() {
             node::DOCUMENT => {
@@ -359,7 +376,7 @@ mod write {
                         let cells: Vec<Vec<Inline>> = row
                             .children
                             .iter()
-                            .map(|cell| cell.children.iter().filter_map(convert_inline).collect())
+                            .map(|cell| block_content_to_inlines(&cell.children))
                             .collect();
                         TableRow {
                             cells,

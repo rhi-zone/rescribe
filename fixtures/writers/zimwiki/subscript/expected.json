@@ -1,0 +1,4 @@
+{
+  "description": "Subscript text emits wrapped in _{ }",
+  "output_contains": ["_{down}"]
+}

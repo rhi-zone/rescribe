@@ -1017,3 +1017,12 @@ fn xwiki_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn zimwiki_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "zimwiki", |doc| {
+        zimwiki::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
