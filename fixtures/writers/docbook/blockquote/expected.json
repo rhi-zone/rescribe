@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits as <blockquote> containing <para>",
+  "output_contains": ["<blockquote>", "<para>quoted text</para>"]
+}

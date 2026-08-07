@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits as <code>",
+  "output_contains": ["<code>printf</code>"]
+}

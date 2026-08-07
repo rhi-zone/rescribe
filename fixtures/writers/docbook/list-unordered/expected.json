@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list emits as <itemizedlist> with <listitem>/<para> entries",
+  "output_contains": ["<itemizedlist>", "<listitem><para>first</para></listitem>", "<listitem><para>second</para></listitem>", "<listitem><para>third</para></listitem>"]
+}

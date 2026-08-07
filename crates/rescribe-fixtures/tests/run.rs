@@ -837,3 +837,57 @@ fn asciidoc_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn mediawiki_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "mediawiki", |doc| {
+        mediawiki_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn dokuwiki_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "dokuwiki", |doc| {
+        dokuwiki::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn fb2_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "fb2", |doc| {
+        fb2_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn docbook_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "docbook", |doc| {
+        docbook_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn typst_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "typst", |doc| {
+        typst_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn tei_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "tei", |doc| {
+        tei_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

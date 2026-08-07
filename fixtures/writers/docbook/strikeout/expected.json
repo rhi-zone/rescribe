@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout emits as <emphasis role=\"strikethrough\"> (DocBook has no dedicated strikethrough element)",
+  "output_contains": ["<emphasis role=\"strikethrough\">deleted</emphasis>"]
+}

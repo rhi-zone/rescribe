@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit as sectioning elements with <title>, level 1 as <section> and level 2 as <sect1>",
+  "output_contains": ["<section", "<title>My Heading</title>", "<sect1", "<title>Sub Heading</title>"]
+}

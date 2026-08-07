@@ -1,0 +1,4 @@
+{
+  "description": "Definition list emits as <variablelist> with <varlistentry>/<term>/<listitem>",
+  "output_contains": ["<variablelist>", "<varlistentry>", "<term>Term</term>", "<listitem><para>Definition text</para></listitem>"]
+}

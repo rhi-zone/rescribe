@@ -1,0 +1,4 @@
+{
+  "description": "Fenced code block emits as <programlisting language=\"...\">",
+  "output_contains": ["<programlisting language=\"rust\">", "fn main()", "</programlisting>"]
+}

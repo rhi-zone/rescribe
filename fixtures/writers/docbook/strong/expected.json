@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits as <emphasis role=\"strong\">",
+  "output_contains": ["<emphasis role=\"strong\">bold</emphasis>"]
+}

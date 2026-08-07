@@ -1143,6 +1143,20 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_inline).collect(),
         )],
 
+        // DocBook has no dedicated strikethrough element; `role="strikethrough"`
+        // on `<emphasis>` is the standard convention (mirroring the
+        // `role="strong"` convention just above for STRONG) — without this
+        // arm, a `strikeout` node fed from a non-DocBook reader (e.g.
+        // pandoc-json) fell through to the generic "unknown inline -
+        // recurse" catch-all below, which silently dropped the wrapper
+        // entirely and emitted only the bare text, losing the strikeout
+        // markup altogether.
+        node::STRIKEOUT => vec![db_element(
+            "emphasis",
+            vec![("role".to_string(), "strikethrough".to_string())],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
+
         node::CODE => {
             let mut children: Vec<DbNode> = node
                 .props

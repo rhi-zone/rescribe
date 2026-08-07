@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list emits as <orderedlist> with <listitem>/<para> entries",
+  "output_contains": ["<orderedlist>", "<listitem><para>one</para></listitem>", "<listitem><para>two</para></listitem>", "<listitem><para>three</para></listitem>"]
+}

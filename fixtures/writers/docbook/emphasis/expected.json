@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis text emits as bare <emphasis>",
+  "output_contains": ["<emphasis>italic</emphasis>"]
+}

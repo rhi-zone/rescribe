@@ -1,0 +1,4 @@
+{
+  "description": "Plain paragraph emits as <para> element",
+  "output_contains": ["<para>Hello, world!</para>"]
+}
