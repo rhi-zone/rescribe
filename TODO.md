@@ -5658,10 +5658,29 @@ depth + largest token) memory is the primary use case, not an afterthought.
   state machine as `StreamingParser` but driven by `Iterator::next()`.
 
 **Consolidation:**
-- [ ] Merge `ooxml-wml`, `ooxml-sml`, `ooxml-pml`, `ooxml-dml`, `ooxml-omml`,
-  `ooxml-opc`, `ooxml-xml` into a single `ooxml-fmt` crate with feature flags.
-  Shared infrastructure (`opc`, `xml`) always compiled; `wml`/`sml`/`pml`/`dml`/`omml`
-  feature-gated. `crates/tools/ooxml-codegen` stays separate (build tool).
+- [ ] **BLOCKED PENDING VERIFICATION (see ADR 0014):** Merge `ooxml-wml`, `ooxml-sml`,
+  `ooxml-pml`, `ooxml-dml`, `ooxml-omml`, `ooxml-opc`, `ooxml-xml` into a single
+  `ooxml-fmt` crate with feature flags. Shared infrastructure (`opc`, `xml`) always
+  compiled; `wml`/`sml`/`pml`/`dml`/`omml` feature-gated.
+  `crates/tools/ooxml-codegen` stays separate (build tool). This item's rationale was
+  never stated anywhere (traced to `53c21c77d6`, asserted with no derivation, restated
+  as settled ever since); `c2fea87315`'s "no principled reason to keep it external" is
+  about the git-repo merge, not the crate merge, and does not justify this item. ADR
+  0014's code-level-coupling test finds no code dependency between `ooxml-wml`,
+  `ooxml-sml`, and `ooxml-pml` themselves — they're independent consumers of the
+  shared `opc`/`dml`/`omml`/`xml` foundation, not mutually coupled — so the wml/sml/pml
+  portion of this merge does not currently meet the bar and should not proceed until
+  either (a) it's dropped in favor of keeping wml/sml/pml separate, each depending on
+  the shared foundation crates, or (b) someone independently verifies real code-level
+  coupling between wml/sml/pml themselves (not just their shared use of the foundation
+  crates), with the same forced-lockstep-coupling evidence ADR 0014's read/write-adapter
+  case has. The foundation-crate portion (opc/dml/omml/xml merging together) is
+  equally open and unverified, not closer to justified: `ooxml-wml`/`ooxml-pml`
+  importing and using `ooxml-dml`'s shape types is an ordinary shared-dependency
+  relationship (the same shape as "every crate here depends on serde"), not evidence
+  of forced-lockstep coupling between those crates specifically — ADR 0014 explains
+  why this doesn't clear the bar. Treat as open on the same footing as wml/sml/pml,
+  pending actual forced-lockstep evidence either way.
 - [ ] Implement `StreamingParser<H>` for DOCX (wml) first — largest user base.
 - [ ] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines.
 - [ ] Implement `StreamingParser<H>` for PPTX (pml).
