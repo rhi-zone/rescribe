@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in = signs",
+  "output_contains": ["=printf="]
+}

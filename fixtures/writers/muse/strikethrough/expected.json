@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout text emits wrapped in double tildes",
+  "output_contains": ["~~removed~~"]
+}

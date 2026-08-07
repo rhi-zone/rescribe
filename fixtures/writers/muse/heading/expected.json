@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit with '*'/'**' prefixes matching level",
+  "output_contains": ["* My Heading", "** Sub Heading"]
+}

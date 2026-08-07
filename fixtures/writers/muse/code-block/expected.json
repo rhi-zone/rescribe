@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits with <example>/</example> delimiters",
+  "output_contains": ["<example>", "fn main() {}", "</example>"]
+}
