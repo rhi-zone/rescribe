@@ -1,0 +1,4 @@
+{
+  "description": "A table with a header row and one data row emits as comma-separated lines",
+  "output_contains": ["Name,Age", "Alice,30"]
+}

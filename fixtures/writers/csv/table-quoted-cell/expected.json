@@ -1,0 +1,4 @@
+{
+  "description": "A cell containing a double-quote character is wrapped in quotes with the quote doubled",
+  "output_contains": ["\"has \"\"quotes\"\"\""]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "A cell containing a comma is wrapped in quotes",
+  "output_contains": ["\"a,b\""]
+}
