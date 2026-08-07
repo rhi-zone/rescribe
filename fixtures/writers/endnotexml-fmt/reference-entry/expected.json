@@ -1,0 +1,10 @@
+{
+  "description": "A pandoc-json document with meta.references (CSL-JSON bibliography, Pandoc's citeproc convention) produces an EndNote XML record via bibliography_entry/bibliography_field IR nodes",
+  "category": "integration",
+  "output_contains": [
+    "A Great Paper",
+    "Nature",
+    "10.1000/xyz123",
+    "2020"
+  ]
+}

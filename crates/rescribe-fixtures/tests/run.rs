@@ -663,6 +663,24 @@ fn rtf_writer() {
     });
 }
 
+#[test]
+fn ris_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "ris", |doc| {
+        ris::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn endnotexml_fmt_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "endnotexml-fmt", |doc| {
+        endnotexml_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Tier D presentation writer smoke tests
 // ---------------------------------------------------------------------------

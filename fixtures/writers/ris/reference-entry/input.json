@@ -1,0 +1,60 @@
+{
+  "pandoc-api-version": [1, 23],
+  "meta": {
+    "references": {
+      "t": "MetaList",
+      "c": [
+        {
+          "t": "MetaMap",
+          "c": {
+            "id": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "smith2020" }] },
+            "type": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "article-journal" }] },
+            "title": {
+              "t": "MetaInlines",
+              "c": [
+                { "t": "Str", "c": "A" },
+                { "t": "Space" },
+                { "t": "Str", "c": "Great" },
+                { "t": "Space" },
+                { "t": "Str", "c": "Paper" }
+              ]
+            },
+            "author": {
+              "t": "MetaList",
+              "c": [
+                {
+                  "t": "MetaMap",
+                  "c": {
+                    "family": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "Smith" }] },
+                    "given": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "John" }] }
+                  }
+                }
+              ]
+            },
+            "container-title": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "Nature" }] },
+            "volume": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "1" }] },
+            "page": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "1-10" }] },
+            "issued": {
+              "t": "MetaMap",
+              "c": {
+                "date-parts": {
+                  "t": "MetaList",
+                  "c": [
+                    {
+                      "t": "MetaList",
+                      "c": [{ "t": "MetaInlines", "c": [{ "t": "Str", "c": "2020" }] }]
+                    }
+                  ]
+                }
+              }
+            },
+            "DOI": { "t": "MetaInlines", "c": [{ "t": "Str", "c": "10.1000/xyz123" }] }
+          }
+        }
+      ]
+    }
+  },
+  "blocks": [
+    { "t": "Para", "c": [{ "t": "Str", "c": "See" }, { "t": "Space" }, { "t": "Str", "c": "the" }, { "t": "Space" }, { "t": "Str", "c": "bibliography." }] }
+  ]
+}

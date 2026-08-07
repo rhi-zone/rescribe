@@ -1,0 +1,13 @@
+{
+  "description": "A pandoc-json document with meta.references (CSL-JSON bibliography, Pandoc's citeproc convention) produces an RIS entry via bibliography_entry/bibliography_field IR nodes",
+  "category": "integration",
+  "output_contains": [
+    "TY  - GEN",
+    "TI  - A Great Paper",
+    "JO  - Nature",
+    "SP  - 1",
+    "EP  - 10",
+    "PY  - 2020/",
+    "10.1000/xyz123"
+  ]
+}
