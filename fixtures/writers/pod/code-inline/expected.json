@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in C<...>",
+  "output_contains": ["C<printf>"]
+}

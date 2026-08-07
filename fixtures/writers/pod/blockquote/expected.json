@@ -1,0 +1,4 @@
+{
+  "description": "POD has no native blockquote construct; content is preserved as a plain paragraph rather than dropped",
+  "output_contains": ["quoted text"]
+}

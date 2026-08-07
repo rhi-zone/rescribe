@@ -1,0 +1,4 @@
+{
+  "description": "POD has no strikethrough markup; text content is preserved unstyled rather than dropped",
+  "output_contains": ["gone"]
+}

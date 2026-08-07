@@ -1,0 +1,4 @@
+{
+  "description": "A link emits as L<label|url>",
+  "output_contains": ["L<Example|https://example.com>"]
+}

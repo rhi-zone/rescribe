@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits wrapped in B<...>",
+  "output_contains": ["B<bold>"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits as =head2",
+  "output_contains": ["=head2 DESCRIPTION"]
+}

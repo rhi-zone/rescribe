@@ -1,0 +1,4 @@
+{
+  "description": "An ordered list emits as =over / =item N. / =back",
+  "output_contains": ["=item 1.", "=item 2.", "first", "second"]
+}

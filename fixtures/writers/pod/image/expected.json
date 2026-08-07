@@ -1,0 +1,4 @@
+{
+  "description": "POD has no image construct; alt text is preserved as a placeholder rather than dropped",
+  "output_contains": ["a photo"]
+}

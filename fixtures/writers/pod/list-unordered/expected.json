@@ -1,0 +1,4 @@
+{
+  "description": "A bullet list emits as =over / =item * / =back",
+  "output_contains": ["=item *", "one", "two"]
+}

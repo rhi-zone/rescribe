@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits as an indented verbatim paragraph",
+  "output_contains": ["    print 'Hello';"]
+}
