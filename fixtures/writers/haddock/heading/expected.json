@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits with two leading equals signs",
+  "output_contains": ["== Section"]
+}

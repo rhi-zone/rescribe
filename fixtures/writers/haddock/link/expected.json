@@ -1,0 +1,4 @@
+{
+  "description": "A link emits as a quoted label followed by the URL in angle brackets",
+  "output_contains": ["\"Example\"<http://example.com>"]
+}

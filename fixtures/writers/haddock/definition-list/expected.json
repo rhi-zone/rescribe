@@ -1,0 +1,4 @@
+{
+  "description": "A definition list emits with the term bracketed and the description following",
+  "output_contains": ["Term", "Definition"]
+}

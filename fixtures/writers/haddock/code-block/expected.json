@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits with each line prefixed by >",
+  "output_contains": ["> main = putStrLn \"hi\""]
+}

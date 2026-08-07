@@ -1,0 +1,3 @@
+{"pandoc-api-version": [1, 23], "meta": {}, "blocks": [{"t": "DefinitionList", "c": [
+  [[{"t": "Str", "c": "Term"}], [[{"t": "Plain", "c": [{"t": "Str", "c": "Definition"}]}]]]
+]}]}
