@@ -1,0 +1,4 @@
+{
+  "description": "A paragraph containing a link emits an outline with both text and an xmlUrl attribute",
+  "output_contains": ["text=\"Example\"", "xmlUrl=\"https://example.com/feed.xml\""]
+}

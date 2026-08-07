@@ -1,0 +1,4 @@
+{
+  "description": "A heading (a construct OPML has no representation for) still falls back to a text-bearing outline rather than being dropped",
+  "output_contains": ["text=\"Title\""]
+}

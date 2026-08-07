@@ -1,0 +1,4 @@
+{
+  "description": "A top-level paragraph becomes a self-closing outline with a text attribute",
+  "output_contains": ["<outline", "text=\"Hello world\""]
+}

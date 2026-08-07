@@ -945,3 +945,12 @@ fn muse_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn opml_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "opml", |doc| {
+        opml_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

@@ -1,0 +1,4 @@
+{
+  "description": "A bullet list becomes sibling outline elements, one per item",
+  "output_contains": ["text=\"Item 1\"", "text=\"Item 2\""]
+}
