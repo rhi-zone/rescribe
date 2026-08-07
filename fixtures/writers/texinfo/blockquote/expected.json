@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits with @quotation/@end quotation",
+  "output_contains": ["@quotation", "quoted text", "@end quotation"]
+}

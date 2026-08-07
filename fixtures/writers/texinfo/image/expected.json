@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as @image{file,...} with alt text preserved",
+  "output_contains": ["@image{photo.png", "alt text"]
+}

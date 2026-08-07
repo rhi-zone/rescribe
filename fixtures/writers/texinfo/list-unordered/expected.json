@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list items emit with @itemize/@item",
+  "output_contains": ["@itemize", "@item first", "@item second", "@item third", "@end itemize"]
+}

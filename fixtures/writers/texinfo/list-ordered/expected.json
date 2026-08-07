@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list items emit with @enumerate/@item",
+  "output_contains": ["@enumerate", "@item one", "@item two", "@item three", "@end enumerate"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Link emits as @uref{url, text}",
+  "output_contains": ["@uref{https://example.com, click here}"]
+}

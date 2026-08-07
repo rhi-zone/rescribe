@@ -891,3 +891,12 @@ fn tei_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn texinfo_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "texinfo", |doc| {
+        texinfo::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

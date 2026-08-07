@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit as @chapter for level 1 and @section for level 2",
+  "output_contains": ["@chapter My Heading", "@section Sub Heading"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits with @example/@end example delimiters",
+  "output_contains": ["@example", "fn main()", "@end example"]
+}

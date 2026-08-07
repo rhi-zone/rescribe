@@ -669,6 +669,19 @@ mod write {
                 }
             }
 
+            node::IMAGE => {
+                let file = node.props.get_str(prop::URL).unwrap_or("").to_string();
+                let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+                Inline::Image {
+                    file,
+                    width: None,
+                    height: None,
+                    alt,
+                    extension: None,
+                    span: Span::NONE,
+                }
+            }
+
             _ => Inline::Text(String::new(), Span::NONE),
         }
     }
