@@ -1,0 +1,4 @@
+{
+  "description": "A blockquote emits wrapped in {QUOTE()}...{QUOTE} plugin markers",
+  "output_contains": ["{QUOTE()}", "quoted text", "{QUOTE}"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits inside a {CODE(lang=...)} plugin block",
+  "output_contains": ["{CODE(lang=rust)}", "fn main() {}", "{CODE}"]
+}

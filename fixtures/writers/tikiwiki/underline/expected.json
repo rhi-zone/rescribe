@@ -1,0 +1,4 @@
+{
+  "description": "Underline text emits wrapped in triple equals",
+  "output_contains": ["===under==="]
+}

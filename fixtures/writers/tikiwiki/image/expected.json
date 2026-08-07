@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as a {img src=...} plugin tag with alt text",
+  "output_contains": ["{img src=\"photo.png\"", "alt=\"alt text\""]
+}

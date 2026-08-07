@@ -1,0 +1,4 @@
+{
+  "description": "A table row emits with ||-delimited cells",
+  "output_contains": ["||A|B||"]
+}

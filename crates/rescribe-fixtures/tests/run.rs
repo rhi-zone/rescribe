@@ -972,3 +972,12 @@ fn t2t_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn tikiwiki_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "tikiwiki", |doc| {
+        tikiwiki::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
