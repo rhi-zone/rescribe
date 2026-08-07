@@ -3,7 +3,9 @@
 //! Emits rescribe's document IR as Pandoc's JSON AST format.
 //! This enables interoperability with Pandoc's extensive format support.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, FidelityWarning};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, PropValue,
+};
 use rescribe_std::{Node, node, prop};
 use serde_json::{Map, Value, json};
 
@@ -473,9 +475,63 @@ impl Emitter {
                 }))
             }
             node::CITE => {
-                // Simple cite - just output the inlines with empty citations
                 let inlines = self.emit_inlines(&node.children);
-                Some(json!({"t": "Cite", "c": [[], inlines]}))
+
+                // `pandoc:citations` (set by the reader) carries the original
+                // `[Citation]` record list: id/mode/noteNum/hash plus the
+                // raw-preserved prefix/suffix JSON. Reconstruct it exactly
+                // when present so a Pandoc round-trip is lossless; fall back
+                // to an empty citation list for a `cite` node authored
+                // directly in the IR (no Pandoc origin to recover).
+                let citations: Vec<Value> = match node.props.get("pandoc:citations") {
+                    Some(PropValue::List(items)) => items
+                        .iter()
+                        .filter_map(|item| {
+                            let PropValue::Map(entry) = item else {
+                                return None;
+                            };
+                            let id = match entry.get("id") {
+                                Some(PropValue::String(s)) => s.clone(),
+                                _ => return None,
+                            };
+                            let mode = match entry.get("mode") {
+                                Some(PropValue::String(s)) => s.clone(),
+                                _ => "NormalCitation".to_string(),
+                            };
+                            let note_num = match entry.get("note-num") {
+                                Some(PropValue::Int(i)) => *i,
+                                _ => 0,
+                            };
+                            let hash = match entry.get("hash") {
+                                Some(PropValue::Int(i)) => *i,
+                                _ => 0,
+                            };
+                            let prefix: Value = match entry.get("prefix-json") {
+                                Some(PropValue::String(s)) => {
+                                    serde_json::from_str(s).unwrap_or_else(|_| json!([]))
+                                }
+                                _ => json!([]),
+                            };
+                            let suffix: Value = match entry.get("suffix-json") {
+                                Some(PropValue::String(s)) => {
+                                    serde_json::from_str(s).unwrap_or_else(|_| json!([]))
+                                }
+                                _ => json!([]),
+                            };
+                            Some(json!({
+                                "citationId": id,
+                                "citationPrefix": prefix,
+                                "citationSuffix": suffix,
+                                "citationMode": {"t": mode},
+                                "citationNoteNum": note_num,
+                                "citationHash": hash
+                            }))
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+
+                Some(json!({"t": "Cite", "c": [citations, inlines]}))
             }
             _ => None,
         }
@@ -580,5 +636,62 @@ mod tests {
         assert_eq!(parsed.content.children[0].kind.as_str(), node::HEADING);
         assert_eq!(parsed.content.children[1].kind.as_str(), node::PARAGRAPH);
         assert_eq!(parsed.content.children[2].kind.as_str(), node::LIST);
+    }
+
+    #[test]
+    fn test_roundtrip_cite_preserves_citation_metadata() {
+        use crate::read::parse;
+
+        let input = r#"{
+            "pandoc-api-version": [1, 23],
+            "meta": {},
+            "blocks": [
+                {"t": "Para", "c": [
+                    {"t": "Cite", "c": [
+                        [
+                            {
+                                "citationId": "smith2020",
+                                "citationPrefix": [{"t": "Str", "c": "see"}],
+                                "citationSuffix": [],
+                                "citationMode": {"t": "NormalCitation"},
+                                "citationNoteNum": 0,
+                                "citationHash": 0
+                            },
+                            {
+                                "citationId": "doe2021",
+                                "citationPrefix": [],
+                                "citationSuffix": [{"t": "Str", "c": "p."}, {"t": "Space"}, {"t": "Str", "c": "42"}],
+                                "citationMode": {"t": "AuthorInText"},
+                                "citationNoteNum": 0,
+                                "citationHash": 1
+                            }
+                        ],
+                        [{"t": "Str", "c": "[see @smith2020; @doe2021, p. 42]"}]
+                    ]}
+                ]}
+            ]
+        }"#;
+
+        let parsed_once = parse(input).unwrap().value;
+        let emitted_bytes = emit(&parsed_once).unwrap().value;
+        let emitted_str = String::from_utf8(emitted_bytes).unwrap();
+        let emitted_json: Value = serde_json::from_str(&emitted_str).unwrap();
+
+        let citations = &emitted_json["blocks"][0]["c"][0]["c"][0];
+        let citations = citations.as_array().unwrap();
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0]["citationId"], "smith2020");
+        assert_eq!(citations[0]["citationMode"]["t"], "NormalCitation");
+        assert_eq!(citations[0]["citationPrefix"][0]["t"], "Str");
+        assert_eq!(citations[0]["citationPrefix"][0]["c"], "see");
+        assert_eq!(citations[1]["citationId"], "doe2021");
+        assert_eq!(citations[1]["citationMode"]["t"], "AuthorInText");
+        assert_eq!(citations[1]["citationHash"], 1);
+        assert_eq!(citations[1]["citationSuffix"][2]["c"], "42");
+
+        // Re-parsing the emitted JSON should reproduce the same citation
+        // metadata (full round-trip, not just single-hop).
+        let parsed_twice = parse(&emitted_str).unwrap().value;
+        assert_eq!(parsed_once.content, parsed_twice.content);
     }
 }

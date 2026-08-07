@@ -4,12 +4,13 @@
 //! This enables interoperability with Pandoc's extensive format support.
 
 use rescribe_core::{
-    ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Severity,
-    WarningKind,
+    ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, PropValue, Properties,
+    Severity, WarningKind,
 };
 use rescribe_std::{Node, node, prop};
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Parse Pandoc JSON into a rescribe Document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -651,11 +652,69 @@ impl Converter {
                 Some(span)
             }
             "Cite" => {
-                // Citation - just extract the text for now
+                // Pandoc's Cite is `[Citation] [Inline]`: a list of citation
+                // records (id/prefix/suffix/mode/noteNum/hash) plus the already
+                // rendered inline text. The rendered text becomes the cite
+                // node's children; the citation records are preserved as
+                // `pandoc:citations` so the writer can reconstruct them.
                 let arr = c?.as_array()?;
+                let citations_json = arr.first()?.as_array()?;
                 let inlines = arr.get(1)?.as_array()?;
                 let children = self.convert_inlines(inlines);
-                Some(Node::new(node::CITE).children(children))
+
+                let mut citations = Vec::new();
+                for citation in citations_json {
+                    let Some(id) = citation.get("citationId").and_then(|v| v.as_str()) else {
+                        self.warn(
+                            WarningKind::Simplified("pandoc:Citation".to_string()),
+                            "Cite element contains a citation entry missing citationId; \
+                             that citation's metadata was dropped"
+                                .to_string(),
+                        );
+                        continue;
+                    };
+                    let mode = citation
+                        .get("citationMode")
+                        .and_then(|v| v.get("t"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("NormalCitation");
+                    let note_num = citation
+                        .get("citationNoteNum")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                    let hash = citation
+                        .get("citationHash")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                    // citationPrefix/citationSuffix are themselves [Inline] -
+                    // arbitrary formatted content. The IR's property bag has
+                    // no slot for a nested node tree, so they're raw-preserved
+                    // as their original JSON so the writer can round-trip them
+                    // exactly, per CLAUDE.md's raw-preservation tier.
+                    let prefix_json = citation
+                        .get("citationPrefix")
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "[]".to_string());
+                    let suffix_json = citation
+                        .get("citationSuffix")
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "[]".to_string());
+
+                    let mut entry = HashMap::new();
+                    entry.insert("id".to_string(), PropValue::String(id.to_string()));
+                    entry.insert("mode".to_string(), PropValue::String(mode.to_string()));
+                    entry.insert("note-num".to_string(), PropValue::Int(note_num));
+                    entry.insert("hash".to_string(), PropValue::Int(hash));
+                    entry.insert("prefix-json".to_string(), PropValue::String(prefix_json));
+                    entry.insert("suffix-json".to_string(), PropValue::String(suffix_json));
+                    citations.push(PropValue::Map(entry));
+                }
+
+                let mut node = Node::new(node::CITE).children(children);
+                if !citations.is_empty() {
+                    node = node.prop("pandoc:citations", PropValue::List(citations));
+                }
+                Some(node)
             }
             _ => {
                 self.warn(
@@ -783,6 +842,84 @@ mod tests {
         let link = &para.children[0];
         assert_eq!(link.kind.as_str(), node::LINK);
         assert_eq!(link.props.get_str(prop::URL), Some("https://example.com"));
+    }
+
+    #[test]
+    fn test_parse_cite_preserves_citation_metadata() {
+        // Two citations in one Cite, one with a prefix, to exercise both
+        // multi-citation handling and prefix/suffix raw preservation.
+        let json = r#"{
+            "pandoc-api-version": [1, 23],
+            "meta": {},
+            "blocks": [
+                {"t": "Para", "c": [
+                    {"t": "Cite", "c": [
+                        [
+                            {
+                                "citationId": "smith2020",
+                                "citationPrefix": [{"t": "Str", "c": "see"}],
+                                "citationSuffix": [],
+                                "citationMode": {"t": "NormalCitation"},
+                                "citationNoteNum": 0,
+                                "citationHash": 0
+                            },
+                            {
+                                "citationId": "doe2021",
+                                "citationPrefix": [],
+                                "citationSuffix": [{"t": "Str", "c": "p."}, {"t": "Space"}, {"t": "Str", "c": "42"}],
+                                "citationMode": {"t": "AuthorInText"},
+                                "citationNoteNum": 0,
+                                "citationHash": 1
+                            }
+                        ],
+                        [{"t": "Str", "c": "[see @smith2020; @doe2021, p. 42]"}]
+                    ]}
+                ]}
+            ]
+        }"#;
+
+        let result = parse(json).unwrap();
+        let doc = result.value;
+
+        let para = &doc.content.children[0];
+        let cite = &para.children[0];
+        assert_eq!(cite.kind.as_str(), node::CITE);
+
+        let Some(PropValue::List(citations)) = cite.props.get("pandoc:citations") else {
+            panic!("expected pandoc:citations list property");
+        };
+        assert_eq!(citations.len(), 2);
+
+        let PropValue::Map(first) = &citations[0] else {
+            panic!("expected map entry");
+        };
+        assert_eq!(
+            first.get("id"),
+            Some(&PropValue::String("smith2020".to_string()))
+        );
+        assert_eq!(
+            first.get("mode"),
+            Some(&PropValue::String("NormalCitation".to_string()))
+        );
+        assert_eq!(first.get("hash"), Some(&PropValue::Int(0)));
+        let Some(PropValue::String(prefix_json)) = first.get("prefix-json") else {
+            panic!("expected prefix-json string property");
+        };
+        let prefix_value: serde_json::Value = serde_json::from_str(prefix_json).unwrap();
+        assert_eq!(prefix_value, serde_json::json!([{"t": "Str", "c": "see"}]));
+
+        let PropValue::Map(second) = &citations[1] else {
+            panic!("expected map entry");
+        };
+        assert_eq!(
+            second.get("id"),
+            Some(&PropValue::String("doe2021".to_string()))
+        );
+        assert_eq!(
+            second.get("mode"),
+            Some(&PropValue::String("AuthorInText".to_string()))
+        );
+        assert_eq!(second.get("hash"), Some(&PropValue::Int(1)));
     }
 
     #[test]
