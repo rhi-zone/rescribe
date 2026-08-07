@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in [code]...[/code]",
+  "output_contains": ["[code]x = 1[/code]"]
+}

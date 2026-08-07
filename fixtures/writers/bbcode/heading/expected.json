@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits as [h2]...[/h2]",
+  "output_contains": ["[h2]Title[/h2]"]
+}

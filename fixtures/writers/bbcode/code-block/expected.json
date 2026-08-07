@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits as [code=lang]...[/code]",
+  "output_contains": ["[code=rust]", "fn main() {}", "[/code]"]
+}

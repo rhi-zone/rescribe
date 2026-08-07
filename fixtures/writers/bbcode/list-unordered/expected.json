@@ -1,0 +1,4 @@
+{
+  "description": "A bullet list emits as [list] with [*] items",
+  "output_contains": ["[list]", "[*]one", "[*]two", "[/list]"]
+}

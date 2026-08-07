@@ -1,0 +1,4 @@
+{
+  "description": "A horizontal rule emits as [hr]",
+  "output_contains": ["[hr]"]
+}

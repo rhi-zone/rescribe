@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as [img]url[/img] (bbcode-fmt's AST does not carry alt text)",
+  "output_contains": ["[img]http://example.com/pic.png[/img]"]
+}

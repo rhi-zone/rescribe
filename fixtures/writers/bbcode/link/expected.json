@@ -1,0 +1,4 @@
+{
+  "description": "A link emits as [url=...]...[/url]",
+  "output_contains": ["[url=http://example.com]Example[/url]"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Underline text emits wrapped in [u]...[/u]",
+  "output_contains": ["[u]under[/u]"]
+}

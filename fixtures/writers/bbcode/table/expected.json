@@ -1,0 +1,4 @@
+{
+  "description": "A table emits with [table][tr][th]/[td] cells, header cells using [th]",
+  "output_contains": ["[table]", "[tr]", "[th]H1[/th]", "[th]H2[/th]", "[td]A[/td]", "[td]B[/td]", "[/table]"]
+}

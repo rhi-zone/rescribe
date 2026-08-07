@@ -1,0 +1,4 @@
+{
+  "description": "An ordered list emits as [list=1] with [*] items",
+  "output_contains": ["[list=1]", "[*]first", "[*]second", "[/list]"]
+}

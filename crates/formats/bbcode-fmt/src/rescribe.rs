@@ -334,6 +334,25 @@ mod write {
         Ok(ConversionResult::ok(output.into_bytes()))
     }
 
+    /// Extract inlines from a node's children where those children may be
+    /// either inline nodes directly (this crate's own reader shape) or block
+    /// nodes such as `paragraph` wrapping the inlines (e.g.
+    /// rescribe-fmt-pandoc-json wraps table-cell content in a block, since
+    /// table cells are block content in Pandoc's AST). Handle both shapes,
+    /// so multi-inline cell content isn't misread as a single node and
+    /// spuriously wrapped in `[b]` by node_to_inline's container fallback.
+    fn block_content_to_inlines(children: &[Node]) -> Vec<Inline> {
+        let mut inlines = Vec::new();
+        for child in children {
+            if child.kind.as_str() == node::PARAGRAPH {
+                inlines.extend(child.children.iter().map(node_to_inline));
+            } else {
+                inlines.push(node_to_inline(child));
+            }
+        }
+        inlines
+    }
+
     fn node_to_block(node: &Node) -> Block {
         match node.kind.as_str() {
             node::PARAGRAPH => {
@@ -397,7 +416,7 @@ mod write {
                             .iter()
                             .map(|cell| {
                                 let is_header = cell.kind.as_str() == node::TABLE_HEADER;
-                                let inlines = cell.children.iter().map(node_to_inline).collect();
+                                let inlines = block_content_to_inlines(&cell.children);
                                 (is_header, inlines)
                             })
                             .collect();
@@ -414,13 +433,19 @@ mod write {
             }
 
             node::HEADING => {
-                // BBCode doesn't have native headings - use bold text in paragraph
-                let inlines = node.children.iter().map(node_to_inline).collect();
-                Block::Paragraph {
-                    inlines: vec![Inline::Bold(inlines, Span::NONE)],
+                // This crate's own AST/emitter model BBCode's [h1]..[h6] tags
+                // directly (see Block::Heading in emit.rs) — use that rather
+                // than degrading to a bold paragraph.
+                let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6) as u8;
+                let children = node.children.iter().map(node_to_inline).collect();
+                Block::Heading {
+                    level,
+                    children,
                     span: Span::NONE,
                 }
             }
+
+            node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
             node::DIV | node::SPAN | node::FIGURE => {
                 // Transparent wrapper - emit children as paragraph
