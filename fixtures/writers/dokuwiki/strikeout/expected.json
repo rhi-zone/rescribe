@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout text emits wrapped in <del> tags (DokuWiki strikethrough)",
+  "output_contains": ["<del>gone</del>"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list items emit with two-space-indented '- ' prefix",
+  "output_contains": ["  - first", "  - second"]
+}

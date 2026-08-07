@@ -561,13 +561,34 @@ mod write {
             node::LINE_BREAK => Some(FmtInline::LineBreak(crate::Span::NONE)),
             node::SOFT_BREAK => Some(FmtInline::SoftBreak(crate::Span::NONE)),
 
-            node::STRIKEOUT
-            | node::SUBSCRIPT
-            | node::SUPERSCRIPT
-            | node::SMALL_CAPS
-            | node::QUOTED
-            | node::FOOTNOTE_REF
-            | node::FOOTNOTE_DEF => {
+            node::STRIKEOUT => {
+                let children = node
+                    .children
+                    .iter()
+                    .filter_map(|n| convert_inline(n, warnings))
+                    .collect();
+                Some(FmtInline::Strikethrough(children, crate::Span::NONE))
+            }
+
+            node::SUPERSCRIPT => {
+                let children = node
+                    .children
+                    .iter()
+                    .filter_map(|n| convert_inline(n, warnings))
+                    .collect();
+                Some(FmtInline::Superscript(children, crate::Span::NONE))
+            }
+
+            node::SUBSCRIPT => {
+                let children = node
+                    .children
+                    .iter()
+                    .filter_map(|n| convert_inline(n, warnings))
+                    .collect();
+                Some(FmtInline::Subscript(children, crate::Span::NONE))
+            }
+
+            node::SMALL_CAPS | node::QUOTED | node::FOOTNOTE_REF | node::FOOTNOTE_DEF => {
                 // Fall back to rendering children as text
                 let children: Vec<FmtInline> = node
                     .children

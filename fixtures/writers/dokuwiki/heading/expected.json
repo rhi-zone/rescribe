@@ -1,0 +1,4 @@
+{
+  "description": "Level-1 heading emits wrapped in six equals signs on each side",
+  "output_contains": ["====== Title ======"]
+}

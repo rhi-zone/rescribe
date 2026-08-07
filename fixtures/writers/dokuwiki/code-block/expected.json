@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits with <code lang> ... </code> wrapping and the language attribute preserved",
+  "output_contains": ["<code python>", "print('hi')", "</code>"]
+}

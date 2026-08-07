@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as {{url|alt}} DokuWiki syntax",
+  "output_contains": ["{{cat.png|a cat}}"]
+}
