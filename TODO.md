@@ -8097,3 +8097,52 @@ worktree.
 comment (both previously claimed direnv/nix handled this via the `include` mechanism —
 already false, and `flake.nix`'s shellHook covering it had already been removed earlier
 this session).
+
+## `rescribe-fmt-pandoc-json` reader: `meta.references`/CSL-JSON bibliography gap (found 2026-08-07, not yet fixed)
+
+**Gap:** `crates/bridges/rescribe-fmt-pandoc-json/src/read.rs`'s `convert_meta` (line 65)
+converts Pandoc's `meta` object generically into flat `Properties` — string-ish key/value
+pairs, with no special-casing of any key. `meta.references` (Pandoc's convention for
+embedding the document's CSL-JSON bibliography array, used alongside `Cite` inline
+elements for citation processing) falls through this generic path along with every other
+meta key: it lands as an opaque nested value in `Properties`, never translated into the
+`bibliography`/`bibliography_entry`/`bibliography_field` node kinds that the IR defines
+for exactly this data (see ADR 0005, and the JATS/TEI/DocBook citation verticals closed
+2026-07-28 above).
+
+**What this blocks:** there is currently no path from any Pandoc-JSON input to
+bibliographic IR that a bibliography-consuming writer can use. Concretely, this is why a
+recent cross-format writer-fixture extension effort could not add meaningful
+`fixtures/writers/ris/` or `fixtures/writers/endnotexml-fmt/` fixtures sourced from
+pandoc-json input — both writers require `bibliography_entry`/`bibliography_field` nodes
+to produce non-empty output, and pandoc-json currently never emits them. More generally,
+any format wanting to receive bibliographic entry data via a pandoc-json-sourced
+conversion is blocked the same way.
+
+**Distinct from the already-fixed `Cite` gap:** commit `b5ae73da86` ("fix
+(rescribe-fmt-pandoc-json): preserve Cite citation metadata") fixed a *related but
+different* gap — `Cite` inline elements (citation *references* within body text, carrying
+id/prefix/suffix/mode/noteNum/hash) now round-trip correctly via a `pandoc:citations`
+prop. That fix is about citation *references*. This gap is about the citation *entry*
+data itself — title/author/issued/container-title/etc., the bibliography Pandoc stores in
+`meta.references` — which `b5ae73da86` did not touch and which remains unimplemented.
+Whoever picks this up should not consider `b5ae73da86` to have covered it.
+
+**Scope note:** implementing this means parsing CSL-JSON's schema (`id`, `type`, `title`,
+`author`, `issued`, `container-title`, etc.) out of `meta.references` and building
+`bibliography_entry`/`bibliography_field` nodes from it. `crates/bridges/
+rescribe-fmt-csl-json`'s reader (`src/read.rs`) already does exactly this: a `CslItem`
+`serde::Deserialize` struct covering the CSL-JSON field set, converted via `convert_item`
+into the same `bibliography_entry`/`bibliography_field` node kinds this gap needs, and
+`rescribe-fmt-csl-json` already depends on `rescribe-core`/`rescribe-std` unconditionally
+(it's a bridge crate, not a feature-gated `-fmt` translation module) — so it's a normal
+dependency `rescribe-fmt-pandoc-json` could take on directly, no feature-flag plumbing
+required. `meta.references` is a JSON array of CSL-JSON items — the same shape
+`rescribe-fmt-csl-json::read` deserializes — so `convert_meta` reusing `CslItem`/
+`convert_item` (either by depending on the crate and calling its logic, or by extracting
+the shared struct/conversion into something both crates pull from) looks straightforward
+in principle; not verified against the actual field-by-field diff between what Pandoc
+emits into `meta.references` and what `rescribe-fmt-csl-json` expects — that check is
+part of the implementation work, not done here. Reimplementing a second CSL-JSON parser
+from scratch in `rescribe-fmt-pandoc-json` should be treated as the wrong outcome absent
+a concrete reason the existing one doesn't fit.
