@@ -309,15 +309,15 @@ mod write {
             _ => {
                 // For unhandled node kinds, recursively process children
                 let blocks: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                if blocks.len() == 1 {
-                    blocks.into_iter().next().unwrap()
-                } else if !blocks.is_empty() {
-                    blocks[0].clone()
-                } else {
-                    Block::Paragraph {
-                        inlines: vec![],
-                        span: Span::NONE,
-                    }
+                match <[Block; 1]>::try_from(blocks) {
+                    Ok([only]) => only,
+                    Err(blocks) => match blocks.into_iter().next() {
+                        Some(first) => first,
+                        None => Block::Paragraph {
+                            inlines: vec![],
+                            span: Span::NONE,
+                        },
+                    },
                 }
             }
         }
