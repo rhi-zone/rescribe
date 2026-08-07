@@ -1,0 +1,1 @@
+{"pandoc-api-version": [1, 23], "meta": {}, "blocks": [{"t": "Header", "c": [2, ["", [], []], [{"t": "Str", "c": "INT."}, {"t": "Space"}, {"t": "Str", "c": "COFFEE"}, {"t": "Space"}, {"t": "Str", "c": "SHOP"}, {"t": "Space"}, {"t": "Str", "c": "-"}, {"t": "Space"}, {"t": "Str", "c": "DAY"}]]}]}

@@ -1,0 +1,4 @@
+{
+  "description": "Underline text in an action line emits wrapped in underscores",
+  "output_contains": ["_stressed_"]
+}

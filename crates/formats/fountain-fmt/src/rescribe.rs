@@ -640,12 +640,44 @@ mod write {
         result
     }
 
+    /// Flatten a node's text content, reconstructing the fountain inline
+    /// markup markers (`**bold**`, `*italic*`, `_underline_`) that
+    /// [`super::read::parse_inline_markup`] parses `strong`/`emphasis`/
+    /// `underline` nodes from — the inverse of that function. Without this,
+    /// formatting on any block that goes through this generic text-flattening
+    /// path (used by every block kind, not just IR from other producers)
+    /// would silently disappear on emit.
     fn collect_text(node: &Node, result: &mut String) {
-        if let Some(content) = node.props.get_str(prop::CONTENT) {
-            result.push_str(content);
-        }
-        for child in &node.children {
-            collect_text(child, result);
+        match node.kind.as_str() {
+            k if k == node::STRONG => {
+                result.push_str("**");
+                for child in &node.children {
+                    collect_text(child, result);
+                }
+                result.push_str("**");
+            }
+            k if k == node::EMPHASIS => {
+                result.push('*');
+                for child in &node.children {
+                    collect_text(child, result);
+                }
+                result.push('*');
+            }
+            k if k == node::UNDERLINE => {
+                result.push('_');
+                for child in &node.children {
+                    collect_text(child, result);
+                }
+                result.push('_');
+            }
+            _ => {
+                if let Some(content) = node.props.get_str(prop::CONTENT) {
+                    result.push_str(content);
+                }
+                for child in &node.children {
+                    collect_text(child, result);
+                }
+            }
         }
     }
 

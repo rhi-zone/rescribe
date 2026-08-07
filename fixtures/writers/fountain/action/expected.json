@@ -1,0 +1,4 @@
+{
+  "description": "A plain paragraph emits as an action line",
+  "output_contains": ["John walks in."]
+}

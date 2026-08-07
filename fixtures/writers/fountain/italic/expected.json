@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis text in an action line emits wrapped in single asterisks",
+  "output_contains": ["*quiet*"]
+}

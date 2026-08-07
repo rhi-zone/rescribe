@@ -1,0 +1,4 @@
+{
+  "description": "Strong text in an action line emits wrapped in double asterisks",
+  "output_contains": ["**LOUD**"]
+}

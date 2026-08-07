@@ -1,0 +1,4 @@
+{
+  "description": "A level-2 heading emits as a scene heading",
+  "output_contains": ["INT. COFFEE SHOP - DAY"]
+}

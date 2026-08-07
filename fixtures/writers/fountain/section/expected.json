@@ -1,0 +1,4 @@
+{
+  "description": "A level-1 heading emits as a section heading marked with a single #",
+  "output_contains": ["# Act One"]
+}
