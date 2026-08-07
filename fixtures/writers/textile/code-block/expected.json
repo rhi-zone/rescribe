@@ -1,0 +1,4 @@
+{
+  "description": "Code block with language emits with bc(lang). prefix",
+  "output_contains": ["bc(rust). ", "fn main()"]
+}

@@ -446,6 +446,8 @@ mod write {
                 }
             }
 
+            node::HORIZONTAL_RULE => Block::HorizontalRule { span: dummy },
+
             node::TABLE => {
                 let rows = node
                     .children
