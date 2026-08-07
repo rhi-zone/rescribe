@@ -1,0 +1,12 @@
+{
+  "description": "A plain paragraph emits a valid ODT zip container: PK magic, an uncompressed mimetype entry with the ODT media type, and the fixed manifest/meta/styles/content member names (stored uncompressed in zip local headers per the zip format, even though content.xml itself is deflated)",
+  "output_contains": [
+    "PK",
+    "mimetype",
+    "application/vnd.oasis.opendocument.text",
+    "META-INF/manifest.xml",
+    "meta.xml",
+    "styles.xml",
+    "content.xml"
+  ]
+}
