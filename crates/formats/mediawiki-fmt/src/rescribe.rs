@@ -327,11 +327,11 @@ mod write {
             }
 
             node::BLOCKQUOTE => {
-                // Flatten blockquote into its children for MediaWiki output
-                node.children
-                    .iter()
-                    .flat_map(node_to_block)
-                    .collect::<Vec<_>>()
+                let children = node.children.iter().flat_map(node_to_block).collect();
+                vec![Block::Blockquote {
+                    children,
+                    span: Span::NONE,
+                }]
             }
 
             node::HORIZONTAL_RULE => {

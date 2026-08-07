@@ -1,0 +1,4 @@
+{
+  "description": "Fenced code block emits with <syntaxhighlight> tags and language attribute",
+  "output_contains": ["<syntaxhighlight lang=\"rust\">", "fn main()", "</syntaxhighlight>"]
+}

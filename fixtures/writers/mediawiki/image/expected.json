@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as [[File:name|alt]] syntax",
+  "output_contains": ["[[File:photo.png|alt text]]"]
+}

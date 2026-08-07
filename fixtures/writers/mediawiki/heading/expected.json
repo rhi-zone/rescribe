@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit with '=' markers matching level (h1 in MediaWiki is reserved for the page title, so level 2 is the first heading level used in body text)",
+  "output_contains": ["== My Heading ==", "=== Sub Heading ==="]
+}

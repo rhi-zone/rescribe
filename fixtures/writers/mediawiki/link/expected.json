@@ -1,0 +1,4 @@
+{
+  "description": "External link emits as [url text] bracket syntax",
+  "output_contains": ["[https://example.com Example]"]
+}

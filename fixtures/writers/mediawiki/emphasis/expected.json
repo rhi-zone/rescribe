@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis emits wrapped in double single-quotes (MediaWiki italic)",
+  "output_contains": ["''italic''"]
+}
