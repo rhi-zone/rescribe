@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits as <hi rend=\"bold\">",
+  "output_contains": ["<hi rend=\"bold\">bold</hi>"]
+}

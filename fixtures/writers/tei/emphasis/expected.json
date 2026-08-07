@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis text emits as <hi rend=\"italic\">",
+  "output_contains": ["<hi rend=\"italic\">italic</hi>"]
+}

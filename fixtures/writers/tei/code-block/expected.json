@@ -1,0 +1,4 @@
+{
+  "description": "Fenced code block emits as <eg> with content preserved",
+  "output_contains": ["<eg>", "fn main()", "</eg>"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as self-closing <graphic url=\"...\"/>",
+  "output_contains": ["<graphic url=\"photo.png\"/>"]
+}

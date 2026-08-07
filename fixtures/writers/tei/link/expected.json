@@ -1,0 +1,4 @@
+{
+  "description": "Link emits as <ref target=\"...\">",
+  "output_contains": ["<ref target=\"https://example.com\">click here</ref>"]
+}

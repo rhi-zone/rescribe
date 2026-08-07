@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit as <head> elements",
+  "output_contains": ["<head>My Heading</head>", "<head>Sub Heading</head>"]
+}

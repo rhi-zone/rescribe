@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list items emit as <list><item>...",
+  "output_contains": ["<list>", "<item><p>first</p></item>", "<item><p>second</p></item>", "<item><p>third</p></item>"]
+}
