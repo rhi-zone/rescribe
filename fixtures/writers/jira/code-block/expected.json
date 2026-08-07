@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits with {code:lang} ... {code}",
+  "output_contains": ["{code:java}", "public class Test {}", "{code}"]
+}

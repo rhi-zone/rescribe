@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit with h1./h2. prefixes matching level",
+  "output_contains": ["h1. My Heading", "h2. Sub Heading"]
+}

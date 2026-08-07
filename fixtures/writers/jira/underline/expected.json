@@ -1,0 +1,4 @@
+{
+  "description": "Underline text emits wrapped in plus signs",
+  "output_contains": ["+underlined+"]
+}
