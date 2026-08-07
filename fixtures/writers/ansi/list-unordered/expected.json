@@ -1,0 +1,4 @@
+{
+  "description": "A bullet list emits with a unicode bullet marker",
+  "output_contains": ["one", "two"]
+}

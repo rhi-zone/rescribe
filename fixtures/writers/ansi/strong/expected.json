@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits the literal text wrapped in SGR bold codes",
+  "output_contains": ["bold"]
+}

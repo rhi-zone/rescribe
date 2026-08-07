@@ -1,0 +1,4 @@
+{
+  "description": "A link degrades to \"label (url)\" since terminals have no native hyperlink markup here",
+  "output_contains": ["Example (http://example.com)"]
+}

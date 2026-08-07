@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits the raw content dimmed",
+  "output_contains": ["x = 1"]
+}

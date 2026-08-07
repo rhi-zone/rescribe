@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis text emits the literal text wrapped in SGR italic codes",
+  "output_contains": ["italic"]
+}

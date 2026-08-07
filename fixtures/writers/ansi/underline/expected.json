@@ -1,0 +1,4 @@
+{
+  "description": "Underline text emits the literal text wrapped in SGR underline codes",
+  "output_contains": ["under"]
+}
