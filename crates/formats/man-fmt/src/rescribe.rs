@@ -325,23 +325,31 @@ mod write {
             }
 
             node::BLOCKQUOTE => {
-                // Convert blockquote children as regular blocks
-                let mut items = Vec::new();
-                let inlines = convert_nodes_to_inlines(&node.children);
-                if !inlines.is_empty() {
-                    items.push((
-                        vec![],
-                        vec![Block::Paragraph {
+                // A blockquote's children are ordinary block nodes (e.g. a
+                // `paragraph`), not flat inlines — the shape produced by
+                // every block-supporting reader (pandoc-json included), not
+                // just a hypothetical man-specific one. Converting via
+                // `convert_node` per child (falling back to treating a
+                // node as inline only if it isn't itself a block) mirrors
+                // how `LIST`/`DEFINITION_LIST` handle their block children
+                // elsewhere in this function, instead of assuming inline
+                // content directly under `BLOCKQUOTE`.
+                let mut content_blocks: Vec<Block> =
+                    node.children.iter().filter_map(convert_node).collect();
+                if content_blocks.is_empty() {
+                    let inlines = convert_nodes_to_inlines(&node.children);
+                    if !inlines.is_empty() {
+                        content_blocks.push(Block::Paragraph {
                             inlines,
                             span: Span::NONE,
-                        }],
-                    ));
+                        });
+                    }
                 }
-                if items.is_empty() {
+                if content_blocks.is_empty() {
                     None
                 } else {
                     Some(Block::DefinitionList {
-                        items,
+                        items: vec![(vec![], content_blocks)],
                         span: Span::NONE,
                     })
                 }

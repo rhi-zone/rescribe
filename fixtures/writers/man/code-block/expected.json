@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits with .nf/.fi delimiters",
+  "output_contains": [".nf", "fn main() {}", ".fi"]
+}

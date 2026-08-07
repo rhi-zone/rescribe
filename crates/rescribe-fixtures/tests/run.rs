@@ -927,3 +927,12 @@ fn jira_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn man_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "man", |doc| {
+        man_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

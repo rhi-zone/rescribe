@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list items emit as .IP N. entries",
+  "output_contains": [".IP 1.", "one", ".IP 2.", "two"]
+}

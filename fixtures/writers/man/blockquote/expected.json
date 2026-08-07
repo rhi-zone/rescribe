@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote content is preserved (man has no native blockquote; emitted via .TP)",
+  "output_contains": [".TP", "quoted text"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list items emit as .IP \\(bu entries",
+  "output_contains": [".IP \\(bu", "first", "second"]
+}

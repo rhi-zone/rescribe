@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in \\f(CW...\\fR",
+  "output_contains": ["\\f(CW", "printf", "\\fR"]
+}

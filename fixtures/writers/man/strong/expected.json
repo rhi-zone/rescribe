@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits wrapped in \\fB...\\fR",
+  "output_contains": ["\\fBbold\\fR"]
+}
