@@ -235,16 +235,14 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             ));
             // Recurse into children to not lose content
             let children = convert_nodes(&n.children, warnings);
-            if children.is_empty() {
-                None
-            } else if children.len() == 1 {
-                Some(children.into_iter().next().unwrap())
-            } else {
-                Some(Block::Figure {
+            match <[Block; 1]>::try_from(children) {
+                Ok([only]) => Some(only),
+                Err(children) if children.is_empty() => None,
+                Err(children) => Some(Block::Figure {
                     name: None,
                     children,
                     span: Span::NONE,
-                })
+                }),
             }
         }
     }
@@ -452,20 +450,20 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
         node::SMALL_CAPS => {
             // Org doesn't have native small caps, emit children as-is
             let children = convert_nodes_to_inlines(&n.children, warnings);
-            if children.len() == 1 {
-                Some(children.into_iter().next().unwrap())
-            } else if children.is_empty() {
-                None
-            } else {
-                // Wrap in a text that concatenates — just return the first
-                // or we could concatenate all text, but returning a Bold is wrong.
-                // Best: return all as separate, but we can only return one Inline.
-                // Return the children by wrapping them inside a no-op container.
-                // We don't have such a container in OrgFmt, so just return first.
-                Some(Inline::Text {
-                    text: collect_text(&children),
-                    span: Span::NONE,
-                })
+            match <[Inline; 1]>::try_from(children) {
+                Ok([only]) => Some(only),
+                Err(children) if children.is_empty() => None,
+                Err(children) => {
+                    // Wrap in a text that concatenates — just return the first
+                    // or we could concatenate all text, but returning a Bold is wrong.
+                    // Best: return all as separate, but we can only return one Inline.
+                    // Return the children by wrapping them inside a no-op container.
+                    // We don't have such a container in OrgFmt, so just return first.
+                    Some(Inline::Text {
+                        text: collect_text(&children),
+                        span: Span::NONE,
+                    })
+                }
             }
         }
 
