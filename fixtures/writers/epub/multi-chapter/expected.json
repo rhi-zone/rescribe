@@ -1,0 +1,4 @@
+{
+  "description": "Two top-level level-1 headings split the document into two chapter XHTML entries in the EPUB manifest/spine",
+  "output_contains": ["OEBPS/chapter1.xhtml", "OEBPS/chapter2.xhtml"]
+}

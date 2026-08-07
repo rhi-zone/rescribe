@@ -1,0 +1,11 @@
+{
+  "description": "A plain paragraph emits a valid EPUB zip container: PK magic, an uncompressed mimetype entry, and manifest paths for the OPF, nav, and single generated chapter",
+  "output_contains": [
+    "PK",
+    "mimetype",
+    "application/epub+zip",
+    "OEBPS/content.opf",
+    "OEBPS/nav.xhtml",
+    "OEBPS/chapter1.xhtml"
+  ]
+}
