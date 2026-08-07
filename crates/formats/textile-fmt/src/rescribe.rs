@@ -611,13 +611,13 @@ mod write {
             _ => {
                 let children: Vec<Inline> =
                     node.children.iter().map(convert_node_to_inline).collect();
-                if children.is_empty() {
-                    Inline::Text(String::new(), dummy)
-                } else if children.len() == 1 {
-                    children.into_iter().next().unwrap()
-                } else {
-                    // Wrap multiple children as text sequence
-                    Inline::Text(String::new(), dummy)
+                match <[Inline; 1]>::try_from(children) {
+                    Ok([only]) => only,
+                    Err(children) if children.is_empty() => Inline::Text(String::new(), dummy),
+                    Err(_) => {
+                        // Wrap multiple children as text sequence
+                        Inline::Text(String::new(), dummy)
+                    }
                 }
             }
         }
