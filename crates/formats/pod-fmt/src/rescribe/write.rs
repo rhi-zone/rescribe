@@ -169,11 +169,9 @@ fn convert_node_to_inline(node: &Node) -> Inline {
 
         node::STRIKEOUT => {
             // POD doesn't support strikethrough; render as text
-            let children: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
-            if children.is_empty() {
-                Inline::Text(String::new(), Span::NONE)
-            } else {
-                children.into_iter().next().unwrap()
+            match node.children.iter().map(convert_node_to_inline).next() {
+                Some(first) => first,
+                None => Inline::Text(String::new(), Span::NONE),
             }
         }
 
