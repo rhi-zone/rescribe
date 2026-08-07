@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits as <code content-type=\"...\">",
+  "output_contains": ["<code content-type=\"rust\">", "fn main() {}", "</code>"]
+}

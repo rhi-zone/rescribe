@@ -1,0 +1,4 @@
+{
+  "description": "Link emits as <ext-link xlink:href=\"...\">",
+  "output_contains": ["<ext-link", "xlink:href=\"https://example.com\"", "click here", "</ext-link>"]
+}

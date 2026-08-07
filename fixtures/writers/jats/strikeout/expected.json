@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout text emits as <strike>",
+  "output_contains": ["<strike>removed</strike>"]
+}

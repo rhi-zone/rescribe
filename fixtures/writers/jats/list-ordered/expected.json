@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list emits as <list list-type=\"order\"> with <list-item>s",
+  "output_contains": ["<list list-type=\"order\">", "<list-item>", "one", "two"]
+}

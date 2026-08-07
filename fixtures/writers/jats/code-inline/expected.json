@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits as <monospace>",
+  "output_contains": ["<monospace>printf</monospace>"]
+}

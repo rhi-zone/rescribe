@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list emits as <list list-type=\"bullet\"> with <list-item>s",
+  "output_contains": ["<list list-type=\"bullet\">", "<list-item>", "first", "second"]
+}

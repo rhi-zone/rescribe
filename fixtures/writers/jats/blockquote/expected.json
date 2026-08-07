@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits as <disp-quote>",
+  "output_contains": ["<disp-quote>", "quoted text", "</disp-quote>"]
+}

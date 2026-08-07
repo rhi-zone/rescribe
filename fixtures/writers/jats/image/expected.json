@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as <inline-graphic xlink:href=\"...\">",
+  "output_contains": ["<inline-graphic", "xlink:href=\"photo.png\""]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Heading emits as a <sec> with a <title>",
+  "output_contains": ["<sec>", "<title>My Heading</title>"]
+}
