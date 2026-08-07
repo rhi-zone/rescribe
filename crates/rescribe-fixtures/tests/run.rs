@@ -999,3 +999,12 @@ fn twiki_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn vimwiki_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "vimwiki", |doc| {
+        vimwiki_fmt::rescribe::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

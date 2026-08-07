@@ -1,0 +1,4 @@
+{
+  "description": "Superscript text emits wrapped in ^ delimiters",
+  "output_contains": ["^up^"]
+}

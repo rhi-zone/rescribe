@@ -1,0 +1,4 @@
+{
+  "description": "A definition list emits with ; term / : desc syntax",
+  "output_contains": ["; Term", ": Definition"]
+}

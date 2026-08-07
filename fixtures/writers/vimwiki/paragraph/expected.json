@@ -1,0 +1,4 @@
+{
+  "description": "A plain paragraph emits as plain text",
+  "output_contains": ["Hello world"]
+}

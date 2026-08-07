@@ -270,7 +270,7 @@ mod read {
 
 #[cfg(all(feature = "writer-builder", feature = "rescribe"))]
 mod write {
-    use crate::{Block, Inline, ListItem, Span, TableRow, VimwikiDoc};
+    use crate::{Block, DefinitionItem, Inline, ListItem, Span, TableRow, VimwikiDoc};
     use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
     use rescribe_format_api::Emit as _;
     use rescribe_std::{node, prop};
@@ -293,6 +293,23 @@ mod write {
         let output = vimwiki_doc.emit();
 
         Ok(ConversionResult::ok(output))
+    }
+
+    /// Extract inlines from a node's children where those children may be
+    /// either inline nodes directly, or block nodes such as `paragraph`
+    /// wrapping the inlines (e.g. rescribe-fmt-pandoc-json wraps table-cell
+    /// and definition-description content in a block since those are block
+    /// content in Pandoc's AST). Handle both shapes.
+    fn block_content_to_inlines(children: &[Node]) -> Vec<Inline> {
+        let mut inlines = Vec::new();
+        for child in children {
+            if child.kind.as_str() == node::PARAGRAPH {
+                inlines.extend(child.children.iter().map(node_to_inline));
+            } else {
+                inlines.push(node_to_inline(child));
+            }
+        }
+        inlines
     }
 
     fn node_to_block(node: &Node) -> Block {
@@ -380,10 +397,10 @@ mod write {
                         let cells = row_node
                             .children
                             .iter()
-                            .filter(|n| n.kind.as_str() == node::TABLE_CELL)
-                            .map(|cell_node| {
-                                cell_node.children.iter().map(node_to_inline).collect()
+                            .filter(|n| {
+                                matches!(n.kind.as_str(), node::TABLE_CELL | node::TABLE_HEADER)
                             })
+                            .map(|cell_node| block_content_to_inlines(&cell_node.children))
                             .collect();
                         TableRow {
                             cells,
@@ -399,6 +416,35 @@ mod write {
             }
 
             node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
+
+            node::DEFINITION_LIST => {
+                // Children are a flat sequence of definition_term /
+                // definition_desc siblings (this crate's own reader shape,
+                // also matched by rescribe-fmt-pandoc-json's DefinitionList
+                // translation), a term optionally followed by multiple descs.
+                let mut items = Vec::new();
+                let mut pending_term: Option<Vec<Inline>> = None;
+                for child in &node.children {
+                    match child.kind.as_str() {
+                        node::DEFINITION_TERM => {
+                            pending_term = Some(block_content_to_inlines(&child.children));
+                        }
+                        node::DEFINITION_DESC => {
+                            let term = pending_term.clone().unwrap_or_default();
+                            items.push(DefinitionItem {
+                                term,
+                                desc: block_content_to_inlines(&child.children),
+                                span: Span::NONE,
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                Block::DefinitionList {
+                    items,
+                    span: Span::NONE,
+                }
+            }
 
             // Fallback for unhandled block types
             _ => {
@@ -486,6 +532,16 @@ mod write {
                     style: None,
                     span: Span::NONE,
                 }
+            }
+
+            node::SUPERSCRIPT => {
+                let children = node.children.iter().map(node_to_inline).collect();
+                Inline::Superscript(children, Span::NONE)
+            }
+
+            node::SUBSCRIPT => {
+                let children = node.children.iter().map(node_to_inline).collect();
+                Inline::Subscript(children, Span::NONE)
             }
 
             // Fallback for inline nodes: wrap in text or return text representation

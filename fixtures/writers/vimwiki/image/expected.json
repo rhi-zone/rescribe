@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as {{url|alt}}",
+  "output_contains": ["{{http://example.com/pic.png|alt text}}"]
+}

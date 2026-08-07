@@ -1,0 +1,4 @@
+{
+  "description": "Subscript text emits wrapped in ,, delimiters",
+  "output_contains": [",,down,,"]
+}
