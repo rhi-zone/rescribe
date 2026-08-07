@@ -1,0 +1,4 @@
+{
+  "description": "A table emits with |-delimited cells, header cells marked with =",
+  "output_contains": ["|=H1|=H2|", "|A|B|"]
+}

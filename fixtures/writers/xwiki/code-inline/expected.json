@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in ## delimiters",
+  "output_contains": ["##x = 1##"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as [[image:url||alt=\"...\"]]",
+  "output_contains": ["[[image:http://example.com/pic.png||alt=\"alt text\"]]"]
+}

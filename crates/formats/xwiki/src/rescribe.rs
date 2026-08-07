@@ -272,7 +272,7 @@ mod write {
                                 let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                                 crate::TableCell {
                                     is_header,
-                                    inlines: nodes_to_inlines(&cell.children),
+                                    inlines: block_content_to_inlines(&cell.children),
                                     span: Span::NONE,
                                 }
                             })
@@ -306,6 +306,14 @@ mod write {
 
             node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
+            node::BLOCKQUOTE => {
+                let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
+                Block::Blockquote {
+                    children,
+                    span: Span::NONE,
+                }
+            }
+
             _ => {
                 // For unhandled node kinds, recursively process children
                 let blocks: Vec<Block> = node.children.iter().map(node_to_block).collect();
@@ -325,6 +333,23 @@ mod write {
 
     fn nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
         nodes.iter().map(node_to_inline).collect()
+    }
+
+    /// Extract inlines from a node's children where those children may be
+    /// either inline nodes directly (this crate's own reader shape) or block
+    /// nodes such as `paragraph` wrapping the inlines (e.g.
+    /// rescribe-fmt-pandoc-json wraps table-cell content in a block, since
+    /// table cells are block content in Pandoc's AST). Handle both shapes.
+    fn block_content_to_inlines(children: &[Node]) -> Vec<Inline> {
+        let mut inlines = Vec::new();
+        for child in children {
+            if child.kind.as_str() == node::PARAGRAPH {
+                inlines.extend(nodes_to_inlines(&child.children));
+            } else {
+                inlines.push(node_to_inline(child));
+            }
+        }
+        inlines
     }
 
     fn node_to_inline(node: &Node) -> Inline {
@@ -378,6 +403,10 @@ mod write {
                     span: Span::NONE,
                 }
             }
+
+            node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children), Span::NONE),
+
+            node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children), Span::NONE),
 
             node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },
 

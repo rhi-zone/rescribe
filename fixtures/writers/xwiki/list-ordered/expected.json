@@ -1,0 +1,4 @@
+{
+  "description": "An ordered list emits with 1. item markers",
+  "output_contains": ["1. first", "1. second"]
+}

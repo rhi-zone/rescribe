@@ -1,0 +1,4 @@
+{
+  "description": "A blockquote emits wrapped in {{quote}} macro tags",
+  "output_contains": ["{{quote}}", "quoted", "{{/quote}}"]
+}

@@ -63,7 +63,7 @@ mediawiki-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
 tikiwiki = { workspace = true, features = ["rescribe", "read", "write"] }
 twiki = { workspace = true, features = ["rescribe", "read", "write"] }
 vimwiki-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
-xwiki = { workspace = true, features = ["rescribe", "read"] }
+xwiki = { workspace = true, features = ["rescribe", "read", "write"] }
 zimwiki = { workspace = true, features = ["rescribe", "read"] }
 markua = { workspace = true, features = ["rescribe"] }
 muse-fmt = { workspace = true, features = ["rescribe", "read", "write"] }
