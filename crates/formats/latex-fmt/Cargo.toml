@@ -20,10 +20,36 @@ write = ["writer-builder", "writer-streaming"]
 # want the standalone LaTeX library never pull in rescribe-core. Translation
 # code is gated per-mode via cfg(all(feature = "<mode>", feature = "rescribe")).
 rescribe = ["dep:rescribe-core", "dep:rescribe-std"]
+# Optional, default-off resolution of `\documentclass`/`\usepackage`
+# targets against real `.cls`/`.sty` content via a local content-addressed
+# disk cache, a best-effort local-TeX-install filesystem probe, and a
+# best-effort CTAN/mirror network fetch — each channel independently
+# optional, all degrading gracefully to the existing raw-preserve
+# fallback. See `src/resolve.rs` module docs for the full design. No
+# package source is vendored into this crate either way. Separate from
+# `rescribe`/`read`/`write`: this is a parsing-fidelity capability, not an
+# IR-adapter or API-mode concern.
+#
+# Cache entries are `rkyv`, not `serde`+bincode/postcard: the realistic
+# usage pattern is one short-lived process per file across a large batch
+# (a shell loop converting thousands of `.tex` files), so there is no
+# cross-read amortization of a deserialization cost within one process —
+# every invocation independently pays whatever the on-disk format costs.
+# `rkyv::access` over an `mmap`ed cache file validates in place and reads
+# directly out of the OS page cache (which stays warm across repeated
+# invocations touching the same entry) with no separate parse/allocate
+# pass, unlike a text (`serde_json`) or even a binary-but-parsed
+# (bincode/postcard) format. See `src/resolve.rs`'s `CacheStore` docs.
+package-resolve = ["dep:dirs", "dep:ureq", "dep:sha2", "dep:rkyv", "dep:memmap2"]
 
 [dependencies]
 rescribe-format-api = { workspace = true }
 rescribe-core = { workspace = true, optional = true }
 rescribe-std = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+rkyv = { workspace = true, optional = true }
+memmap2 = { workspace = true, optional = true }
 
 [dev-dependencies]

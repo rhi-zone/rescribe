@@ -53,15 +53,21 @@
 //!   scan over raw source bytes rather than full token-level parsing; an
 //!   optional argument containing unbalanced `[`/`]` characters *inside* a
 //!   nested `{...}` group is not specially handled.
-//! - No resolution of unknown names against real `.cls`/`.sty` package
-//!   content (vendored source / local TeX install / network fetch) and no
-//!   bounded macro-expansion engine — deferred pending explicit
-//!   confirmation (licensing/network-dependency questions), see TODO.md.
-//!   As a consequence, essentially every command a typical real document
-//!   uses (`\section`, `\textbf`, `\cite`, ...) raw-preserves with an
-//!   `Info` diagnostic rather than being semantically modeled, since real
-//!   documents almost never locally `\def`/`\newcommand` their own
-//!   structural commands.
+//! - By default (and always, regardless of feature flags, for
+//!   [`parse::parse`]/[`events::events`]/[`batch::StreamingParser`]), there
+//!   is no resolution of unknown names against real `.cls`/`.sty` package
+//!   content. As a consequence, essentially every command a typical real
+//!   document uses (`\section`, `\textbf`, `\cite`, ...) raw-preserves with
+//!   an `Info` diagnostic rather than being semantically modeled, since
+//!   real documents almost never locally `\def`/`\newcommand` their own
+//!   structural commands. The optional `package-resolve` feature (default
+//!   off) adds [`resolve::parse_with_package_resolution`], which resolves
+//!   `\documentclass`/`\usepackage`/`\LoadClass`/`\RequirePackage` targets
+//!   against real package content via a local content-addressed disk
+//!   cache, a best-effort local-TeX-install filesystem probe, and a
+//!   best-effort CTAN/mirror network fetch — no package source is ever
+//!   vendored into this crate; see [`resolve`]'s module docs for the full
+//!   design, including why nothing here is a redistribution concern.
 //! - `\begingroup`/`\endgroup` are not modeled as scope boundaries for
 //!   in-document macro tracking (only `{...}` groups, command/environment
 //!   argument groups, and known-environment bodies are).
@@ -78,6 +84,8 @@ pub mod events;
 pub mod parse;
 #[cfg(feature = "rescribe")]
 pub mod rescribe;
+#[cfg(feature = "package-resolve")]
+pub mod resolve;
 pub mod tokenize;
 pub mod writer;
 

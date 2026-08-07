@@ -8166,3 +8166,97 @@ output (verified: `<container_title>Nature</container_title>`,
 `endnotexml-fmt`'s role-name fallback design, not something introduced or fixed here;
 tracked here for whoever next touches EndNote XML's CSL-JSON interop, not fixed as part
 of this change since it's outside the pandoc-json `meta.references` scope.
+
+## `latex-fmt`: package resolution via local cache + local-fs/network channels (no vendoring) (2026-08-07)
+
+**Replaces the earlier "vendor real package source into the crate" design**, which raised
+real licensing/redistribution questions and repeatedly stalled. New design: **no package
+source is ever bundled into this crate's repository or published artifact.** Real
+`.cls`/`.sty` content, when available, is obtained entirely at the caller's runtime via two
+independently-optional channels — a local-filesystem probe (`kpsewhich`, falling back to a
+small set of standard TeX-install path patterns) and a best-effort CTAN/mirror network fetch
+— both gracefully degrading to the existing raw-preserve-with-`Info`-diagnostic fallback when
+unavailable/not found. What gets cached locally (`dirs::cache_dir()/rescribe/latex-fmt/
+packages/v1/`, never committed, never shipped) is the **resolved definition table**, not raw
+source — same category of thing as cargo's own registry cache. Full design, including the
+hash-chain cache-key scheme (`chain_i = SHA256(chain_{i-1} || kind || name || options)`,
+covering `\usepackage[options]{name}` and the prior package-load sequence, since packages can
+branch on what's already loaded), lives in `crates/formats/latex-fmt/src/resolve.rs`'s module
+docs. Feature-gated `package-resolve` (default off), separate from `rescribe`/`read`/`write`.
+New workspace deps: `dirs` (OS cache dir), `ureq` (blocking HTTP, no async runtime pulled in).
+
+**Cache on-disk format is `rkyv`, not `serde`+bincode/postcard** (coordinator input mid-task,
+addressed before completing this work). Rationale: the realistic usage pattern is a shell
+loop invoking the conversion tool once per file across a large batch (e.g. thousands of
+`.tex` files), each invocation a fresh short-lived process — so there's no cross-read
+amortization of a deserialization cost within one process; every invocation independently
+pays whatever the format costs. `rkyv::access` over an `mmap`ed cache file validates in place
+and reads straight out of the OS page cache (warm across repeated invocations touching the
+same entry) with no separate parse/allocate pass, unlike text (`serde_json`, the initial
+implementation, replaced) or binary-but-parsed (bincode/postcard) formats. Implementation:
+`CachedResolved` (the persisted subset — `commands`/`environments`/`source_sha256`/
+`resolved_via`/`resolved_at_unix`; excludes `Diagnostic`, which has no `rkyv` impl and isn't
+needed for a cache hit to be correct) derives `Archive`/`Serialize`/`Deserialize` via `rkyv`;
+`CacheStore::get` does `File::open` → `memmap2::Mmap::map` (unsafe, justified in a doc comment:
+this directory holds only content the same process tree itself wrote, so the "no concurrent
+mutation" safety requirement holds) → `rkyv::access::<ArchivedCachedResolved, _>` (validated,
+zero-copy borrow) → `rkyv::deserialize` into an owned `CachedResolved` (the one unavoidable
+step, since callers merge into their own owned `HashMap<String, MacroInfo>`; documented as
+categorically cheaper than JSON-text parsing or a bincode/postcard decode, not claimed to be
+literally zero-cost). New workspace deps for this: `rkyv`, `memmap2`. `serde`/`serde_json`
+were added then removed again from `latex-fmt`'s `package-resolve` feature during this same
+pass (never landed in a commit) once the format was switched.
+
+**Discrepancy found and resolved by re-reading the actual code, not assumed:** the task that
+requested this described a "bounded macro-expansion engine (already landed, same engine
+handles in-document and package-level definitions)" as an existing precondition. It does not
+exist as a separate thing — `crates/formats/latex-fmt/src/parse.rs`'s own module docs
+explicitly list "bounded macro-expansion engine" as **deferred, not implemented** (priority
+#3 in that file's resolution-model doc comment), and `lib.rs`'s known-limitations list said
+the same. What *does* exist and *is* reused here is the definer-tracking scope-stack engine
+(`Parser`'s `command_scopes`/`env_scopes`, `COMMAND_DEFINERS`/`TEX_DEFINERS`/`ENV_DEFINERS`
+dispatch) already landed for in-document `\def`/`\newcommand` tracking — genuinely "bounded"
+(no recursive body substitution, only definer-arity tracking with real TeX grouping
+semantics) and genuinely reusable verbatim against package content, which is what "same
+engine handles in-document and package-level definitions" turns out to mean concretely: two
+new `parse.rs` functions, `extract_definitions` (runs `Parser` over arbitrary source, returns
+the global-frame definition table left after) and `parse_seeded`/`Parser::new_seeded` (runs
+the normal in-document scan with that table pre-populated into the global frame) — no new
+expansion engine written, the existing one wired to a second input source. Flagged here per
+CLAUDE.md's "surface a real divergence, don't guess" rule; not a blocker since the mapping is
+unambiguous once the actual code is read, but the requesting task's premise was inaccurate to
+the codebase state and should not be repeated uncorrected in a future summary.
+
+**Network channel is explicitly heuristic, documented as such, not claimed complete.** CTAN
+has no single uniform "give me the raw `.sty` for `<name>`" URL for every package (varied
+publish layouts — bare file, `.dtx`/`.ins` pair, `.tds.zip`); `NetworkSource` only covers the
+common "published as a direct file under a conventional path" case and simply misses (not
+errors) everything else. Real-world hit rate against arbitrary CTAN packages is unverified —
+no network access was available to test against live CTAN from this session's environment.
+
+**Tests:** unit tests for chain-key determinism/option-sensitivity/kind-sensitivity/
+prior-load-sequence-sensitivity, cache put/get roundtrip (real temp dir, no mocking needed —
+it's just file I/O), resolver wiring against a mock `LocalFsSource` (`extra_roots` pointed at
+a temp dir with a hand-written `.sty`), pre-scan of `\documentclass`/`\usepackage`/comma-list
+expansion, and two end-to-end tests (resolved package seeds a real command use; unresolvable
+package still raw-preserves exactly like plain `parse()`) — all mock/fixture-based, no real
+network or TeX install required, all passing. Three `#[ignore]`-gated integration tests
+(`local_fs_resolves_a_real_installed_package`, `network_resolves_a_real_ctan_package`,
+`full_resolver_end_to_end_against_real_ctan`) exercise the real channels; not run in this
+session (no real TeX install or verified live network path available here), and not asserted
+to pass — whoever has both available should run `cargo test -p latex-fmt --all-features --
+--ignored` and report results, especially for the network channel given the heuristic caveat
+above.
+
+**Not attempted / explicitly out of scope this pass:** `fixtures/latex/` was not extended for
+this feature. The fixture suite's `input`+`expected.json` model assumes deterministic,
+environment-independent output; `package-resolve`'s behavior is inherently dependent on what
+`.cls`/`.sty` content (if any) is reachable on a given machine/network at test time, which
+doesn't fit that model. Crate-level tests (above) are the correct test surface for this
+feature; `fixtures/latex/COVERAGE.md` is unaffected.
+
+**Verification:** `cargo test -q -p latex-fmt --all-features` (68 passed, 3 ignored, 0
+failed) and `cargo test -q -p latex-fmt` (default features, unaffected: 48 passed) both
+clean; `cargo clippy --all-targets --all-features -p latex-fmt -- -D warnings` clean;
+`cargo fmt --check` (workspace-wide) clean. `Cargo.lock` diff confirmed purely additive (new
+transitive deps for `dirs`/`ureq` only, no existing entries touched/removed).

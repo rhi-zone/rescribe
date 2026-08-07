@@ -50,6 +50,51 @@ pub fn parse(input: &str) -> (LatexDoc, Vec<Diagnostic>) {
     (LatexDoc { nodes }, p.diags)
 }
 
+/// Like [`parse`] but with the global command/environment frame seeded
+/// from `seed_commands`/`seed_environments` before the scan begins. Used
+/// by `crate::resolve::parse_with_package_resolution` to make names
+/// resolved from `.cls`/`.sty` content behave exactly like an in-document
+/// `\newcommand` for the rest of this document.
+#[cfg(feature = "package-resolve")]
+pub(crate) fn parse_seeded(
+    input: &str,
+    seed_commands: HashMap<String, MacroInfo>,
+    seed_environments: HashMap<String, MacroInfo>,
+) -> (LatexDoc, Vec<Diagnostic>) {
+    let mut p = Parser::new_seeded(input, seed_commands, seed_environments);
+    let nodes = p.parse_sequence(false);
+    (LatexDoc { nodes }, p.diags)
+}
+
+/// Runs the *same* definer-tracking engine `parse()` uses for in-document
+/// `\def`/`\newcommand`/`\newenvironment` tracking over `source` (the raw
+/// content of a resolved `.cls`/`.sty` file, or any other TeX source),
+/// and returns the definitions left in the global frame once the whole
+/// source has been scanned — the package's "public" macro table, as if it
+/// had just finished loading. This *is* the "bounded macro-expansion
+/// engine" referenced in package-resolution design docs: it is bounded
+/// (no recursive body substitution — the same non-goal `parse()` already
+/// documents; only definer-arity tracking with real TeX grouping/shadowing
+/// semantics), and it is literally the same [`Parser`] used for
+/// in-document tracking, applied to a different source string. No new
+/// engine, no I/O — `crate::resolve` supplies `source` via its own
+/// filesystem/network/cache channels and calls this to turn bytes into a
+/// definition table.
+#[cfg(feature = "package-resolve")]
+pub(crate) fn extract_definitions(
+    source: &str,
+) -> (
+    HashMap<String, MacroInfo>,
+    HashMap<String, MacroInfo>,
+    Vec<Diagnostic>,
+) {
+    let mut p = Parser::new(source);
+    let _ = p.parse_sequence(false);
+    let commands = p.command_scopes.into_iter().next().unwrap_or_default();
+    let environments = p.env_scopes.into_iter().next().unwrap_or_default();
+    (commands, environments, p.diags)
+}
+
 /// Commands that define/redefine a macro name via the LaTeX-kernel
 /// `\newcommand` family. Recognizing these nine names is knowledge of the
 /// TeX/LaTeX *definition mechanism itself* (a kernel primitive / kernel
@@ -68,12 +113,12 @@ const ENV_DEFINERS: &[&str] = &["newenvironment", "renewenvironment"];
 /// the name consumes. Derived entirely from the document's own definition
 /// (declared `[N]` for `\newcommand`/`\newenvironment`, or inferred `#n`
 /// count for `\def`) — never from any external table.
-#[derive(Debug, Clone, Copy)]
-struct MacroInfo {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MacroInfo {
     /// Total mandatory `{...}` groups consumed at a use site (already
     /// excluding the leading optional one, if any).
-    mandatory: u8,
-    has_optional_leading: bool,
+    pub(crate) mandatory: u8,
+    pub(crate) has_optional_leading: bool,
 }
 
 pub(crate) struct Parser<'a> {
@@ -100,6 +145,27 @@ impl<'a> Parser<'a> {
             command_scopes: vec![HashMap::new()],
             env_scopes: vec![HashMap::new()],
         }
+    }
+
+    /// Like [`Parser::new`] but with the global (index-0) command/
+    /// environment frames pre-populated. Used by the optional
+    /// `package-resolve` feature ([`crate::resolve`]) to seed definitions
+    /// extracted from resolved `.cls`/`.sty` content before the
+    /// in-document scan begins, so uses of those names later in the
+    /// document resolve through the same [`Parser::resolve_command`] /
+    /// [`Parser::resolve_environment`] lookup as any in-document `\def`/
+    /// `\newcommand`. No I/O and no new dependency here — the seeding data
+    /// is produced entirely by `resolve.rs`; this module only accepts it.
+    #[cfg(feature = "package-resolve")]
+    pub(crate) fn new_seeded(
+        input: &'a str,
+        seed_commands: HashMap<String, MacroInfo>,
+        seed_environments: HashMap<String, MacroInfo>,
+    ) -> Self {
+        let mut p = Self::new(input);
+        p.command_scopes[0] = seed_commands;
+        p.env_scopes[0] = seed_environments;
+        p
     }
 
     // ---- scope-stack plumbing ---------------------------------------------
