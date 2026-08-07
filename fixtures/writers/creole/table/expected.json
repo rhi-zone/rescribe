@@ -1,0 +1,4 @@
+{
+  "description": "A table with a header row and one data row emits with |=-prefixed header cells and |-prefixed data cells",
+  "output_contains": ["|=Name", "|=Age", "|Alice", "|30"]
+}

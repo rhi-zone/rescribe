@@ -1,0 +1,4 @@
+{
+  "description": "A blockquote emits its quoted content",
+  "output_contains": ["quoted text"]
+}

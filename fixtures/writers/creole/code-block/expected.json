@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits wrapped in triple-brace nowiki markers",
+  "output_contains": ["{{{", "fn main() {}", "}}}"]
+}
