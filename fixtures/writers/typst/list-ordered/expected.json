@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list items emit with Typst '+' style prefix",
+  "output_contains": ["+ one", "+ two", "+ three"]
+}

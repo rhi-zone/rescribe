@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as <image l:href=\"...\"> with alt attribute; non-fragment hrefs are prefixed with '#' since FB2 image references target embedded binaries",
+  "output_contains": ["<image l:href=\"#photo.png\" alt=\"alt text\""]
+}

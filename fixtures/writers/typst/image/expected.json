@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as #image(\"url\") function syntax",
+  "output_contains": ["#image(\"photo.png\")"]
+}

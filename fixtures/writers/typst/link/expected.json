@@ -1,0 +1,4 @@
+{
+  "description": "Link emits as #link(\"url\")[text] function syntax",
+  "output_contains": ["#link(\"https://example.com\")[click here]"]
+}

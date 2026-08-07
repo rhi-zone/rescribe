@@ -1,0 +1,4 @@
+{
+  "description": "First heading becomes the section's <title>",
+  "output_contains": ["<title><p>Chapter One</p></title>"]
+}
