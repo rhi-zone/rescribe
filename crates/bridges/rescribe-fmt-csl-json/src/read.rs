@@ -55,6 +55,25 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
     Ok(ConversionResult::with_warnings(document, warnings))
 }
 
+/// Parse a single already-deserialized CSL-JSON item (one element of a
+/// CSL-JSON array, as a `serde_json::Value`) into a `bibliography_entry`
+/// node plus any fidelity warnings generated for it.
+///
+/// Public so other bridge crates that receive CSL-JSON structurally
+/// embedded in another format — e.g. `rescribe-fmt-pandoc-json`'s
+/// `meta.references` — can reuse per-item CSL-JSON parsing instead of
+/// reimplementing it. Operating per-item (rather than via [`parse`], which
+/// deserializes the whole array as `Vec<CslItem>` in one shot) lets a
+/// caller recover from one malformed item without losing every other valid
+/// entry in the array.
+pub fn parse_item(item: &Value) -> Result<(Node, Vec<FidelityWarning>), ParseError> {
+    let item: CslItem = serde_json::from_value(item.clone())
+        .map_err(|e| ParseError::Invalid(format!("CSL JSON item parse error: {}", e)))?;
+    let mut warnings = Vec::new();
+    let node = convert_item(&item, &mut warnings);
+    Ok((node, warnings))
+}
+
 #[derive(Debug, Deserialize)]
 struct CslItem {
     id: String,

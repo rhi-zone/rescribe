@@ -3227,6 +3227,7 @@ name = "rescribe-fmt-pandoc-json"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-fmt-csl-json",
  "rescribe-std",
  "serde",
  "serde_json",

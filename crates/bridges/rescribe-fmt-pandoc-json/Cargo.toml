@@ -9,5 +9,6 @@ description = "Pandoc JSON reader and writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+rescribe-fmt-csl-json.workspace = true
 serde.workspace = true
 serde_json.workspace = true

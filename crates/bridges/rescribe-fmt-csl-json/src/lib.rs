@@ -27,5 +27,5 @@
 mod read;
 mod write;
 
-pub use read::parse;
+pub use read::{parse, parse_item};
 pub use write::emit;

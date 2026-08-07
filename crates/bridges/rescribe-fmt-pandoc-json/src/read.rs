@@ -26,8 +26,11 @@ pub fn parse_with_options(
         serde_json::from_str(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
 
     let mut converter = Converter::new();
-    let children = converter.convert_blocks(&pandoc.blocks);
+    let mut children = converter.convert_blocks(&pandoc.blocks);
     let metadata = converter.convert_meta(&pandoc.meta);
+    if let Some(bibliography) = converter.convert_references(&pandoc.meta) {
+        children.push(bibliography);
+    }
 
     let root = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(root).with_metadata(metadata);
@@ -66,12 +69,191 @@ impl Converter {
         let mut props = Properties::new();
         if let Value::Object(map) = meta {
             for (key, value) in map {
+                // `references` carries Pandoc's CSL-JSON bibliography array
+                // (see `convert_references`) — structured bibliographic data,
+                // not a flat string. It's translated into
+                // `bibliography`/`bibliography_entry`/`bibliography_field`
+                // content nodes instead of a generic metadata property.
+                if key == "references" {
+                    continue;
+                }
                 if let Some(v) = self.extract_meta_value(value) {
                     props.set(key.clone(), v);
                 }
             }
         }
         props
+    }
+
+    /// Translate Pandoc's `meta.references` — the document's embedded
+    /// CSL-JSON bibliography array, used alongside `Cite` inline elements
+    /// for citation processing — into a `bibliography` node with
+    /// `bibliography_entry`/`bibliography_field` children (see ADR 0005).
+    /// Returns `None` when `meta.references` is absent, which is the normal
+    /// case (most documents have no bibliography) — not a fidelity gap.
+    ///
+    /// Reuses `rescribe-fmt-csl-json`'s `parse_item` for the actual CSL-JSON
+    /// field parsing (title/author/issued/container-title/etc.) rather than
+    /// reimplementing it. One real structural gap between Pandoc's
+    /// `meta.references` and standalone CSL-JSON files: every Pandoc `meta`
+    /// value — including nested ones — is wrapped in Pandoc's own
+    /// `{"t": "MetaX", "c": ...}` envelope (confirmed against real
+    /// `pandoc -t json` output: a `references:` YAML metadata block becomes
+    /// `MetaList` of `MetaMap` of per-field `MetaInlines`/`MetaMap`/... —
+    /// not the flat CSL-JSON object shape `rescribe-fmt-csl-json` expects).
+    /// `unwrap_references_value` strips that envelope into plain JSON before
+    /// handing items to `parse_item`.
+    fn convert_references(&mut self, meta: &Value) -> Option<Node> {
+        let references = meta.get("references")?;
+        let unwrapped = match self.unwrap_references_value(references) {
+            Some(v) => v,
+            None => {
+                self.warn(
+                    WarningKind::UnsupportedNode("pandoc:references".to_string()),
+                    "meta.references present but has an unrecognized Pandoc MetaValue shape; \
+                     bibliography dropped"
+                        .to_string(),
+                );
+                return None;
+            }
+        };
+        let items = match unwrapped {
+            Value::Array(items) => items,
+            _ => {
+                self.warn(
+                    WarningKind::UnsupportedNode("pandoc:references".to_string()),
+                    "meta.references present but did not unwrap to a list; bibliography dropped"
+                        .to_string(),
+                );
+                return None;
+            }
+        };
+
+        let mut entries = Vec::new();
+        for item in &items {
+            match rescribe_fmt_csl_json::parse_item(item) {
+                Ok((node, item_warnings)) => {
+                    entries.push(node);
+                    self.warnings.extend(item_warnings);
+                }
+                Err(e) => self.warn(
+                    WarningKind::UnsupportedNode("pandoc:references".to_string()),
+                    format!("meta.references entry could not be parsed as CSL-JSON: {e}"),
+                ),
+            }
+        }
+
+        if entries.is_empty() {
+            None
+        } else {
+            Some(Node::new(node::BIBLIOGRAPHY).children(entries))
+        }
+    }
+
+    /// Recursively strip Pandoc's `{"t": "MetaX", "c": ...}` MetaValue
+    /// envelope into plain JSON (`MetaString`/`MetaInlines` -> string,
+    /// `MetaBool` -> bool, `MetaList` -> array, `MetaMap` -> object), the
+    /// shape `rescribe-fmt-csl-json::parse_item` expects. `MetaInlines` text
+    /// reuses `inlines_to_text`, so nested inline formatting (`Emph`,
+    /// `Strong`, ...) is flattened to plain text the same way every other
+    /// `meta` field's `MetaInlines` value already is.
+    ///
+    /// `date-parts` is special-cased via `unwrap_date_parts`: Pandoc's YAML
+    /// metadata parser treats every scalar as inline content, so integers
+    /// like a CSL `issued` year arrive as `MetaInlines` string tokens
+    /// (`"2020"`), not JSON numbers — unlike a standalone CSL-JSON file.
+    /// `rescribe-fmt-csl-json`'s date handling reads `date-parts` via
+    /// `Value::as_i64`, which returns `None` (silently dropping the date)
+    /// for a JSON string, so this coerces numeric-looking date-part strings
+    /// back into numbers before handoff.
+    fn unwrap_references_value(&mut self, value: &Value) -> Option<Value> {
+        let t = value.get("t")?.as_str()?;
+        let c = value.get("c")?;
+        match t {
+            "MetaString" => c.as_str().map(|s| Value::String(s.to_string())),
+            "MetaInlines" => {
+                if let Value::Array(inlines) = c {
+                    Some(Value::String(self.inlines_to_text(inlines)))
+                } else {
+                    None
+                }
+            }
+            "MetaBool" => c.as_bool().map(Value::Bool),
+            "MetaList" => {
+                if let Value::Array(items) = c {
+                    Some(Value::Array(
+                        items
+                            .iter()
+                            .filter_map(|item| self.unwrap_references_value(item))
+                            .collect(),
+                    ))
+                } else {
+                    None
+                }
+            }
+            "MetaMap" => {
+                if let Value::Object(map) = c {
+                    let mut obj = serde_json::Map::new();
+                    for (k, v) in map {
+                        let unwrapped = if k == "date-parts" {
+                            self.unwrap_date_parts(v)
+                        } else {
+                            self.unwrap_references_value(v)
+                        };
+                        match unwrapped {
+                            Some(uv) => {
+                                obj.insert(k.clone(), uv);
+                            }
+                            None => self.warn(
+                                WarningKind::UnsupportedNode(format!("pandoc:references:{k}")),
+                                format!(
+                                    "meta.references field '{k}' has an unrecognized Pandoc \
+                                     MetaValue shape; dropped"
+                                ),
+                            ),
+                        }
+                    }
+                    Some(Value::Object(obj))
+                } else {
+                    None
+                }
+            }
+            _ => {
+                self.warn(
+                    WarningKind::UnsupportedNode(format!("pandoc:meta-value:{t}")),
+                    format!("meta.references contains unsupported Pandoc MetaValue type '{t}'"),
+                );
+                None
+            }
+        }
+    }
+
+    /// See `unwrap_references_value`'s doc comment for why this exists:
+    /// coerces numeric-looking `date-parts` leaf strings back into JSON
+    /// numbers. Non-numeric parts (e.g. a CSL "season" code) are left as
+    /// text, matching how `rescribe-fmt-csl-json` already treats
+    /// unparseable date parts (dropped, not guessed at).
+    fn unwrap_date_parts(&mut self, value: &Value) -> Option<Value> {
+        let unwrapped = self.unwrap_references_value(value)?;
+        let Value::Array(outer) = unwrapped else {
+            return Some(unwrapped);
+        };
+        let coerced = outer
+            .into_iter()
+            .map(|inner| match inner {
+                Value::Array(parts) => Value::Array(
+                    parts
+                        .into_iter()
+                        .map(|p| match &p {
+                            Value::String(s) => s.parse::<i64>().map(Value::from).unwrap_or(p),
+                            _ => p,
+                        })
+                        .collect(),
+                ),
+                other => other,
+            })
+            .collect();
+        Some(Value::Array(coerced))
     }
 
     fn extract_meta_value(&mut self, value: &Value) -> Option<String> {
@@ -938,5 +1120,105 @@ mod tests {
 
         assert_eq!(doc.metadata.get_str("title"), Some("My Title"));
         assert_eq!(doc.metadata.get_str("author"), Some("John Doe"));
+    }
+
+    /// Real `pandoc -f markdown -t json` output for a document with a YAML
+    /// `references:` metadata block (captured against pandoc 3.7.0.2) —
+    /// confirms `meta.references` arrives wrapped in Pandoc's own MetaValue
+    /// envelope (`MetaList`/`MetaMap`/`MetaInlines`), not flat CSL-JSON, and
+    /// that `date-parts` integers arrive as `MetaInlines` string tokens.
+    #[test]
+    fn test_parse_references_bibliography() {
+        let json = r#"{"pandoc-api-version":[1,23,1],"meta":{"references":{"t":"MetaList","c":[{"t":"MetaMap","c":{"DOI":{"t":"MetaInlines","c":[{"t":"Str","c":"10.1000/xyz123"}]},"author":{"t":"MetaList","c":[{"t":"MetaMap","c":{"family":{"t":"MetaInlines","c":[{"t":"Str","c":"Smith"}]},"given":{"t":"MetaInlines","c":[{"t":"Str","c":"John"}]}}}]},"container-title":{"t":"MetaInlines","c":[{"t":"Str","c":"Nature"}]},"id":{"t":"MetaInlines","c":[{"t":"Str","c":"smith2020"}]},"issued":{"t":"MetaMap","c":{"date-parts":{"t":"MetaList","c":[{"t":"MetaList","c":[{"t":"MetaInlines","c":[{"t":"Str","c":"2020"}]}]}]}}},"page":{"t":"MetaInlines","c":[{"t":"Str","c":"1-10"}]},"title":{"t":"MetaInlines","c":[{"t":"Str","c":"A"},{"t":"Space"},{"t":"Str","c":"Great"},{"t":"Space"},{"t":"Str","c":"Paper"}]},"type":{"t":"MetaInlines","c":[{"t":"Str","c":"article-journal"}]},"volume":{"t":"MetaInlines","c":[{"t":"Str","c":"1"}]}}}]}},"blocks":[{"t":"Para","c":[{"t":"Str","c":"Hello."}]}]}"#;
+
+        let result = parse(json).unwrap();
+        let doc = result.value;
+
+        // `references` never lands as a generic metadata property.
+        assert_eq!(doc.metadata.get_str("references"), None);
+
+        // The bibliography is appended as the last top-level content node,
+        // after the body blocks.
+        let bibliography = doc.content.children.last().expect("bibliography node");
+        assert_eq!(bibliography.kind.as_str(), node::BIBLIOGRAPHY);
+        assert_eq!(bibliography.children.len(), 1);
+
+        let entry = &bibliography.children[0];
+        assert_eq!(entry.kind.as_str(), node::BIBLIOGRAPHY_ENTRY);
+        assert_eq!(entry.props.get_str("csl:id"), Some("smith2020"));
+        assert_eq!(entry.props.get_str("csl:type"), Some("article-journal"));
+
+        // `date-parts` year survived the string->number coercion needed for
+        // `rescribe-fmt-csl-json`'s `Value::as_i64`-based date parsing.
+        let Some(rescribe_core::PropValue::Map(date)) = entry.props.get(prop::DATE) else {
+            panic!("expected structured date prop");
+        };
+        assert_eq!(date.get("year"), Some(&rescribe_core::PropValue::Int(2020)));
+
+        let field_kinds: Vec<&str> = entry
+            .children
+            .iter()
+            .map(|f| f.props.get_str("csl:field").unwrap_or_default())
+            .collect();
+        assert!(field_kinds.contains(&"container-title"));
+        assert!(field_kinds.contains(&"DOI"));
+        assert!(field_kinds.contains(&"page"));
+    }
+
+    #[test]
+    fn test_no_references_key_produces_no_bibliography() {
+        let json = r#"{
+            "pandoc-api-version": [1, 23],
+            "meta": {},
+            "blocks": [{"t": "Para", "c": [{"t": "Str", "c": "Hello."}]}]
+        }"#;
+
+        let result = parse(json).unwrap();
+        let doc = result.value;
+
+        assert!(
+            !doc.content
+                .children
+                .iter()
+                .any(|n| n.kind.as_str() == node::BIBLIOGRAPHY)
+        );
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_malformed_reference_entry_warns_without_dropping_valid_entries() {
+        // First item is missing the required `id` field; second is valid.
+        let json = r#"{
+            "pandoc-api-version": [1, 23],
+            "meta": {
+                "references": {"t": "MetaList", "c": [
+                    {"t": "MetaMap", "c": {
+                        "title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "No id"}]}
+                    }},
+                    {"t": "MetaMap", "c": {
+                        "id": {"t": "MetaInlines", "c": [{"t": "Str", "c": "valid2021"}]}
+                    }}
+                ]}
+            },
+            "blocks": []
+        }"#;
+
+        let result = parse(json).unwrap();
+        let doc = result.value;
+
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("could not be parsed as CSL-JSON"))
+        );
+
+        let bibliography = doc.content.children.last().expect("bibliography node");
+        assert_eq!(bibliography.kind.as_str(), node::BIBLIOGRAPHY);
+        assert_eq!(bibliography.children.len(), 1);
+        assert_eq!(
+            bibliography.children[0].props.get_str("csl:id"),
+            Some("valid2021")
+        );
     }
 }
