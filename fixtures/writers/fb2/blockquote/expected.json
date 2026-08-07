@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits as <cite> (FB2's quotation element)",
+  "output_contains": ["<cite>", "<p>quoted text</p>", "</cite>"]
+}
