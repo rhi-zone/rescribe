@@ -2381,14 +2381,11 @@ mod write {
             }
             if let Some(pg_type) = child.props.get_str("jats:person-group-type") {
                 let mut group_kids = vec![write_bibliography_field(child)];
-                while let Some(next) = iter.peek() {
-                    if next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
+                while let Some(next) = iter.next_if(|next| {
+                    next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
                         && next.props.get_str("jats:person-group-type") == Some(pg_type)
-                    {
-                        group_kids.push(write_bibliography_field(iter.next().unwrap()));
-                    } else {
-                        break;
-                    }
+                }) {
+                    group_kids.push(write_bibliography_field(next));
                 }
                 citation_kids.push(jats_element(
                     "person-group",

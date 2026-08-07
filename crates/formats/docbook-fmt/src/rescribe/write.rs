@@ -95,16 +95,19 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     // document built programmatically rather than round-tripped) falls
     // back to the pre-existing synthesized-`<article>`-wrapper behavior.
     let root = match doc.content.children.as_slice() {
-        [only]
-            if only.kind.as_str() == node::DIV
-                && only
-                    .props
-                    .get_str("docbook:tag")
-                    .is_some_and(is_structural_sectioning_tag) =>
-        {
-            let tag = only.props.get_str("docbook:tag").unwrap().to_string();
-            write_sectioning_container(&tag, only, xmlns_attrs, info.into_iter().collect())
-        }
+        [only] if only.kind.as_str() == node::DIV => match only.props.get_str("docbook:tag") {
+            Some(tag) if is_structural_sectioning_tag(tag) => {
+                let tag = tag.to_string();
+                write_sectioning_container(&tag, only, xmlns_attrs, info.into_iter().collect())
+            }
+            _ => {
+                root_children.extend(info);
+                for child in &doc.content.children {
+                    root_children.extend(write_node(child));
+                }
+                db_element("article", xmlns_attrs, root_children)
+            }
+        },
         _ => {
             root_children.extend(info);
             for child in &doc.content.children {
@@ -963,12 +966,9 @@ fn write_bibliography_entry(node: &Node) -> DbNode {
             continue;
         }
         if child.props.get_str(prop::FIELD_ROLE) == Some("page_first")
-            && iter
-                .peek()
-                .and_then(|next| next.props.get_str(prop::FIELD_ROLE))
-                == Some("page_last")
+            && let Some(last) =
+                iter.next_if(|next| next.props.get_str(prop::FIELD_ROLE) == Some("page_last"))
         {
-            let last = iter.next().unwrap();
             let first_text = flatten_field_text(child);
             let last_text = flatten_field_text(last);
             kids.push(db_element(

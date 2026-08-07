@@ -1073,14 +1073,14 @@ pub mod read {
     /// mapping this implements.
     fn convert_bibl_scope(attrs: &[(String, String)], children: Vec<Node>) -> Vec<Node> {
         let unit = get_attr(attrs, "unit");
-        if matches!(unit, Some("page") | Some("pp"))
+        if let Some(unit_str @ ("page" | "pp")) = unit
             && let (Some(from), Some(to)) = (get_attr(attrs, "from"), get_attr(attrs, "to"))
         {
             let page_field = |role: &str, text: &str| {
                 Node::new(node::BIBLIOGRAPHY_FIELD)
                     .prop(prop::FIELD_ROLE, role.to_string())
                     .prop("tei:tag", "biblScope")
-                    .prop("tei:attr:unit", unit.unwrap().to_string())
+                    .prop("tei:attr:unit", unit_str.to_string())
                     .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
             };
             return vec![page_field("page_first", from), page_field("page_last", to)];
@@ -2428,13 +2428,14 @@ pub mod write {
             }
             if child.props.get_str("tei:tag") == Some("biblScope")
                 && role == Some("page_first")
-                && let Some(next) = iter.peek()
-                && next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
-                && next.props.get_str("tei:tag") == Some("biblScope")
-                && next.props.get_str(prop::FIELD_ROLE) == Some("page_last")
+                && let Some(next) = iter.next_if(|next| {
+                    next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
+                        && next.props.get_str("tei:tag") == Some("biblScope")
+                        && next.props.get_str(prop::FIELD_ROLE) == Some("page_last")
+                })
             {
                 let from = field_plain_text(child);
-                let to = field_plain_text(iter.next().unwrap());
+                let to = field_plain_text(next);
                 out.push(tei_element(
                     "biblScope",
                     vec![
