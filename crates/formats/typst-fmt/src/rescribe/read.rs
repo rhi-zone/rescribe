@@ -267,11 +267,10 @@ mod tests {
             .children
             .iter()
             .find(|c| c.kind.as_str() == node::FOOTNOTE_DEF);
-        assert!(
-            footnote.is_some(),
-            "Expected a footnote_def node in paragraph"
-        );
-        assert!(!footnote.unwrap().children.is_empty());
+        let Some(footnote) = footnote else {
+            panic!("Expected a footnote_def node in paragraph");
+        };
+        assert!(!footnote.children.is_empty());
     }
 
     #[test]

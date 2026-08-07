@@ -539,14 +539,14 @@ mod write {
             // For unsupported nodes, emit children as text
             _ => {
                 let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
-                if children.is_empty() {
-                    Inline::Text(String::new(), Span::NONE)
-                } else if children.len() == 1 {
-                    children.into_iter().next().unwrap()
-                } else {
-                    // Multiple children, wrap in a generic container
-                    // Since t2t doesn't have generic containers, just concatenate
-                    Inline::Text(String::new(), Span::NONE)
+                match <[Inline; 1]>::try_from(children) {
+                    Ok([only]) => only,
+                    Err(children) if children.is_empty() => Inline::Text(String::new(), Span::NONE),
+                    Err(_) => {
+                        // Multiple children, wrap in a generic container
+                        // Since t2t doesn't have generic containers, just concatenate
+                        Inline::Text(String::new(), Span::NONE)
+                    }
                 }
             }
         }

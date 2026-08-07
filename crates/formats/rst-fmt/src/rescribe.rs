@@ -406,12 +406,12 @@ pub mod read {
             let doc = result.value;
             let para = &root_children(&doc)[0];
 
-            let link = para.children.iter().find(|n| n.kind.as_str() == node::LINK);
-            assert!(link.is_some());
-            assert_eq!(
-                link.unwrap().props.get_str(prop::URL),
-                Some("https://example.com")
-            );
+            let link = para
+                .children
+                .iter()
+                .find(|n| n.kind.as_str() == node::LINK)
+                .expect("parsed paragraph should contain a link node");
+            assert_eq!(link.props.get_str(prop::URL), Some("https://example.com"));
         }
 
         #[test]
@@ -776,12 +776,10 @@ pub mod write {
             _ => {
                 // Unknown inline: recurse into children
                 let children = nodes_to_inlines(&node.children, warnings);
-                if children.is_empty() {
-                    Inline::Text(Cow::Borrowed(""))
-                } else if children.len() == 1 {
-                    children.into_iter().next().unwrap()
-                } else {
-                    Inline::Strong(children)
+                match <[_; 1]>::try_from(children) {
+                    Ok([only]) => only,
+                    Err(children) if children.is_empty() => Inline::Text(Cow::Borrowed("")),
+                    Err(children) => Inline::Strong(children),
                 }
             }
         }

@@ -344,24 +344,33 @@ fn convert_element(
         // `<a class="footnote-back">` backlink. The marker and backlink are
         // regenerated from the label on write, so only the content span's
         // children need to survive the round trip.
+        // Footnote definition convention (see the writer's
+        // convert_footnote_def): id is fetched once and its "fn-" prefix
+        // checked and stripped in the same `if let`, so the label
+        // extraction can never desync from the guard that justified it.
         "div"
             if has_class(attrs, "footnote")
                 && get_attr(attrs, "id")
                     .as_deref()
                     .is_some_and(|id| id.starts_with("fn-")) =>
         {
-            let label = get_attr(attrs, "id").unwrap()["fn-".len()..].to_string();
-            let content = children.iter().find(|c| {
-                c.kind.as_str() == node::SPAN
-                    && c.props.get_str(prop::CLASSES).is_some_and(|classes| {
-                        classes.split_whitespace().any(|c| c == "footnote-content")
-                    })
-            });
-            match content {
-                Some(content_span) => Node::new(node::FOOTNOTE_DEF)
-                    .prop(prop::LABEL, label)
-                    .children(content_span.children.clone()),
-                None => apply_global_attrs(Node::new(node::DIV).children(children), attrs),
+            if let Some(label) =
+                get_attr(attrs, "id").and_then(|id| id.strip_prefix("fn-").map(str::to_string))
+            {
+                let content = children.iter().find(|c| {
+                    c.kind.as_str() == node::SPAN
+                        && c.props.get_str(prop::CLASSES).is_some_and(|classes| {
+                            classes.split_whitespace().any(|c| c == "footnote-content")
+                        })
+                });
+                match content {
+                    Some(content_span) => Node::new(node::FOOTNOTE_DEF)
+                        .prop(prop::LABEL, label)
+                        .children(content_span.children.clone()),
+                    None => apply_global_attrs(Node::new(node::DIV).children(children), attrs),
+                }
+            } else {
+                apply_global_attrs(Node::new(node::DIV).children(children), attrs)
             }
         }
 

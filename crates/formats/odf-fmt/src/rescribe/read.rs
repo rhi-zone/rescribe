@@ -1029,11 +1029,10 @@ mod tests {
         let result = parse(&odt).unwrap();
         let para = &result.value.content.children[0];
         let link = para.children.iter().find(|c| c.kind.as_str() == node::LINK);
-        assert!(link.is_some(), "should have a link node");
-        assert_eq!(
-            link.unwrap().props.get_str(prop::URL),
-            Some("https://example.com")
-        );
+        let Some(link) = link else {
+            panic!("should have a link node");
+        };
+        assert_eq!(link.props.get_str(prop::URL), Some("https://example.com"));
     }
 
     #[test]

@@ -348,9 +348,11 @@ pub mod read {
             let doc = parse_str(r"{\rtf1 \fs48 big\par}");
             let para = &doc.content.children[0];
             // FontSize node should become a SPAN with style:size
-            let span = para.children.iter().find(|n| n.kind.as_str() == node::SPAN);
-            assert!(span.is_some());
-            let span = span.unwrap();
+            let span = para
+                .children
+                .iter()
+                .find(|n| n.kind.as_str() == node::SPAN)
+                .expect("parsed paragraph should contain a span node");
             assert_eq!(span.props.get_str(prop::STYLE_SIZE), Some("24pt"));
         }
 
@@ -358,9 +360,11 @@ pub mod read {
         fn test_parse_color() {
             let doc = parse_str(r"{\rtf1{\colortbl ;\red255\green0\blue0;}\cf1 red\par}");
             let para = &doc.content.children[0];
-            let span = para.children.iter().find(|n| n.kind.as_str() == node::SPAN);
-            assert!(span.is_some());
-            let span = span.unwrap();
+            let span = para
+                .children
+                .iter()
+                .find(|n| n.kind.as_str() == node::SPAN)
+                .expect("parsed paragraph should contain a span node");
             assert_eq!(span.props.get_str(prop::STYLE_COLOR), Some("#ff0000"));
         }
 
@@ -659,36 +663,32 @@ pub mod write {
                 }
                 // Plain span: pass children through
                 let children = nodes_to_inlines(&node.children);
-                if children.is_empty() {
-                    Inline::Text {
+                match <[_; 1]>::try_from(children) {
+                    Ok([only]) => only,
+                    Err(children) if children.is_empty() => Inline::Text {
                         text: String::new(),
                         span: Span::NONE,
-                    }
-                } else if children.len() == 1 {
-                    children.into_iter().next().unwrap()
-                } else {
+                    },
                     // Wrap in bold as a neutral container (best we can do without a generic span)
-                    Inline::Bold {
+                    Err(children) => Inline::Bold {
                         children,
                         span: Span::NONE,
-                    }
+                    },
                 }
             }
 
             _ => {
                 let children = nodes_to_inlines(&node.children);
-                if children.is_empty() {
-                    Inline::Text {
+                match <[_; 1]>::try_from(children) {
+                    Ok([only]) => only,
+                    Err(children) if children.is_empty() => Inline::Text {
                         text: String::new(),
                         span: Span::NONE,
-                    }
-                } else if children.len() == 1 {
-                    children.into_iter().next().unwrap()
-                } else {
-                    Inline::Bold {
+                    },
+                    Err(children) => Inline::Bold {
                         children,
                         span: Span::NONE,
-                    }
+                    },
                 }
             }
         }
