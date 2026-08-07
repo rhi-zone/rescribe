@@ -226,7 +226,7 @@ mod read {
 
 #[cfg(all(feature = "writer-builder", feature = "rescribe"))]
 mod write {
-    use crate::{Block, Inline, ListItem, Span, TableCell, TableRow, TwikiDoc};
+    use crate::{Block, DefinitionItem, Inline, ListItem, Span, TableCell, TableRow, TwikiDoc};
     use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
     use rescribe_format_api::Emit as _;
     use rescribe_std::{node, prop};
@@ -254,6 +254,24 @@ mod write {
         };
         let output = twiki_doc.emit();
         Ok(ConversionResult::ok(output))
+    }
+
+    /// Extract inlines from a node's children where those children may be
+    /// either inline nodes directly (this crate's own reader shape for
+    /// `definition_term`/`definition_desc`) or block nodes such as
+    /// `paragraph` wrapping the inlines (rescribe-fmt-pandoc-json's shape for
+    /// definition descriptions and table cells, since those are block
+    /// content in Pandoc's AST). Handle both.
+    fn block_content_to_inlines(children: &[Node]) -> Vec<Inline> {
+        let mut inlines = Vec::new();
+        for child in children {
+            if child.kind.as_str() == node::PARAGRAPH {
+                inlines.extend(node_children_to_inlines(&child.children));
+            } else if let Some(inline) = node_to_inline(child) {
+                inlines.push(inline);
+            }
+        }
+        inlines
     }
 
     fn node_to_block(node: &Node) -> Option<Block> {
@@ -327,7 +345,7 @@ mod write {
                             .iter()
                             .map(|cell| {
                                 let is_header = cell.kind.as_str() == node::TABLE_HEADER;
-                                let inlines = node_children_to_inlines(&cell.children);
+                                let inlines = block_content_to_inlines(&cell.children);
                                 TableCell {
                                     inlines,
                                     is_header,
@@ -348,6 +366,62 @@ mod write {
             }
 
             node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
+
+            node::BLOCKQUOTE => {
+                let children: Vec<Block> = node.children.iter().filter_map(node_to_block).collect();
+                Some(Block::Blockquote {
+                    children,
+                    span: Span::NONE,
+                })
+            }
+
+            node::DEFINITION_LIST => {
+                // Children may be wrapped per-item (this crate's own reader
+                // shape) or a flat sequence of definition_term / definition_desc
+                // siblings (e.g. rescribe-fmt-pandoc-json's shape, where a term
+                // can be followed by multiple desc nodes). Handle both.
+                let mut items = Vec::new();
+                let mut pending_term: Option<Vec<Inline>> = None;
+                for child in &node.children {
+                    match child.kind.as_str() {
+                        "definition_item" => {
+                            let term = child
+                                .children
+                                .iter()
+                                .find(|c| c.kind.as_str() == node::DEFINITION_TERM)
+                                .map(|t| block_content_to_inlines(&t.children))
+                                .unwrap_or_default();
+                            let desc = child
+                                .children
+                                .iter()
+                                .find(|c| c.kind.as_str() == node::DEFINITION_DESC)
+                                .map(|d| block_content_to_inlines(&d.children))
+                                .unwrap_or_default();
+                            items.push(DefinitionItem {
+                                term,
+                                desc,
+                                span: Span::NONE,
+                            });
+                        }
+                        node::DEFINITION_TERM => {
+                            pending_term = Some(block_content_to_inlines(&child.children));
+                        }
+                        node::DEFINITION_DESC => {
+                            let term = pending_term.clone().unwrap_or_default();
+                            items.push(DefinitionItem {
+                                term,
+                                desc: block_content_to_inlines(&child.children),
+                                span: Span::NONE,
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                Some(Block::DefinitionList {
+                    items,
+                    span: Span::NONE,
+                })
+            }
 
             node::DIV | node::SPAN | node::FIGURE => {
                 // These are container nodes; flatten their children
@@ -424,6 +498,44 @@ mod write {
                 Some(Inline::Link {
                     url,
                     label,
+                    span: Span::NONE,
+                })
+            }
+
+            node::STRIKEOUT => {
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::Strikethrough(children, Span::NONE))
+            }
+
+            node::UNDERLINE => {
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::Underline(children, Span::NONE))
+            }
+
+            node::SUPERSCRIPT => {
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::Superscript(children, Span::NONE))
+            }
+
+            node::SUBSCRIPT => {
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::Subscript(children, Span::NONE))
+            }
+
+            node::IMAGE => {
+                let url = node
+                    .props
+                    .get_str(prop::URL)
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                let alt = node
+                    .props
+                    .get_str(prop::ALT)
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                Some(Inline::Image {
+                    url,
+                    alt,
                     span: Span::NONE,
                 })
             }

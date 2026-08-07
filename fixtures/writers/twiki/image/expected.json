@@ -1,0 +1,4 @@
+{
+  "description": "An image emits as an <img> tag with src and alt",
+  "output_contains": ["<img src=\"http://example.com/pic.png\" alt=\"alt text\" />"]
+}

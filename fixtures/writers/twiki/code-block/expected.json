@@ -1,0 +1,4 @@
+{
+  "description": "A code block emits wrapped in <verbatim> tags",
+  "output_contains": ["<verbatim>", "fn main() {}", "</verbatim>"]
+}
