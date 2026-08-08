@@ -1089,7 +1089,7 @@ pub(crate) fn bootstrap<T: FromXml>(xml: &[u8]) -> Result<T> {
 }
 
 /// Extract plain strings from a SharedStrings SST.
-fn extract_shared_strings(sst: &crate::types::SharedStrings) -> Vec<String> {
+pub(crate) fn extract_shared_strings(sst: &crate::types::SharedStrings) -> Vec<String> {
     sst.si
         .iter()
         .map(|si| {

@@ -30,3 +30,10 @@ path = "fuzz_targets/fuzz_serde_deserialize.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_streaming_parser"
+path = "fuzz_targets/fuzz_streaming_parser.rs"
+test = false
+doc = false
+bench = false

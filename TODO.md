@@ -5669,7 +5669,38 @@ depth + largest token) memory is the primary use case, not an afterthought.
 
 **Streaming implementation:**
 - [ ] Implement `StreamingParser<H>` for DOCX (wml) first — largest user base.
-- [ ] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines.
+- [x] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines
+  (2026-08-08). `crates/formats/ooxml-sml/src/batch.rs`: drives
+  `ooxml_opc::StreamingParser` for OPC-level entry delivery, runs
+  `crate::events::events` (the existing true-SAX per-part iterator) over each
+  `xl/worksheets/sheetN.xml` part's bytes, forwards `Event::Sheet{path, event}`.
+  `xl/sharedStrings.xml` is parsed into `Event::SharedStrings(Vec<String>)`
+  whenever it streams past. **Two things below are not what the M2.5 target
+  architecture describes as "done," and are flagged rather than silently
+  papered over:**
+  - **Memory bound is O(largest single part), not O(nesting depth).**
+    `ooxml_opc::StreamingParser` buffers each ZIP entry's decompressed bytes
+    in full before delivering `Event::Part` (its own module docs call this
+    out as a deliberate, scoped exception: "buffer-per-ZIP-entry"). That
+    means a giant `xl/worksheets/sheetN.xml` — XLSX's actual large-file
+    case — is fully in memory by the time this crate's SAX pass sees it, no
+    different from `events()`. Reaching true O(nesting depth) end-to-end
+    would require `ooxml-opc` to deliver worksheet bytes sub-ZIP-entry as
+    they decompress, which its own docs say is explicitly out of scope for
+    that crate today ("would mean handing partially-decompressed bytes to
+    wml/sml/pml's own future `StreamingParser`s mid-ZIP-entry"). This is a
+    shared-foundation-crate decision affecting `ooxml-wml`/`ooxml-pml`
+    identically, not an sml-specific gap — filed here rather than worked
+    around unilaterally.
+  - **Shared-string resolution is left to the caller, by design, not
+    two-pass.** A cell's `t="s"` value indexes into `xl/sharedStrings.xml`,
+    a separate part that may stream past before or after any given
+    worksheet part (ZIP/OPC order is unspecified). Rather than buffering to
+    force an order or doing a two-pass read (either defeats streaming),
+    `Event::Sheet`'s cell values always carry the **raw index**, never a
+    resolved string — matching `events()`'s and `SmlWriter::set_shared_strings`'s
+    existing pattern of leaving resolution to the caller. `Event::SharedStrings`
+    delivers the parsed table independently, whenever its part arrives.
 - [ ] Implement `StreamingParser<H>` for PPTX (pml).
 - [ ] `parse()` as direct recursive descent (independent of events()).
 - [ ] `events()` as true pull iterator (frame-stack, no block-granular buffering).

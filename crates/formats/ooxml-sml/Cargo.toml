@@ -28,7 +28,7 @@ full = [
 # API-mode flags
 reader-ast = []       # Workbook::open / parse — materialised tree
 reader-streaming = [] # LazyWorksheet + events() — lazy/streaming row iteration
-reader-batch = ["reader-ast"] # BatchParser — chunk-driven; buffers all input, parses on finish()
+reader-batch = ["reader-ast", "reader-streaming"] # BatchParser (buffers, parses on finish()) + StreamingParser (genuinely chunk-fed; needs reader-streaming's per-part SAX events)
 writer-streaming = ["reader-streaming", "writer-builder"] # SmlWriter<W> — event-driven XLSX emit
 writer-builder = []   # WorkbookBuilder — build and write a workbook
 # Roundtrip fidelity features
@@ -62,6 +62,7 @@ quick-xml.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 base64.workspace = true
+rescribe-format-api.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

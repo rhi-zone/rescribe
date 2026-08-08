@@ -43,6 +43,8 @@ pub mod writer;
 pub mod batch;
 #[cfg(feature = "reader-batch")]
 pub use batch::BatchParser;
+#[cfg(feature = "reader-batch")]
+pub use batch::{Event as SmlStreamEvent, StreamingParser};
 
 // Streaming writer.
 #[cfg(feature = "writer-streaming")]

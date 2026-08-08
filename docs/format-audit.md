@@ -1082,8 +1082,21 @@ point it needs to emit them.
 
 `ooxml-sml`'s severity-ranking entry moves from "writer wrongly cited as clean, was
 actually O(document))" to genuinely clean on the writer axis. Its reader side
-(`StreamingParser<H>`) remains out of scope for this fix — filed in TODO.md as
+(`StreamingParser<H>`) was out of scope for this fix and was filed in TODO.md as
 separate follow-up work, same boundary as `ooxml-wml`'s reader-batch gap above.
+
+**Update 2026-08-08 — reader-side `StreamingParser<H>` implemented, with a caveat.**
+`crates/formats/ooxml-sml/src/batch.rs` now has a genuinely chunk-fed
+`StreamingParser<H>`, driven by `ooxml_opc::StreamingParser` for OPC-level entry
+delivery and `crate::events::events` (true SAX) for per-worksheet-part XML. See the
+TODO.md "ooxml-fmt rework" entry for the full writeup, but in short: its memory
+bound is **O(largest single part)**, not O(nesting depth), because
+`ooxml_opc::StreamingParser` buffers each ZIP entry's decompressed bytes in full
+before delivering it — a documented, scoped exception in `ooxml-opc` itself, shared
+by `ooxml-wml`/`ooxml-pml` alike, not an sml-specific shortfall. Reaching true
+O(nesting depth) for XLSX's actual large-file case (`xl/worksheets/sheetN.xml`)
+requires a change to the shared `ooxml-opc` foundation crate, filed rather than
+worked around unilaterally.
 
 ---
 
