@@ -515,5 +515,92 @@ fn main() {
         write_docx(&format!("{}/doc_core_properties/input.docx", base), b);
     }
 
+    // --- integration: table cells with formatted runs ---
+    {
+        let mut b = DocumentBuilder::new();
+        let table = b.body_mut().add_table();
+        let row = table.add_row();
+        let cell = row.add_cell();
+        let para = cell.add_paragraph();
+        let run = para.add_run();
+        run.set_text("bold cell text");
+        run.set_bold(true);
+        write_docx(
+            &format!("{}/integration_table_formatted_runs/input.docx", base),
+            b,
+        );
+    }
+
+    // --- integration: list items with inline formatting ---
+    {
+        let mut b = DocumentBuilder::new();
+        let num_id = b.add_list(ListType::Bullet);
+        let para = b.body_mut().add_paragraph();
+        para.set_numbering(num_id, 0);
+        let run = para.add_run();
+        run.set_text("italic item");
+        run.set_italic(true);
+        write_docx(
+            &format!("{}/integration_list_formatted/input.docx", base),
+            b,
+        );
+    }
+
+    // --- integration: footnote with formatted content ---
+    {
+        let mut b = DocumentBuilder::new();
+        let fn_id = {
+            let mut fn_builder = b.add_footnote();
+            let para = fn_builder.body_mut().add_paragraph();
+            let run = para.add_run();
+            run.set_text("bold footnote text");
+            run.set_bold(true);
+            fn_builder.id() as i64
+        };
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("Body text.");
+        para.add_run().add_footnote_ref(fn_id);
+        write_docx(
+            &format!("{}/integration_footnote_formatted/input.docx", base),
+            b,
+        );
+    }
+
+    // --- integration: heading with inline formatting ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            paragraph_style: Some(Box::new(types::CTString {
+                value: "Heading1".to_string(),
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        let run = para.add_run();
+        run.set_text("Bold Heading");
+        run.set_bold(true);
+        write_docx(
+            &format!("{}/integration_heading_formatted/input.docx", base),
+            b,
+        );
+    }
+
+    // --- integration: hyperlink containing formatted text ---
+    {
+        let mut b = DocumentBuilder::new();
+        let rel_id = b.add_hyperlink("https://example.com");
+        let para = b.body_mut().add_paragraph();
+        let link = para.add_hyperlink();
+        link.set_rel_id(&rel_id);
+        let run = link.add_run();
+        run.set_text("bold link text");
+        run.set_bold(true);
+        write_docx(
+            &format!("{}/integration_hyperlink_formatted/input.docx", base),
+            b,
+        );
+    }
+
     println!("Done generating DOCX fixtures.");
 }

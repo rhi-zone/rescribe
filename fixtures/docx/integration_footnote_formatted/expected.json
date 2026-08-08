@@ -1,0 +1,13 @@
+{
+  "description": "Footnote content with a bold run",
+  "category": "integration",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "paragraph" },
+    { "path": "/0/0",     "kind": "text", "props": { "content": "Body text." } },
+    { "path": "/0/1",     "kind": "footnote_ref" },
+    { "path": "/0/1/0",   "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "strong" },
+    { "path": "/0/1/0/0/0", "kind": "text", "props": { "content": "bold footnote text" } }
+  ]
+}

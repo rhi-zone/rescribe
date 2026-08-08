@@ -82,13 +82,13 @@ spec.
 - [ ] styles.xml named styles — (deferred — full named-style resolution (style inheritance chains, `basedOn`, style categories) is large; `StyleContext`/`RunPropertiesExt` in ooxml-wml already support *reading* resolved run properties through the style chain, but the bridge doesn't yet expose named styles as IR constructs beyond the existing `docx:pStyle` raw string. Out of scope for this pass.)
 
 ## Composition (integration)
-- [ ] table cells with formatted runs — (missing)
-- [ ] list items with inline formatting — (missing)
-- [ ] footnote with formatted content — (missing)
-- [ ] image with caption (figure style) — (missing)
-- [ ] heading with inline formatting — (missing)
-- [ ] hyperlink containing formatted text — (missing)
-- [ ] table of contents (TOC field code) — (missing)
+- [x] table cells with formatted runs — `integration_table_formatted_runs`
+- [x] list items with inline formatting — `integration_list_formatted`
+- [x] footnote with formatted content — `integration_footnote_formatted`
+- [ ] image with caption (figure style) — (deferred: DOCX has no native figure/caption construct -- it's conventionally an image run followed by a "Caption"-styled paragraph, or a SEQ field. Grouping those two adjacent block nodes into a single `figure`/`caption` pair is a heuristic the bridge doesn't implement yet; doing it without a real construct to key off risks silently mis-grouping unrelated adjacent content.)
+- [x] heading with inline formatting — `integration_heading_formatted`
+- [x] hyperlink containing formatted text — `integration_hyperlink_formatted`
+- [ ] table of contents (TOC field code) — (deferred: depends on field code support, which is itself unimplemented — see the "field code" inline-construct item)
 
 ## Adversarial
 - [ ] malformed zip archive — (missing)

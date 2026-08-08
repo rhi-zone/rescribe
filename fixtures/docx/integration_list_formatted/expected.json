@@ -1,0 +1,11 @@
+{
+  "description": "Italic run inside a list item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",      "kind": "list_item" },
+    { "path": "/0/0/0",    "kind": "emphasis" },
+    { "path": "/0/0/0/0",  "kind": "text", "props": { "content": "italic item" } }
+  ]
+}
