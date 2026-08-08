@@ -818,10 +818,22 @@ fn convert_table<R: Read + Seek>(
                 continue;
             }
 
+            // Walk the cell's block content directly (not just cell.paragraphs())
+            // so nested tables (a table inside a table cell -- legal DOCX, and a
+            // real construct, not an edge case to drop) are recursed into instead
+            // of silently disappearing.
             let mut cell_children = Vec::new();
-            for para in cell.paragraphs() {
-                if let Some(node) = convert_paragraph(converter, doc, para)? {
-                    cell_children.push(node);
+            for block in &cell.block_content {
+                match block {
+                    BlockContent::P(para) => {
+                        if let Some(node) = convert_paragraph(converter, doc, para)? {
+                            cell_children.push(node);
+                        }
+                    }
+                    BlockContent::Tbl(nested_table) => {
+                        cell_children.push(convert_table(converter, doc, nested_table)?);
+                    }
+                    _ => {}
                 }
             }
 

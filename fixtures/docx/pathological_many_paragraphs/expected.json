@@ -1,0 +1,11 @@
+{
+  "description": "Document with 5000 paragraphs parses without excessive slowdown or panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",       "kind": "document", "children_count": 5000 },
+    { "path": "/0",      "kind": "paragraph" },
+    { "path": "/0/0",    "kind": "text", "props": { "content": "Paragraph 0" } },
+    { "path": "/4999",   "kind": "paragraph" },
+    { "path": "/4999/0", "kind": "text", "props": { "content": "Paragraph 4999" } }
+  ]
+}

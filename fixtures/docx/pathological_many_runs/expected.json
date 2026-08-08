@@ -1,0 +1,10 @@
+{
+  "description": "Paragraph with 500 runs parses without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph", "children_count": 500 },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "run0 " } },
+    { "path": "/0/499", "kind": "text", "props": { "content": "run499 " } }
+  ]
+}

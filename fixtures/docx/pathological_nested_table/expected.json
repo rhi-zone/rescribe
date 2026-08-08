@@ -1,0 +1,17 @@
+{
+  "description": "A table nested inside a table cell is recursed into rather than silently dropped",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",              "kind": "document" },
+    { "path": "/0",             "kind": "table" },
+    { "path": "/0/0",           "kind": "table_row" },
+    { "path": "/0/0/0",         "kind": "table_cell", "children_count": 2 },
+    { "path": "/0/0/0/0",       "kind": "paragraph" },
+    { "path": "/0/0/0/0/0",     "kind": "text", "props": { "content": "outer cell text" } },
+    { "path": "/0/0/0/1",       "kind": "table" },
+    { "path": "/0/0/0/1/0",     "kind": "table_row" },
+    { "path": "/0/0/0/1/0/0",   "kind": "table_cell" },
+    { "path": "/0/0/0/1/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/1/0/0/0/0", "kind": "text", "props": { "content": "inner cell text" } }
+  ]
+}

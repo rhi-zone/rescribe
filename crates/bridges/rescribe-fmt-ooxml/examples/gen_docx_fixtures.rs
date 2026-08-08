@@ -630,5 +630,128 @@ fn main() {
     // DocumentBuilder, which always produces well-formed output) and are
     // committed as static input.docx files rather than generated here.
 
+    // --- pathological: thousands of paragraphs ---
+    {
+        let mut b = DocumentBuilder::new();
+        for i in 0..5000 {
+            b.body_mut()
+                .add_paragraph()
+                .add_run()
+                .set_text(format!("Paragraph {}", i));
+        }
+        write_docx(
+            &format!("{}/pathological_many_paragraphs/input.docx", base),
+            b,
+        );
+    }
+
+    // --- pathological: deeply nested tables (table inside a table cell) ---
+    {
+        let mut b = DocumentBuilder::new();
+        let outer_table = b.body_mut().add_table();
+        let outer_row = outer_table.add_row();
+        let outer_cell = outer_row.add_cell();
+        outer_cell
+            .add_paragraph()
+            .add_run()
+            .set_text("outer cell text");
+        // Nested tables aren't reachable through the TableCell convenience API
+        // (add_table lives on Body), so nest by adding block content directly.
+        let inner_table = types::Table {
+            range_markup: Vec::new(),
+            table_properties: Box::new(types::TableProperties::default()),
+            tbl_grid: Box::new(types::TableGrid::default()),
+            rows: {
+                let mut cell_run_text = types::Run::default();
+                cell_run_text
+                    .run_content
+                    .push(types::RunContent::T(Box::new(types::Text {
+                        text: Some("inner cell text".to_string()),
+                        extra_children: Vec::new(),
+                    })));
+                let mut inner_para = types::Paragraph::default();
+                inner_para
+                    .paragraph_content
+                    .push(types::ParagraphContent::R(Box::new(cell_run_text)));
+                let inner_cell = types::TableCell {
+                    id: None,
+                    cell_properties: None,
+                    block_content: vec![types::BlockContent::P(Box::new(inner_para))],
+                    ..Default::default()
+                };
+                let inner_row = types::CTRow {
+                    row_properties: None,
+                    cells: vec![types::CellContent::Tc(Box::new(inner_cell))],
+                    ..Default::default()
+                };
+                vec![types::RowContent::Tr(Box::new(inner_row))]
+            },
+            extra_children: Vec::new(),
+        };
+        outer_cell
+            .block_content
+            .push(types::BlockContent::Tbl(Box::new(inner_table)));
+        write_docx(&format!("{}/pathological_nested_table/input.docx", base), b);
+    }
+
+    // --- pathological: list with 20+ nesting levels ---
+    {
+        let mut b = DocumentBuilder::new();
+        let num_id = b.add_list(ListType::Bullet);
+        for level in 0..25u32 {
+            let para = b.body_mut().add_paragraph();
+            para.set_numbering(num_id, level);
+            para.add_run().set_text(format!("Level {}", level));
+        }
+        write_docx(
+            &format!("{}/pathological_deep_list_nesting/input.docx", base),
+            b,
+        );
+    }
+
+    // --- pathological: paragraph with hundreds of runs ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        for i in 0..500 {
+            para.add_run().set_text(format!("run{} ", i));
+        }
+        write_docx(&format!("{}/pathological_many_runs/input.docx", base), b);
+    }
+
+    // --- pathological: very large embedded image ---
+    {
+        let mut b = DocumentBuilder::new();
+        let large_data = vec![0xAAu8; 8 * 1024 * 1024]; // 8 MiB
+        let rel_id = b.add_image(large_data, "image/png");
+        let para = b.body_mut().add_paragraph();
+        let mut drawing = ooxml_wml::writer::Drawing::new();
+        drawing.add_image(&rel_id);
+        let mut doc_id = 1usize;
+        let ct_drawing = drawing.build(&mut doc_id);
+        para.add_run().add_drawing(ct_drawing);
+        write_docx(&format!("{}/pathological_large_image/input.docx", base), b);
+    }
+
+    // --- pathological: hundreds of footnotes ---
+    {
+        let mut b = DocumentBuilder::new();
+        let mut fn_ids = Vec::new();
+        for i in 0..300 {
+            let mut fn_builder = b.add_footnote();
+            fn_builder.add_paragraph(&format!("Footnote {} text.", i));
+            fn_ids.push(fn_builder.id() as i64);
+        }
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("Body text.");
+        for fn_id in fn_ids {
+            para.add_run().add_footnote_ref(fn_id);
+        }
+        write_docx(
+            &format!("{}/pathological_many_footnotes/input.docx", base),
+            b,
+        );
+    }
+
     println!("Done generating DOCX fixtures.");
 }

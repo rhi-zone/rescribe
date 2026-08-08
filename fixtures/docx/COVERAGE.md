@@ -101,9 +101,9 @@ spec.
 - [x] extremely long style names — `adv-long-style-name`
 
 ## Pathological
-- [ ] document with thousands of paragraphs — (missing)
-- [ ] deeply nested tables (table inside table cell) — (missing)
-- [ ] list with 20+ nesting levels — (missing)
-- [ ] paragraph with hundreds of runs — (missing)
-- [ ] very large embedded image — (missing)
-- [ ] document with hundreds of footnotes — (missing)
+- [x] document with thousands of paragraphs — `pathological_many_paragraphs` (5000)
+- [x] deeply nested tables (table inside table cell) — `pathological_nested_table` (fixed a real gap: `convert_table`'s cell handling only walked `cell.paragraphs()`, silently dropping any nested `<w:tbl>` in a cell; now walks `cell.block_content` directly and recurses. Writer gained a matching `write_table_into` split so a nested `table` IR node can be written into a cell without a `&mut DocumentBuilder`.)
+- [x] list with 20+ nesting levels — `pathological_deep_list_nesting` (25 levels; note the fixture's own description flags that ilvl-based nesting is the pre-existing "nested list" gap above -- all levels currently flatten into one list)
+- [x] paragraph with hundreds of runs — `pathological_many_runs` (500)
+- [x] very large embedded image — `pathological_large_image` (8 MiB)
+- [x] document with hundreds of footnotes — `pathological_many_footnotes` (300)

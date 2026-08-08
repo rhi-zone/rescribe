@@ -1,0 +1,12 @@
+{
+  "description": "List with 25 numbering levels (same numId, increasing ilvl) parses without panic. Note: ilvl-based nesting itself is a known gap (see COVERAGE.md 'nested list') -- all levels currently flatten into one list's list_items since grouping only keys on numId, not ilvl.",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "list", "children_count": 25 },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Level 0" } },
+    { "path": "/0/24",  "kind": "list_item" },
+    { "path": "/0/24/0","kind": "text", "props": { "content": "Level 24" } }
+  ]
+}

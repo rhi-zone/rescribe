@@ -737,6 +737,30 @@ fn write_table(
     footnote_map: &HashMap<String, i64>,
     image_map: &HashMap<String, types::CTDrawing>,
 ) -> Result<(), EmitError> {
+    let table = builder.body_mut().add_table();
+    write_table_into(
+        table,
+        table_node,
+        warnings,
+        hyperlink_map,
+        footnote_map,
+        image_map,
+    )
+}
+
+/// Write a `table` IR node into an existing (possibly nested, i.e. inside a
+/// table cell) `types::Table`. Split out from [`write_table`] so a nested
+/// table (a `table` node appearing among a cell's children) can be written
+/// without needing a `&mut DocumentBuilder` -- only the top-level call gets
+/// its `types::Table` from `builder.body_mut().add_table()`.
+fn write_table_into(
+    table: &mut types::Table,
+    table_node: &Node,
+    warnings: &mut Vec<FidelityWarning>,
+    hyperlink_map: &HashMap<String, String>,
+    footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
+) -> Result<(), EmitError> {
     let row_nodes: Vec<&Node> = table_node
         .children
         .iter()
@@ -806,7 +830,6 @@ fn write_table(
         grid.push(cells);
     }
 
-    let table = builder.body_mut().add_table();
     for (row_idx, cells) in grid.into_iter().enumerate() {
         let row = table.add_row();
         // Merge real cells and scheduled continuations in column order.
@@ -838,17 +861,38 @@ fn write_table(
                 apply_cell_border(out_cell, cell_node, "bottom");
                 apply_cell_border(out_cell, cell_node, "left");
                 apply_cell_border(out_cell, cell_node, "right");
-                for para_node in &cell_node.children {
-                    let para = out_cell.add_paragraph();
-                    write_inline_to_para(
-                        para,
-                        &para_node.children,
-                        &FormattingState::default(),
-                        warnings,
-                        hyperlink_map,
-                        footnote_map,
-                        image_map,
-                    );
+                for child_node in &cell_node.children {
+                    if child_node.kind.as_str() == node::TABLE {
+                        let mut nested = types::Table {
+                            range_markup: Vec::new(),
+                            table_properties: Box::new(types::TableProperties::default()),
+                            tbl_grid: Box::new(types::TableGrid::default()),
+                            rows: Vec::new(),
+                            extra_children: Vec::new(),
+                        };
+                        write_table_into(
+                            &mut nested,
+                            child_node,
+                            warnings,
+                            hyperlink_map,
+                            footnote_map,
+                            image_map,
+                        )?;
+                        out_cell
+                            .block_content
+                            .push(types::BlockContent::Tbl(Box::new(nested)));
+                    } else {
+                        let para = out_cell.add_paragraph();
+                        write_inline_to_para(
+                            para,
+                            &child_node.children,
+                            &FormattingState::default(),
+                            warnings,
+                            hyperlink_map,
+                            footnote_map,
+                            image_map,
+                        );
+                    }
                 }
             } else if let Some(cont) = cont {
                 let out_cell = row.add_cell();

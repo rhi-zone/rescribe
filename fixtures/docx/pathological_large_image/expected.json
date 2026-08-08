@@ -1,0 +1,9 @@
+{
+  "description": "8 MiB embedded image parses without panic or excessive memory blowup",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "image" }
+  ]
+}

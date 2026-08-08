@@ -1,0 +1,15 @@
+{
+  "description": "Document with 300 footnotes parses without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "paragraph", "children_count": 301 },
+    { "path": "/0/0",      "kind": "text", "props": { "content": "Body text." } },
+    { "path": "/0/1",      "kind": "footnote_ref" },
+    { "path": "/0/1/0",    "kind": "paragraph" },
+    { "path": "/0/1/0/0",  "kind": "text", "props": { "content": "Footnote 0 text." } },
+    { "path": "/0/300",    "kind": "footnote_ref" },
+    { "path": "/0/300/0",  "kind": "paragraph" },
+    { "path": "/0/300/0/0","kind": "text", "props": { "content": "Footnote 299 text." } }
+  ]
+}
