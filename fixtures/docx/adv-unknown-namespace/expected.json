@@ -1,0 +1,7 @@
+{
+  "description": "document.xml with the wordprocessingml namespace URI swapped for an unrecognized one does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document" }
+  ]
+}

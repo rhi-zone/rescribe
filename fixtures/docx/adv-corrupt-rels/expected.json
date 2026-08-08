@@ -1,0 +1,6 @@
+{
+  "description": "Corrupt (non-XML) _rels/.rels does not panic",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

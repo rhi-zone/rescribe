@@ -91,14 +91,14 @@ spec.
 - [ ] table of contents (TOC field code) — (deferred: depends on field code support, which is itself unimplemented — see the "field code" inline-construct item)
 
 ## Adversarial
-- [ ] malformed zip archive — (missing)
-- [ ] missing word/document.xml — (missing)
-- [ ] corrupt relationship file (_rels/.rels) — (missing)
-- [ ] unknown XML namespace — (missing)
-- [ ] empty document (no paragraphs) — (missing)
-- [ ] corrupt image binary in media/ — (missing)
-- [ ] circular relationship references — (missing)
-- [ ] extremely long style names — (missing)
+- [x] malformed zip archive — `adv-malformed-zip`
+- [x] missing word/document.xml — `adv-missing-document-xml`
+- [x] corrupt relationship file (_rels/.rels) — `adv-corrupt-rels`
+- [x] unknown XML namespace — `adv-unknown-namespace`
+- [x] empty document (no paragraphs) — `adv-empty-document`
+- [x] corrupt image binary in media/ — `adv-corrupt-image`
+- [x] circular relationship references — `adv-circular-relationships`
+- [x] extremely long style names — `adv-long-style-name`
 
 ## Pathological
 - [ ] document with thousands of paragraphs — (missing)

@@ -1,0 +1,7 @@
+{
+  "description": "Embedded image with corrupt (non-PNG) binary data does not panic; the resource is still captured verbatim",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/",   "kind": "document" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "document.xml.rels with a relationship whose target points back to document.xml itself does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document" }
+  ]
+}

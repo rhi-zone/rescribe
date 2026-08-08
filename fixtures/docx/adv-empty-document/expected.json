@@ -1,0 +1,7 @@
+{
+  "description": "Valid DOCX with zero paragraphs produces an empty document",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

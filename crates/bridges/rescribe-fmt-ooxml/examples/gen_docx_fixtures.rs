@@ -602,5 +602,33 @@ fn main() {
         );
     }
 
+    // --- adv-empty-document: a valid docx with zero paragraphs ---
+    {
+        let b = DocumentBuilder::new();
+        write_docx(&format!("{}/adv-empty-document/input.docx", base), b);
+    }
+
+    // --- adv-long-style-name: pStyle value far beyond any realistic length ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            paragraph_style: Some(Box::new(types::CTString {
+                value: "X".repeat(100_000),
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run()
+            .set_text("Paragraph with a pathologically long style name.");
+        write_docx(&format!("{}/adv-long-style-name/input.docx", base), b);
+    }
+
+    // Note: adv-corrupt-image, adv-missing-document-xml, adv-corrupt-rels,
+    // adv-unknown-namespace, adv-circular-relationships, adv-malformed-zip, and
+    // adv-empty-bytes are hand-corrupted zip/XML packages (not expressible via
+    // DocumentBuilder, which always produces well-formed output) and are
+    // committed as static input.docx files rather than generated here.
+
     println!("Done generating DOCX fixtures.");
 }

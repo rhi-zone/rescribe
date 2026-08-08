@@ -1,0 +1,6 @@
+{
+  "description": "Valid zip package missing word/document.xml returns a parse error without panic",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

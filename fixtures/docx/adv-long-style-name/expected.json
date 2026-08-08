@@ -1,0 +1,8 @@
+{
+  "description": "Paragraph with a 100,000-character pStyle value does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/",   "kind": "document" },
+    { "path": "/0",  "kind": "paragraph" }
+  ]
+}
