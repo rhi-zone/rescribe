@@ -5739,6 +5739,69 @@ depth + largest token) memory is the primary use case, not an afterthought.
   existed per the DOCX/XLSX writer checklists above; only harness wiring was missing.
   Shape-geometry (EMU position/size, needs YAML+codegen regen) remains open and
   untouched, as already tracked above.
+- [x] **`ooxml-opc` container layer: fix the "buffers whole part" gap flagged
+  above (2026-08-08 follow-up).** The `ooxml-opc` foundation entry above
+  documented `Event::Part` as delivering a part's full decompressed bytes in
+  one `Vec<u8>` — meaning memory was O(largest part), not O(largest token),
+  which defeats this whole effort's stated justification (a single
+  `document.xml`/worksheet can itself be the multi-hundred-MB-to-GB file
+  that doesn't fit in memory). Fixed: `Event::Part` is now `PartStart` /
+  zero-or-more `PartData` chunks / `PartEnd`; once `[Content_Types].xml` has
+  streamed past (the dominant real-world case — Office/OpenXML SDK writes it
+  first), a generic part's `PartData` chunks are forwarded to the caller's
+  handler as `zip-fmt` produces them, no accumulation. `[Content_Types].xml`
+  and `.rels` parts still buffer in full (need a complete parse; both are
+  inherently small, bounded metadata — never the large-file case). A generic
+  part that streams past *before* `[Content_Types].xml` still buffers and
+  replays as a single-chunk triple (same bound as before, narrower scope).
+  New `ooxml-opc` test (`large_part_streams_as_multiple_bounded_chunks_after_content_types`)
+  builds an 80KB incompressible part, feeds it in 1KB chunks, and asserts
+  `PartData` arrives as multiple chunks each under half the part's total
+  size — verifying the memory characteristic structurally, not just
+  re-checking output correctness.
+
+  wml/sml/pml's `StreamingParser<H>` updated to consume the new API:
+  - **wml**: `word/document.xml`'s `PartData` chunks are still accumulated
+    into one buffer before `crate::events::events` runs over it — checked,
+    not assumed: `events()` takes `bytes: &[u8]`, a `quick_xml::Reader<&[u8]>`
+    over the complete input, and this crate has no chunk-fed XML tokenizer.
+    That remains a real, documented gap (memory bound for the main part is
+    still O(part size + nesting depth), now because of this crate's own XML
+    layer, not `ooxml-opc`'s container layer). What *did* improve: every
+    other part (styles, media, core/app properties) is now dropped as its
+    `PartData` arrives, never accumulated at all — before this fix,
+    `ooxml-opc` fully buffered even those parts before this crate discarded
+    them.
+  - **sml**: worksheet/`sharedStrings.xml`/generic classification happens at
+    `PartStart` (path + resolved content type, never content), so
+    classification no longer waits on a part's bytes. All three kinds still
+    accumulate their own `PartData` for now — same `events()` full-slice
+    limitation as wml, not yet closed.
+  - **pml**: once presentation/slide-path resolution completes, a part that
+    resolution says is neither the presentation part nor a slide part is now
+    dropped as its `PartData` arrives, never buffered even transiently — a
+    real improvement, since `ooxml-opc` previously buffered every part in
+    full regardless of whether pml was going to keep it. The two pre-existing
+    buffering exceptions (pre-resolution parts, out-of-slide-order parts) are
+    unchanged — they exist because of pml's own resolution/ordering logic,
+    not because of how `ooxml-opc` delivers bytes, so this fix doesn't touch
+    them.
+
+  **What is and isn't achieved:** the OPC container layer (`ooxml-opc`) now
+  genuinely delivers O(largest decompressor output chunk) for any part none
+  of wml/sml/pml specifically want to hold onto — the shared-foundation
+  architectural fork flagged in every entry above ("would require
+  `ooxml-opc` to deliver worksheet bytes sub-ZIP-entry... out of scope for
+  that crate") is resolved. What remains open, and is a different, narrower
+  gap than before: reaching true O(largest XML token) for each crate's *own*
+  main content part (`word/document.xml`, a worksheet, a slide) requires a
+  chunk-fed XML tokenizer in that crate's own `events()`/`generated_events`
+  layer — feeding `PartData` chunks into a `quick_xml::Reader` (or
+  equivalent) as they arrive, instead of buffering the whole part first. That
+  is real, scoped, per-crate follow-up work, not attempted here (it was
+  explicitly out of this task's scope) and not silently left undocumented —
+  each crate's `batch.rs` module doc now states this precisely rather than
+  the old, now-inaccurate "blocked on ooxml-opc" framing.
 - [ ] `parse()` as direct recursive descent (independent of events()) — not evaluated
   in the 2026-08-08 `StreamingParser<H>` pass above; unclear whether existing `parse()`
   for wml/sml/pml already meets this bar or still routes through `events()`/an

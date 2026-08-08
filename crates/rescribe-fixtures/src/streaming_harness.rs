@@ -404,6 +404,15 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // over every fixture, plus no-panic gates). Still NotYetWired here specifically:
         // this harness has no fixture-driven check of its own yet, same gap as
         // ooxml-pml's streaming_parser above.
+        //
+        // Memory-bound update (2026-08-08, same day follow-up): ooxml-opc's Event::Part
+        // no longer buffers a ZIP entry's full decompressed bytes before delivery (fixed —
+        // see TODO.md's "ooxml-fmt rework" entry). word/document.xml's own bytes are still
+        // accumulated by this crate before crate::events::events runs over them (that
+        // function takes a complete &[u8]; no chunk-fed XML tokenizer exists here yet), so
+        // the memory bound for the main part is still O(part size + nesting depth) — but
+        // every other part (styles, media, core/app properties) is now dropped as it
+        // arrives, never buffered at all, which was not true before this fix.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-wml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
              crate-level tests but is not yet exercised by a fixture-driven check in this \
@@ -431,6 +440,14 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // NotYetWired here specifically: this harness (rescribe-fixtures) has no fixture-driven
         // check of its own yet — the crate-level tests establish correctness but this table
         // tracks harness-level coverage, per this enum variant's own contract.
+        //
+        // Memory-bound update (2026-08-08, same day follow-up): once presentation/slide-path
+        // resolution completes, ooxml-opc's per-part delivery plus this crate's own dispatch
+        // means a part that's neither the presentation part nor a slide part is now dropped
+        // as it arrives, never buffered at all (previously ooxml-opc buffered it in full
+        // regardless). The two pre-existing buffering exceptions (parts before resolution
+        // completes, slides arriving out of display order) are unchanged — see TODO.md's
+        // "ooxml-fmt rework" entry.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-pml::batch::StreamingParser exists (added 2026-08-08) with passing crate-level \
              tests but is not yet exercised by a fixture-driven check in this harness",
@@ -459,6 +476,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // passing crate-level adversarial-chunking tests plus a no-panic fuzz target
         // (fuzz_streaming_parser). Still NotYetWired here specifically: this harness has no
         // fixture-driven check of its own yet, same gap as ooxml-wml/ooxml-pml above.
+        //
+        // Memory-bound update (2026-08-08, same day follow-up): ooxml-opc's Event::Part no
+        // longer buffers a ZIP entry's full decompressed bytes before delivery (fixed — see
+        // TODO.md's "ooxml-fmt rework" entry). Worksheet/sharedStrings/generic classification
+        // now happens at PartStart (path + content type, never content). All three kinds
+        // still accumulate their own PartData for now — crate::events::events takes a
+        // complete &[u8], same full-slice limitation as ooxml-wml, not yet closed.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-sml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
              crate-level tests but is not yet exercised by a fixture-driven check in this \
