@@ -396,10 +396,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "docx",
         events: ApiState::Wired,
+        // ooxml-wml::batch::StreamingParser<H> (chunk-fed, driven by ooxml_opc::StreamingParser,
+        // forwarding only word/document.xml's bytes through the same true-SAX events()
+        // machinery) was added 2026-08-08 with 5 passing crate-level tests
+        // (crates/formats/ooxml-wml/tests/streaming_reader.rs: adversarial chunking at
+        // 1/3/7/64/4096-byte and whole-input boundaries cross-checked against events()
+        // over every fixture, plus no-panic gates). Still NotYetWired here specifically:
+        // this harness has no fixture-driven check of its own yet, same gap as
+        // ooxml-pml's streaming_parser above.
         streaming_parser: ApiState::NotYetWired(
-            "ooxml-wml::batch::BatchParser exists (crates/formats/ooxml-wml/src/batch.rs) \
-             but is not yet exercised by this harness; a fixture-driven chunking check \
-             over real docx document.xml parts is tracked follow-up work",
+            "ooxml-wml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
+             crate-level tests but is not yet exercised by a fixture-driven check in this \
+             harness",
         ),
         streaming_writer: ApiState::NotYetWired(
             "ooxml-wml::streaming::WmlWriter exists and ooxml-pml's sibling writer has a \
@@ -444,8 +452,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "xlsx",
         events: ApiState::Wired,
+        // ooxml-sml::batch::StreamingParser<H> (chunk-fed, driven by ooxml_opc::StreamingParser,
+        // running each xl/worksheets/sheetN.xml part through the existing true-SAX events()
+        // iterator; xl/sharedStrings.xml delivered independently as Event::SharedStrings,
+        // cell values always carry the raw shared-string index) was added 2026-08-08 with
+        // passing crate-level adversarial-chunking tests plus a no-panic fuzz target
+        // (fuzz_streaming_parser). Still NotYetWired here specifically: this harness has no
+        // fixture-driven check of its own yet, same gap as ooxml-wml/ooxml-pml above.
         streaming_parser: ApiState::NotYetWired(
-            "ooxml-sml::batch exists but not yet exercised by this harness",
+            "ooxml-sml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
+             crate-level tests but is not yet exercised by a fixture-driven check in this \
+             harness",
         ),
         streaming_writer: ApiState::Wired,
     },

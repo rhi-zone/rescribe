@@ -5668,7 +5668,29 @@ depth + largest token) memory is the primary use case, not an afterthought.
   state machine as `StreamingParser` but driven by `Iterator::next()`.
 
 **Streaming implementation:**
-- [ ] Implement `StreamingParser<H>` for DOCX (wml) first — largest user base.
+- [x] `ooxml-opc` foundation (2026-08-08): additive chunk-fed
+  `ooxml_opc::StreamingParser<H: Handler<Event>>` (`crates/formats/ooxml-opc/src/batch.rs`),
+  built on `zip-fmt`'s push-based streaming ZIP reader, alongside the existing seekable
+  `Package<R: Read+Seek>` (unchanged). Emits `Event::ContentTypes`, `Event::Relationships
+  { part_path, .. }` (recognized structurally from `.rels` paths), and `Event::Part { path,
+  content_type, content }` for every other part, with `content_type` resolved once
+  `[Content_Types].xml` has streamed past. Memory: O(largest part + bytes preceding
+  `[Content_Types].xml`), not O(full archive) — but each `Event::Part` still delivers a
+  part's full decompressed bytes in one `Vec<u8>`, a deliberate, documented scoped
+  exception (not sub-entry incremental), inherited identically by wml/sml/pml below.
+- [x] Implement `StreamingParser<H>` for DOCX (wml) — largest user base (2026-08-08).
+  `crates/formats/ooxml-wml/src/batch.rs`: drives `ooxml_opc::StreamingParser`, forwards
+  only `word/document.xml`'s bytes (matched by literal path, not `_rels/.rels` resolution
+  — see the module docs) into the crate's existing true-SAX `crate::events::events`
+  iterator, delivering `OwnedWmlEvent`s to the caller's `Handler` as they're produced (not
+  `events().collect()` first). Memory bound: O(largest single part + nesting depth), same
+  `ooxml-opc`-inherited exception as sml below. Every non-`document.xml` part (styles,
+  core/app properties, etc.) is silently dropped at this layer — see the "package-level
+  events" gap noted below, not yet closed for any of the three crates. Fuzz target
+  extended (`fuzz/fuzz_targets/docx_reader.rs`) but **unverified**: the `fuzz` crate fails
+  to build workspace-wide for a pre-existing, unrelated reason (stale `rescribe-read-ansi`
+  dependency), confirmed via `git stash` to predate this change — needs its own fix before
+  the new fuzz coverage can actually run.
 - [x] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines
   (2026-08-08). `crates/formats/ooxml-sml/src/batch.rs`: drives
   `ooxml_opc::StreamingParser` for OPC-level entry delivery, runs
@@ -5701,9 +5723,45 @@ depth + largest token) memory is the primary use case, not an afterthought.
     resolved string — matching `events()`'s and `SmlWriter::set_shared_strings`'s
     existing pattern of leaving resolution to the caller. `Event::SharedStrings`
     delivers the parsed table independently, whenever its part arrives.
-- [ ] Implement `StreamingParser<H>` for PPTX (pml).
-- [ ] `parse()` as direct recursive descent (independent of events()).
-- [ ] `events()` as true pull iterator (frame-stack, no block-granular buffering).
+- [x] Implement `StreamingParser<H>` for PPTX (pml) (2026-08-08).
+  `crates/formats/ooxml-pml/src/batch.rs`: drives `ooxml_opc::StreamingParser`; each slide
+  part's buffered bytes run through the same `crate::events::events` SAX function
+  `events()` itself calls. Slide **display order** is resolved from `<p:sldIdLst>` +
+  the presentation part's relationships (reusing `presentation.rs`'s existing
+  `parse_presentation_slides`/`resolve_path`, now `pub(crate)`) — not ZIP/filename order,
+  which does not match display order in general. Same `ooxml-opc`-inherited "buffers a
+  part's full bytes before this crate's SAX pass sees them" memory caveat as wml/sml,
+  judged lower-impact here since individual slide XML is typically small (a deck's size
+  scales in slide *count*, not single-part size). Also **wired the previously-stubbed
+  PPTX streaming writer** into `crates/rescribe-fixtures`' harness (`CAPABILITIES`'
+  pptx `streaming_writer: NotYetWired → Wired`, backed by a new multi-slide roundtrip
+  test) — the writer itself (multi-slide via `new_slide()`, table content) already
+  existed per the DOCX/XLSX writer checklists above; only harness wiring was missing.
+  Shape-geometry (EMU position/size, needs YAML+codegen regen) remains open and
+  untouched, as already tracked above.
+- [ ] `parse()` as direct recursive descent (independent of events()) — not evaluated
+  in the 2026-08-08 `StreamingParser<H>` pass above; unclear whether existing `parse()`
+  for wml/sml/pml already meets this bar or still routes through `events()`/an
+  intermediate representation. Needs its own audit pass, not assumed either way.
+- [ ] `events()` as true pull iterator (frame-stack, no block-granular buffering) — per
+  `docs/format-audit.md`'s cross-API harness inventory table, `events()` is already
+  `Wired` for docx/pptx/xlsx (fixed 2026-08-03, reachability/ordering bugs). Whether it
+  specifically meets the "frame-stack, no block-granular buffering" architecture note
+  above was not separately re-verified in the 2026-08-08 pass — left unchecked rather
+  than assumed satisfied by "Wired."
+- [ ] **Package-level events — still open, not resolved by the 2026-08-08
+  `StreamingParser<H>` work above.** `events()` and the new `StreamingParser<H>` for all
+  three crates (wml/sml/pml) are scoped to a single content part (`word/document.xml`,
+  `xl/worksheets/sheetN.xml`, `ppt/slides/slideN.xml`) — none of them walk `_rels` to
+  surface `core_properties`/`app_properties`/`styles.xml`(wml)/`Stylesheet`(sml)-derived
+  content as part of the event stream; that content is either unreachable via these APIs
+  or (for sml/pml, whose `Event` enums include a generic `Event::Part{path, content, ..}`
+  passthrough for non-main parts) delivered as opaque bytes, not parsed into any
+  format-level event. Closing this needs a real design decision, not a mechanical
+  extension: does each crate's own `WmlEvent`/`SmlEvent`/`PmlEvent` vocabulary grow new
+  variants for package-level metadata (blending single-part-content and whole-package
+  concerns into one event type), or does a separate package-level event/wrapper type
+  sit above the existing per-part `Event`s? Deliberately not decided unilaterally here.
 
 ### Milestone: M2.5 — Streaming IR layer
 
