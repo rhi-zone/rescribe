@@ -1,0 +1,18 @@
+{
+  "description": "DOCX body sectPr (page size/margins/orientation) is raw-preserved as docx:page-*/docx:margin-* document metadata (no dedicated rescribe-std page-layout node/prop exists yet)",
+  "category": "happy",
+  "metadata": {
+    "docx:page-width-twips": 12240,
+    "docx:page-height-twips": 15840,
+    "docx:page-orientation": "portrait",
+    "docx:margin-top-twips": "1440",
+    "docx:margin-bottom-twips": "1440",
+    "docx:margin-left-twips": "1800",
+    "docx:margin-right-twips": "1800"
+  },
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Body text." } }
+  ]
+}

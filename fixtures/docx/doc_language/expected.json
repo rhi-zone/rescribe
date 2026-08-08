@@ -1,0 +1,10 @@
+{
+  "description": "DOCX styles.xml docDefaults/rPrDefault/rPr/lang maps to the semantic language document-metadata field",
+  "category": "happy",
+  "metadata": { "language": "de-DE" },
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Body text." } }
+  ]
+}

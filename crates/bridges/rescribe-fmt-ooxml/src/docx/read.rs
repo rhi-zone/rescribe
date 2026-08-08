@@ -452,17 +452,51 @@ fn convert_paragraph_content<R: Read + Seek>(
                 }
             }
             ParagraphContent::Ins(ins) => {
-                // Include inserted content (from tracked changes)
+                // Tracked insertion: keep the content (it's visible in the current
+                // document state) and mark it as a tracked change so a writer can
+                // re-emit the <w:ins> wrapper on round-trip.
+                let mut inner = Vec::new();
                 for item in &ins.run_content {
                     if let RunContentChoice::R(run) = item {
                         for n in convert_run(converter, doc, run)? {
-                            children.push(n);
+                            inner.push(n);
                         }
                     }
                 }
+                if !inner.is_empty() {
+                    children.push(wrap_tracked_change(
+                        "ins",
+                        ins.id,
+                        &ins.author,
+                        ins.date.as_deref(),
+                        inner,
+                    ));
+                }
             }
-            ParagraphContent::Del(_del) => {
-                converter.warn("Tracked deletion content skipped");
+            ParagraphContent::Del(del) => {
+                // Tracked deletion: content is not visible in the current document
+                // state, but dropping it entirely is a losslessness bug (a
+                // DOCX->DOCX round-trip would lose the deleted text and the
+                // tracked-change record). Keep it, wrapped so a writer can restore
+                // the <w:del>/<w:delText> structure and callers that don't care
+                // about revision history can filter on docx:tracked-change="del".
+                let mut inner = Vec::new();
+                for item in &del.run_content {
+                    if let RunContentChoice::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            inner.push(n);
+                        }
+                    }
+                }
+                if !inner.is_empty() {
+                    children.push(wrap_tracked_change(
+                        "del",
+                        del.id,
+                        &del.author,
+                        del.date.as_deref(),
+                        inner,
+                    ));
+                }
             }
             ParagraphContent::MoveFrom(move_from) => {
                 // MoveFrom contains text being moved away — include it (it was visible).
@@ -641,6 +675,13 @@ fn convert_run<R: Read + Seek>(
     for item in &run.run_content {
         match item {
             RunContent::T(t) => {
+                if let Some(text) = &t.text {
+                    buf.push_str(text);
+                }
+            }
+            // <w:delText> is the tracked-deletion equivalent of <w:t> (used inside
+            // <w:del> runs); text content is otherwise identical.
+            RunContent::DelText(t) => {
                 if let Some(text) = &t.text {
                     buf.push_str(text);
                 }
@@ -865,6 +906,34 @@ fn apply_border_prop(
     node
 }
 
+/// Wrap tracked-insertion/-deletion content in a `span` carrying
+/// `docx:tracked-change` ("ins"/"del") plus author/date, so a writer can
+/// restore the `<w:ins>`/`<w:del>` wrapper and callers that don't care about
+/// revision history can filter on the prop. There's no cross-format
+/// "tracked change" node kind in rescribe-std, so this follows the existing
+/// `docx:*`-namespaced raw-preservation pattern on a generic structural node
+/// rather than dropping the content (which the reader previously did for
+/// deletions -- a real losslessness bug).
+fn wrap_tracked_change(
+    kind: &str,
+    id: i64,
+    author: &str,
+    date: Option<&str>,
+    children: Vec<Node>,
+) -> Node {
+    let mut node = Node::new(node::SPAN)
+        .prop("docx:tracked-change", kind.to_string())
+        .prop("docx:tracked-change-id", id)
+        .children(children);
+    if !author.is_empty() {
+        node = node.prop("docx:tracked-change-author", author.to_string());
+    }
+    if let Some(d) = date {
+        node = node.prop("docx:tracked-change-date", d.to_string());
+    }
+    node
+}
+
 fn create_text_node(text: &str) -> Node {
     Node::new(node::TEXT).prop(prop::CONTENT, text.to_string())
 }
@@ -979,6 +1048,45 @@ fn extract_metadata<R: Read + Seek>(doc: &OoxmlDocument<R>) -> Properties {
         }
         if let Some(modified) = &core.modified {
             metadata.set("modified", modified.clone());
+        }
+    }
+
+    // Section properties: page size/margins/orientation. Real cross-format
+    // concept (LaTeX \geometry, ODT fo:page-width, ...), but rescribe-std has no
+    // dedicated page-layout node/prop yet, so this is raw-preserved on metadata
+    // like the rest of docx-specific document properties.
+    if let Some(sect_pr) = doc.body().sect_pr.as_deref() {
+        use ooxml_wml::ext::SectionPropertiesExt;
+        if let Some(w) = sect_pr.page_width_twips() {
+            metadata.set("docx:page-width-twips", w as i64);
+        }
+        if let Some(h) = sect_pr.page_height_twips() {
+            metadata.set("docx:page-height-twips", h as i64);
+        }
+        if let Some(orient) = sect_pr.page_orientation() {
+            metadata.set("docx:page-orientation", orient.to_string());
+        }
+        if let Some(margins) = sect_pr.page_margins() {
+            metadata.set("docx:margin-top-twips", margins.top.clone());
+            metadata.set("docx:margin-bottom-twips", margins.bottom.clone());
+            metadata.set("docx:margin-left-twips", margins.left.clone());
+            metadata.set("docx:margin-right-twips", margins.right.clone());
+        }
+    }
+
+    // Document-level default language, from styles.xml docDefaults/rPrDefault/rPr/lang.
+    {
+        let styles = doc.styles();
+        if let Some(lang) = styles
+            .doc_defaults
+            .as_ref()
+            .and_then(|dd| dd.r_pr_default.as_ref())
+            .and_then(|rpd| rpd.r_pr.as_ref())
+            .and_then(|rp| rp.lang.as_deref())
+            .and_then(|l| l.value.as_ref())
+            && !lang.is_empty()
+        {
+            metadata.set(prop::LANGUAGE, lang.clone());
         }
     }
 

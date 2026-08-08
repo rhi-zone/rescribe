@@ -1,0 +1,20 @@
+{
+  "description": "DOCX <w:ins> tracked insertion is kept (visible in current document state) and wrapped in a span carrying docx:tracked-change=\"ins\" plus author/date/id",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Unchanged text. " } },
+    {
+      "path": "/0/1",
+      "kind": "span",
+      "props": {
+        "docx:tracked-change": "ins",
+        "docx:tracked-change-id": 1,
+        "docx:tracked-change-author": "Jane Doe",
+        "docx:tracked-change-date": "2026-01-01T00:00:00Z"
+      }
+    },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Inserted text." } }
+  ]
+}

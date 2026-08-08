@@ -69,6 +69,87 @@ fn write_metadata(builder: &mut DocumentBuilder, doc: &Document) {
             ..Default::default()
         });
     }
+
+    // Section properties: page size/margins/orientation (raw-preserved metadata).
+    let has_sect_pr = m.get_int("docx:page-width-twips").is_some()
+        || m.get_int("docx:page-height-twips").is_some()
+        || m.get_str("docx:page-orientation").is_some()
+        || m.get_str("docx:margin-top-twips").is_some();
+    if has_sect_pr {
+        let pg_sz = if m.get_int("docx:page-width-twips").is_some()
+            || m.get_int("docx:page-height-twips").is_some()
+            || m.get_str("docx:page-orientation").is_some()
+        {
+            Some(Box::new(types::PageSize {
+                width: m.get_int("docx:page-width-twips").map(|v| v.to_string()),
+                height: m.get_int("docx:page-height-twips").map(|v| v.to_string()),
+                orient: m
+                    .get_str("docx:page-orientation")
+                    .and_then(|s| s.parse().ok()),
+                code: None,
+                extra_attrs: Default::default(),
+            }))
+        } else {
+            None
+        };
+        let pg_mar = if m.get_str("docx:margin-top-twips").is_some() {
+            Some(Box::new(types::PageMargins {
+                top: m
+                    .get_str("docx:margin-top-twips")
+                    .unwrap_or("1440")
+                    .to_string(),
+                right: m
+                    .get_str("docx:margin-right-twips")
+                    .unwrap_or("1440")
+                    .to_string(),
+                bottom: m
+                    .get_str("docx:margin-bottom-twips")
+                    .unwrap_or("1440")
+                    .to_string(),
+                left: m
+                    .get_str("docx:margin-left-twips")
+                    .unwrap_or("1440")
+                    .to_string(),
+                header: "720".to_string(),
+                footer: "720".to_string(),
+                gutter: "0".to_string(),
+                extra_attrs: Default::default(),
+            }))
+        } else {
+            None
+        };
+        builder
+            .body_mut()
+            .set_section_properties(types::SectionProperties {
+                pg_sz,
+                pg_mar,
+                ..Default::default()
+            });
+    }
+
+    // Document-level default language, into styles.xml docDefaults/rPrDefault/rPr/lang.
+    if let Some(lang) = m.get_str(prop::LANGUAGE) {
+        let styles = types::Styles {
+            doc_defaults: Some(Box::new(types::DocumentDefaults {
+                r_pr_default: Some(Box::new(types::RunPropertiesDefault {
+                    r_pr: Some(Box::new(types::RunProperties {
+                        lang: Some(Box::new(types::LanguageElement {
+                            value: Some(lang.to_string()),
+                            east_asia: None,
+                            bidi: None,
+                            extra_attrs: Default::default(),
+                        })),
+                        ..Default::default()
+                    })),
+                    extra_children: Vec::new(),
+                })),
+                p_pr_default: None,
+                extra_children: Vec::new(),
+            })),
+            ..Default::default()
+        };
+        builder.set_styles(styles);
+    }
 }
 
 // ── Pre-registration: hyperlinks ──────────────────────────────────────────────
@@ -662,16 +743,40 @@ fn write_table(
         .filter(|n| n.kind.as_str() == node::TABLE_ROW)
         .collect();
 
-    // Pass 1: place every real cell on the grid (row_idx, col) using colspan
-    // to advance the column cursor within its row.
+    // Single forward pass: a row's real cells (as stored in the IR -- the reader
+    // already dropped vMerge-continuation placeholders, folding them into the
+    // origin cell's rowspan) only account for the columns *not* covered by a
+    // still-open rowspan from an earlier row. So column assignment must skip
+    // over columns an active merge still occupies, not just run 0..colspan
+    // within the row in isolation.
+    struct ActiveMerge {
+        col: i64,
+        colspan: i64,
+        rows_left: i64,
+    }
+    let mut active: Vec<ActiveMerge> = Vec::new();
     let mut grid: Vec<Vec<GridCell>> = Vec::with_capacity(row_nodes.len());
-    for row_node in &row_nodes {
+    let mut continuations: Vec<Vec<ContinuationCell>> =
+        (0..row_nodes.len()).map(|_| Vec::new()).collect();
+
+    for (row_idx, row_node) in row_nodes.iter().enumerate() {
+        for am in &active {
+            continuations[row_idx].push(ContinuationCell {
+                col: am.col,
+                colspan: am.colspan,
+            });
+        }
+
         let mut col = 0i64;
         let mut cells = Vec::new();
         for cell_node in &row_node.children {
             let kind = cell_node.kind.as_str();
             if kind != node::TABLE_CELL && kind != node::TABLE_HEADER {
                 continue;
+            }
+            // Skip past any column currently reserved by an open rowspan.
+            while let Some(a) = active.iter().find(|a| a.col == col) {
+                col += a.colspan;
             }
             let colspan = cell_node.props.get_int(prop::COLSPAN).unwrap_or(1).max(1);
             let rowspan = cell_node.props.get_int(prop::ROWSPAN).unwrap_or(1).max(1);
@@ -683,25 +788,22 @@ fn write_table(
             });
             col += colspan;
         }
-        grid.push(cells);
-    }
 
-    // Pass 2: for every cell with rowspan > 1, schedule a vMerge-continue
-    // placeholder in each subsequent row it covers.
-    let mut continuations: Vec<Vec<ContinuationCell>> =
-        (0..row_nodes.len()).map(|_| Vec::new()).collect();
-    for (row_idx, cells) in grid.iter().enumerate() {
-        for cell in cells {
-            for offset in 1..cell.rowspan {
-                let target = row_idx + offset as usize;
-                if let Some(bucket) = continuations.get_mut(target) {
-                    bucket.push(ContinuationCell {
-                        col: cell.col,
-                        colspan: cell.colspan,
-                    });
-                }
+        for am in &mut active {
+            am.rows_left -= 1;
+        }
+        active.retain(|a| a.rows_left > 0);
+        for cell in &cells {
+            if cell.rowspan > 1 {
+                active.push(ActiveMerge {
+                    col: cell.col,
+                    colspan: cell.colspan,
+                    rows_left: cell.rowspan - 1,
+                });
             }
         }
+
+        grid.push(cells);
     }
 
     let table = builder.body_mut().add_table();
@@ -853,6 +955,9 @@ fn write_inline_to_para(
                     footnote_map,
                     image_map,
                 );
+            }
+            node::SPAN if node.props.get_str("docx:tracked-change").is_some() => {
+                write_tracked_change_to_para(para, node);
             }
             node::SPAN => {
                 let mut next = fmt.clone();
@@ -1018,6 +1123,49 @@ fn write_inline_to_para(
                     image_map,
                 );
             }
+        }
+    }
+}
+
+/// Re-emit a tracked-insertion/-deletion span as `<w:ins>`/`<w:del>`.
+///
+/// Limitation: nested inline formatting inside the tracked-change span is
+/// flattened to plain text (`add_tracked_insertion`/`add_tracked_deletion`
+/// only take flat text) -- acceptable for round-tripping the tracked-change
+/// record and its text, but bold/italic/etc *within* a tracked change would
+/// need a lower-level CTRunTrackChange builder to fully preserve.
+fn write_tracked_change_to_para(para: &mut types::Paragraph, node: &Node) {
+    let kind = node.props.get_str("docx:tracked-change").unwrap_or("");
+    let id = node.props.get_int("docx:tracked-change-id").unwrap_or(1);
+    let author = node
+        .props
+        .get_str("docx:tracked-change-author")
+        .unwrap_or("unknown")
+        .to_string();
+    let date = node
+        .props
+        .get_str("docx:tracked-change-date")
+        .map(|s| s.to_string());
+    let mut text = String::new();
+    flatten_text(&node.children, &mut text);
+    match kind {
+        "ins" => {
+            para.add_tracked_insertion(id, &author, date.as_deref(), &text);
+        }
+        "del" => {
+            para.add_tracked_deletion(id, &author, date.as_deref(), &text);
+        }
+        _ => {}
+    }
+}
+
+/// Recursively concatenate all `text` node content under `nodes`.
+fn flatten_text(nodes: &[Node], out: &mut String) {
+    for node in nodes {
+        if node.kind.as_str() == node::TEXT {
+            out.push_str(node.props.get_str(prop::CONTENT).unwrap_or(""));
+        } else {
+            flatten_text(&node.children, out);
         }
     }
 }

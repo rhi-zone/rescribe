@@ -1,0 +1,16 @@
+{
+  "description": "DOCX core properties (docProps/core.xml) map to document metadata",
+  "category": "happy",
+  "metadata": {
+    "title": "Sample Document",
+    "author": "Jane Doe",
+    "description": "A test document.",
+    "created": "2026-01-01T00:00:00Z",
+    "modified": "2026-01-02T00:00:00Z"
+  },
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Body text." } }
+  ]
+}

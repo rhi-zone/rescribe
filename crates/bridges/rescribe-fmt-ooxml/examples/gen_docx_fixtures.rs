@@ -413,5 +413,107 @@ fn main() {
         write_docx(&format!("{}/heading_levels/input.docx", base), b);
     }
 
+    // --- revision_ins ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("Unchanged text. ");
+        para.add_tracked_insertion(
+            1,
+            "Jane Doe",
+            Some("2026-01-01T00:00:00Z"),
+            "Inserted text.",
+        );
+        write_docx(&format!("{}/revision_ins/input.docx", base), b);
+    }
+
+    // --- revision_del ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("Unchanged text. ");
+        para.add_tracked_deletion(2, "Jane Doe", Some("2026-01-01T00:00:00Z"), "Deleted text.");
+        write_docx(&format!("{}/revision_del/input.docx", base), b);
+    }
+
+    // --- doc_page_layout: section properties (page size/margins/orientation) ---
+    {
+        let mut b = DocumentBuilder::new();
+        b.body_mut()
+            .add_paragraph()
+            .add_run()
+            .set_text("Body text.");
+        b.body_mut()
+            .set_section_properties(types::SectionProperties {
+                pg_sz: Some(Box::new(types::PageSize {
+                    width: Some("12240".to_string()),
+                    height: Some("15840".to_string()),
+                    orient: Some(types::STPageOrientation::Portrait),
+                    code: None,
+                    extra_attrs: Default::default(),
+                })),
+                pg_mar: Some(Box::new(types::PageMargins {
+                    top: "1440".to_string(),
+                    right: "1800".to_string(),
+                    bottom: "1440".to_string(),
+                    left: "1800".to_string(),
+                    header: "720".to_string(),
+                    footer: "720".to_string(),
+                    gutter: "0".to_string(),
+                    extra_attrs: Default::default(),
+                })),
+                ..Default::default()
+            });
+        write_docx(&format!("{}/doc_page_layout/input.docx", base), b);
+    }
+
+    // --- doc_language: document-level default language (docDefaults/rPrDefault/rPr/lang) ---
+    {
+        let mut b = DocumentBuilder::new();
+        b.body_mut()
+            .add_paragraph()
+            .add_run()
+            .set_text("Body text.");
+        b.set_styles(types::Styles {
+            doc_defaults: Some(Box::new(types::DocumentDefaults {
+                r_pr_default: Some(Box::new(types::RunPropertiesDefault {
+                    r_pr: Some(Box::new(types::RunProperties {
+                        lang: Some(Box::new(types::LanguageElement {
+                            value: Some("de-DE".to_string()),
+                            east_asia: None,
+                            bidi: None,
+                            extra_attrs: Default::default(),
+                        })),
+                        ..Default::default()
+                    })),
+                    extra_children: Vec::new(),
+                })),
+                p_pr_default: None,
+                extra_children: Vec::new(),
+            })),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/doc_language/input.docx", base), b);
+    }
+
+    // --- doc_core_properties ---
+    {
+        use ooxml_wml::CoreProperties;
+        let mut b = DocumentBuilder::new();
+        b.body_mut()
+            .add_paragraph()
+            .add_run()
+            .set_text("Body text.");
+        b.set_core_properties(CoreProperties {
+            title: Some("Sample Document".to_string()),
+            creator: Some("Jane Doe".to_string()),
+            description: Some("A test document.".to_string()),
+            created: Some("2026-01-01T00:00:00Z".to_string()),
+            modified: Some("2026-01-02T00:00:00Z".to_string()),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/doc_core_properties/input.docx", base), b);
+    }
+
     println!("Done generating DOCX fixtures.");
 }

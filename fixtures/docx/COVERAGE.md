@@ -56,7 +56,7 @@ spec.
 - [ ] field code (`<w:fldChar>`/`<w:instrText>`) — (missing)
 - [ ] bookmark (`<w:bookmarkStart>`/`<w:bookmarkEnd>`) — (missing)
 - [ ] comment reference (`<w:commentReference>`) — (missing)
-- [ ] revision marks (tracked changes: ins/del) — (missing)
+- [x] revision marks (tracked changes: ins/del) — `revision_ins`, `revision_del` (content wrapped in a `span` with `docx:tracked-change`; nested inline formatting *inside* a tracked change is flattened to plain text on write — see write.rs `write_tracked_change_to_para` doc comment)
 - [x] font name (`<w:rFonts>`) — `inline_font_name`
 - [x] language (`<w:lang>`) — `inline_language`
 
@@ -73,13 +73,13 @@ spec.
 - [ ] numbering properties (separate from list fixture) — (missing)
 
 ## Document properties / Metadata
-- [ ] core properties (title, author, description, created, modified) — (missing)
-- [ ] custom properties — (missing)
-- [ ] document language (`<w:defaultTabStop>`, `<w:lang>`) — (missing)
-- [ ] page size and margins — (missing)
-- [ ] section properties (`<w:sectPr>`) — (missing)
-- [ ] theme fonts and colors — (missing)
-- [ ] styles.xml named styles — (missing)
+- [x] core properties (title, author, description, created, modified) — `doc_core_properties`
+- [ ] custom properties — (deferred: DOCX custom properties live in `docProps/custom.xml`, which uses the `vt:` variant-type schema (`vt:lpwstr`, `vt:i4`, `vt:filetime`, `vt:bool`, ...). ooxml-wml has no reader/writer for this part at all yet -- this is new parser/writer work in ooxml-wml, not a bridge wiring gap. Out of scope for this pass.)
+- [x] document language (`<w:lang>`) — `doc_language` (styles.xml `docDefaults/rPrDefault/rPr/lang` maps to the semantic `language` document-metadata field); `<w:defaultTabStop>` itself (a numeric layout default, not a language construct despite being grouped with it in this checklist item) is not separately covered -- deferred, low value
+- [x] page size and margins — `doc_page_layout`
+- [x] section properties (`<w:sectPr>`) — `doc_page_layout` (page size/margins only; header/footer references, columns, and other `sectPr` children are not yet bridged)
+- [ ] theme fonts and colors — (deferred — full theme1.xml color/font-scheme extraction is a multi-day effort involving a new ooxml-dml theme parser; out of scope for this pass)
+- [ ] styles.xml named styles — (deferred — full named-style resolution (style inheritance chains, `basedOn`, style categories) is large; `StyleContext`/`RunPropertiesExt` in ooxml-wml already support *reading* resolved run properties through the style chain, but the bridge doesn't yet expose named styles as IR constructs beyond the existing `docx:pStyle` raw string. Out of scope for this pass.)
 
 ## Composition (integration)
 - [ ] table cells with formatted runs — (missing)
