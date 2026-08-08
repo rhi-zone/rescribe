@@ -21,12 +21,15 @@
 //! # `StreamingParser<H>`: genuinely incremental
 //!
 //! Driven by [`ooxml_opc::StreamingParser`] for container-level (ZIP/OPC)
-//! entry delivery, translating each `ppt/slides/slideN.xml` part into the
-//! same [`crate::PmlEvent`] stream [`crate::events::events`] already
-//! produces for a single slide's bytes — the two APIs share that per-part
-//! SAX state machine as a plain function call, not by one being derived
-//! from the other (see the crate root's / `CLAUDE.md`'s "three independent
-//! implementations" rule).
+//! entry delivery, translating each `ppt/slides/slideN.xml` part's bytes
+//! into the same [`crate::PmlEvent`] stream [`crate::events::events`]
+//! produces for a single slide's complete bytes — but via
+//! [`crate::chunked_events::ChunkedPmlTokenizer`], a genuinely independent,
+//! chunk-resumable XML-to-event translation (not derived from
+//! [`crate::events::PmlEventIter`]'s pull-`Iterator`-over-a-complete-slice
+//! design; see that module's own doc comment for the technique and
+//! `CLAUDE.md`'s "three independent implementations" rule). The two only
+//! share a handful of pure, `Reader`-agnostic helper functions.
 //!
 //! ```ignore
 //! use ooxml_pml::batch::StreamingParser;
@@ -54,8 +57,8 @@
 //!
 //! ## Memory model and buffering
 //!
-//! **Update (2026-08-08):** `ooxml-opc`'s `Event::Part` no longer delivers
-//! a part's full decompressed bytes in one shot — it is now
+//! **Update (2026-08-08, part 1):** `ooxml-opc`'s `Event::Part` no longer
+//! delivers a part's full decompressed bytes in one shot — it is now
 //! `PartStart`/`PartData`/`PartEnd`, with `PartData` chunks forwarded as
 //! they decompress once `[Content_Types].xml` has streamed past (see its
 //! own module docs). This module takes advantage of that directly for one
@@ -67,13 +70,38 @@
 //! buffered every part (including ones this module immediately discarded)
 //! before this module ever saw it.
 //!
+//! **Update (2026-08-08, part 2):** the per-slide XML-to-`PmlEvent`
+//! translation itself is now genuinely chunk-resumable
+//! ([`crate::chunked_events::ChunkedPmlTokenizer`]), closing the gap this
+//! doc comment used to describe (a slide's bytes were fully accumulated
+//! before any of its events could be produced). For the common case — a
+//! slide part whose display-order slot is already known to be
+//! `next_slide_idx` when its `PartStart` arrives, i.e. resolution has
+//! completed and slide parts are streaming in display order (the
+//! conventional case for real PPTX packages) — [`InnerHandler`] feeds each
+//! `PartData` chunk straight to that slide's tokenizer as it arrives (see
+//! `Shared::begin_slide_stream`/`feed_current_slide`/`finish_current_slide`),
+//! so no single slide's full XML needs to be buffered to make progress on
+//! it: memory for that slide is bounded by `ChunkedPmlTokenizer`'s own
+//! O(nesting depth + largest token + largest props/geometry element) —
+//! see that module's doc comment for the technique and the one edge case
+//! (a malformed `<a:custGeom>`/`<a:avLst>` at the genuine, final end of
+//! input) it documents rather than papering over.
+//!
 //! Two scoped buffering exceptions remain, both orthogonal to the
-//! `ooxml-opc` container-layer change above (they exist because of what
-//! this module's own resolution/ordering logic needs, not because of how
-//! `ooxml-opc` delivers bytes) and both still needing a part's complete
-//! bytes at the point they're held — individual slide XML parts are
-//! typically small, so this is judged acceptable for `pml` even though it
-//! would not be for `wml`/`sml`'s much larger single-part documents:
+//! `ooxml-opc` container-layer change above and to the tokenizer change
+//! just described (they exist because of what this module's own
+//! resolution/ordering logic needs — *when* a slide's bytes are ready to be
+//! tokenized at all, not *how* they get tokenized once ready — not because
+//! of how `ooxml-opc` delivers bytes or how the tokenizer works) and both
+//! still needing a part's complete bytes at the point they're held —
+//! individual slide XML parts are typically small, so this is judged
+//! acceptable for `pml` even though it would not be for `wml`/`sml`'s much
+//! larger single-part documents. When either applies, the affected slide's
+//! bytes are still translated via the same [`ChunkedPmlTokenizer`] as the
+//! fast path, just fed as one accumulated blob in a single `feed()` call
+//! (see `Shared::emit_slide`) instead of incrementally — the tokenizer
+//! itself doesn't care which:
 //!
 //! 1. **Pre-resolution part buffering.** Any part whose classification
 //!    (presentation part / slide part / irrelevant) isn't yet knowable —
@@ -131,7 +159,7 @@ impl BatchParser {
 // StreamingParser<H>
 // ---------------------------------------------------------------------------
 
-use crate::events;
+use crate::chunked_events::ChunkedPmlTokenizer;
 use crate::generated_events::OwnedPmlEvent;
 use crate::presentation::{
     REL_OFFICE_DOCUMENT, REL_SLIDE, parse_presentation_slides, resolve_path,
@@ -164,17 +192,57 @@ struct Shared<H: Handler<OwnedPmlEvent>> {
     slide_content: HashMap<String, Vec<u8>>,
     /// Index into `slide_paths` of the next slide to emit.
     next_slide_idx: usize,
+    /// The chunk-resumable tokenizer for the slide currently streaming in
+    /// as `PartData`, when [`InnerHandler`] has determined (at that part's
+    /// `PartStart`) that it is already known to be the next slide in
+    /// display order — the fast path described in the module docs' memory
+    /// model section. `None` whenever no slide is being fed incrementally
+    /// right now (resolution isn't done yet, or the in-flight part isn't
+    /// the awaited slide): those cases fall back to `emit_slide`, which
+    /// feeds the same tokenizer type one accumulated blob in one shot.
+    current_slide_tokenizer: Option<ChunkedPmlTokenizer>,
 }
 
 impl<H: Handler<OwnedPmlEvent>> Shared<H> {
-    /// Emit one slide's events: run the same per-part SAX iterator
-    /// [`crate::events::events`] uses for a single slide, converting each
-    /// borrowed event to owned before handing it to the handler (mirrors
-    /// every other migrated crate's `StreamingParser<H: Handler<OwnedEvent>>`
-    /// contract).
+    /// Emit one slide's events from its complete accumulated bytes — used
+    /// by the two buffering-exception paths (module docs) where a part's
+    /// full bytes are only available as one blob. Feeds
+    /// [`ChunkedPmlTokenizer`] that whole blob in a single `feed()` call
+    /// followed by `finish()`: the tokenizer itself doesn't care whether
+    /// its input arrives incrementally or all at once, so this reuses the
+    /// exact same XML-to-`PmlEvent` translation the fast path below uses,
+    /// rather than a second, separate whole-buffer implementation.
     fn emit_slide(&mut self, bytes: &[u8]) {
-        for event in events::events(bytes) {
-            self.handler.handle(event.into_owned());
+        let mut tokenizer = ChunkedPmlTokenizer::new();
+        let handler = &mut self.handler;
+        tokenizer.feed(bytes, &mut |ev| handler.handle(ev));
+        tokenizer.finish(&mut |ev| handler.handle(ev));
+    }
+
+    /// Start feeding the currently-streaming part's bytes directly to a
+    /// fresh [`ChunkedPmlTokenizer`] as `PartData` chunks arrive, instead of
+    /// accumulating them first — the fast path, only taken by
+    /// [`InnerHandler`] when this part is already known to be the next
+    /// slide in display order.
+    fn begin_slide_stream(&mut self) {
+        self.current_slide_tokenizer = Some(ChunkedPmlTokenizer::new());
+    }
+
+    /// Forward one `PartData` chunk of the currently-streaming slide to its
+    /// tokenizer, dispatching any events it can now prove complete.
+    fn feed_current_slide(&mut self, chunk: &[u8]) {
+        if let Some(tokenizer) = self.current_slide_tokenizer.as_mut() {
+            let handler = &mut self.handler;
+            tokenizer.feed(chunk, &mut |ev| handler.handle(ev));
+        }
+    }
+
+    /// The currently-streaming slide's part has ended: flush its
+    /// tokenizer's remaining/ambiguous state as final.
+    fn finish_current_slide(&mut self) {
+        if let Some(tokenizer) = self.current_slide_tokenizer.take() {
+            let handler = &mut self.handler;
+            tokenizer.finish(&mut |ev| handler.handle(ev));
         }
     }
 
@@ -306,14 +374,18 @@ impl<H: Handler<OwnedPmlEvent>> Shared<H> {
 /// chunks into `buf` — *unless* `drop_immediately` says resolution has
 /// already determined this part is neither the presentation part nor a
 /// slide part, in which case chunks are discarded as they arrive without
-/// ever touching `buf`. See the module docs' "Memory model and buffering"
-/// section for why the other two buffering exceptions (pre-resolution,
-/// out-of-order slides) still need a part's complete bytes once accepted.
+/// ever touching `buf`; or *unless* `fast_path` says this part is already
+/// known (at `PartStart`) to be the next slide in display order, in which
+/// case chunks go straight to [`Shared::feed_current_slide`] instead of
+/// `buf` — see the module docs' "Memory model and buffering" section for
+/// why the other two buffering exceptions (pre-resolution, out-of-order
+/// slides) still need a part's complete bytes once accepted.
 struct InnerHandler<H: Handler<OwnedPmlEvent>> {
     shared: Rc<RefCell<Shared<H>>>,
     current_path: String,
     buf: Vec<u8>,
     drop_immediately: bool,
+    fast_path: bool,
 }
 
 impl<H: Handler<OwnedPmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
@@ -329,7 +401,7 @@ impl<H: Handler<OwnedPmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHand
                 .on_relationships(part_path, relationships),
             ooxml_opc::StreamingEvent::PartStart { path, .. } => {
                 self.buf.clear();
-                let shared = self.shared.borrow();
+                let mut shared = self.shared.borrow_mut();
                 self.drop_immediately = match &shared.slide_paths {
                     Some(slide_paths) => {
                         !slide_paths.contains(&path)
@@ -340,14 +412,41 @@ impl<H: Handler<OwnedPmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHand
                     // (module docs, exception 1).
                     None => false,
                 };
+                // Fast path: this part is already known to be exactly the
+                // slide `emit_ready_slides` is waiting for next, so its
+                // bytes can be tokenized as they arrive instead of being
+                // accumulated into `slide_content` first.
+                self.fast_path = match &shared.slide_paths {
+                    Some(slide_paths) => {
+                        shared.next_slide_idx < slide_paths.len()
+                            && slide_paths[shared.next_slide_idx] == path
+                    }
+                    None => false,
+                };
+                if self.fast_path {
+                    shared.begin_slide_stream();
+                }
                 self.current_path = path;
             }
             ooxml_opc::StreamingEvent::PartData(chunk) => {
-                if !self.drop_immediately {
+                if self.fast_path {
+                    self.shared.borrow_mut().feed_current_slide(&chunk);
+                } else if !self.drop_immediately {
                     self.buf.extend_from_slice(&chunk);
                 }
             }
             ooxml_opc::StreamingEvent::PartEnd => {
+                if self.fast_path {
+                    self.fast_path = false;
+                    let mut shared = self.shared.borrow_mut();
+                    shared.finish_current_slide();
+                    shared.next_slide_idx += 1;
+                    // Finishing this slide may make the next one(s) already
+                    // available in `slide_content` (buffering exception 2)
+                    // ready to emit too.
+                    shared.emit_ready_slides();
+                    return;
+                }
                 if self.drop_immediately {
                     self.buf.clear();
                     return;
@@ -381,12 +480,14 @@ impl<H: Handler<OwnedPmlEvent>> StreamingParser<H> {
             pending_parts: Vec::new(),
             slide_content: HashMap::new(),
             next_slide_idx: 0,
+            current_slide_tokenizer: None,
         }));
         let inner_handler = InnerHandler {
             shared: shared.clone(),
             current_path: String::new(),
             buf: Vec::new(),
             drop_immediately: false,
+            fast_path: false,
         };
         StreamingParser {
             inner: ooxml_opc::StreamingParser::new(inner_handler),

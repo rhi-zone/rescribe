@@ -73,7 +73,7 @@ enum XmlInfo {
 /// they fell through to `skip_element()`, since none is a tracked
 /// container), the entire paragraph/run/text subtree beneath them — i.e. all
 /// slide text — is silently dropped.
-fn is_transparent_wrapper(local: &[u8]) -> bool {
+pub(crate) fn is_transparent_wrapper(local: &[u8]) -> bool {
     matches!(local, b"sld" | b"cSld" | b"spTree" | b"txBody")
 }
 
@@ -91,6 +91,19 @@ enum ContextFrame {
     /// A wrapper descended into silently; its end tag produces nothing.
     Transparent,
 }
+
+// A handful of pure, Reader-agnostic helpers below (`local_name_owned`,
+// `attr_string`, `end_event_for`, `is_transparent_wrapper`) are `pub(crate)`
+// so `crate::chunked_events` (the independent chunk-resumable tokenizer used
+// by `StreamingParser<H>`) can call them as plain functions instead of
+// duplicating them — see CLAUDE.md's "three independent implementations,
+// not derived from one another" rule: implementations may share pure
+// state-transition helpers, just not derive from each other's control flow.
+// `skip_element`/`read_text_content` are deliberately NOT shared: their
+// `Eof`/`Err` handling silently treats "no more bytes right now" as "done",
+// which is correct for a fixed complete buffer but wrong for a genuinely
+// truncated chunk — `chunked_events` needs its own variants that can instead
+// report "need more input" and retry.
 
 /// True streaming PPTX event iterator.
 pub struct PmlEventIter<'input> {
@@ -622,7 +635,7 @@ impl<'input> PmlEventIter<'input> {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-fn local_name_owned(raw: &[u8]) -> Vec<u8> {
+pub(crate) fn local_name_owned(raw: &[u8]) -> Vec<u8> {
     raw.iter()
         .position(|&b| b == b':')
         .map_or_else(|| raw.to_vec(), |i| raw[i + 1..].to_vec())
@@ -666,7 +679,7 @@ fn read_text_content(reader: &mut Reader<&[u8]>) -> String {
     text
 }
 
-fn end_event_for(kind: PmlStartKind) -> PmlEvent<'static> {
+pub(crate) fn end_event_for(kind: PmlStartKind) -> PmlEvent<'static> {
     match kind {
         PmlStartKind::Shape => PmlEvent::EndShape,
         PmlStartKind::GraphicFrame => PmlEvent::EndGraphicFrame,
@@ -679,7 +692,7 @@ fn end_event_for(kind: PmlStartKind) -> PmlEvent<'static> {
     }
 }
 
-fn attr_string(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<String> {
+pub(crate) fn attr_string(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<String> {
     for attr in e.attributes().filter_map(|a| a.ok()) {
         if attr.key.as_ref() == qname {
             return Some(String::from_utf8_lossy(&attr.value).into_owned());

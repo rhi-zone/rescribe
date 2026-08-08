@@ -38,6 +38,11 @@
 pub mod batch;
 #[cfg(feature = "reader-batch")]
 pub use batch::{BatchParser, StreamingParser};
+/// Chunk-resumable XML tokenizer used internally by
+/// [`batch::StreamingParser`] to translate one slide part's bytes as they
+/// arrive. Not part of the public API — see the module's own doc comment.
+#[cfg(feature = "reader-batch")]
+mod chunked_events;
 
 pub mod error;
 pub mod ext;
