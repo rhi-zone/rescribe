@@ -78,7 +78,7 @@ enum ContextFrame {
 /// rather than skipped. `<w:document>`/`<w:body>` are the document's own
 /// structure; the rest wrap paragraph- or run-level content that would
 /// otherwise be silently dropped.
-fn is_transparent_wrapper(local: &[u8]) -> bool {
+pub(crate) fn is_transparent_wrapper(local: &[u8]) -> bool {
     matches!(
         local,
         b"document"
@@ -494,7 +494,7 @@ impl<'input> WmlEventIter<'input> {
 // ---------------------------------------------------------------------------
 
 /// Strip the namespace prefix: `b"w:p"` → `b"p"` (returns owned Vec).
-fn local_name_owned(raw: &[u8]) -> Vec<u8> {
+pub(crate) fn local_name_owned(raw: &[u8]) -> Vec<u8> {
     raw.iter()
         .position(|&b| b == b':')
         .map_or_else(|| raw.to_vec(), |i| raw[i + 1..].to_vec())
@@ -530,7 +530,7 @@ fn read_text_content(reader: &mut Reader<&[u8]>) -> String {
 
 /// Resolve one entity reference into `out`, keeping it verbatim (`&name;`) if
 /// it is not a character reference or one of the five XML predefined entities.
-fn push_entity(out: &mut String, e: &quick_xml::events::BytesRef<'_>) {
+pub(crate) fn push_entity(out: &mut String, e: &quick_xml::events::BytesRef<'_>) {
     if let Ok(Some(c)) = e.resolve_char_ref() {
         out.push(c);
         return;
@@ -571,7 +571,7 @@ fn skip_element(reader: &mut Reader<&[u8]>) {
 }
 
 /// Build the `EndXxx` event for a container kind.
-fn end_event_for(kind: WmlStartKind) -> WmlEvent<'static> {
+pub(crate) fn end_event_for(kind: WmlStartKind) -> WmlEvent<'static> {
     match kind {
         WmlStartKind::Paragraph => WmlEvent::EndParagraph,
         WmlStartKind::Run => WmlEvent::EndRun,
@@ -583,7 +583,7 @@ fn end_event_for(kind: WmlStartKind) -> WmlEvent<'static> {
 }
 
 /// Build an owned leaf event from an empty element, if tracked.
-fn build_leaf_event_owned(
+pub(crate) fn build_leaf_event_owned(
     local: &[u8],
     e: &quick_xml::events::BytesStart<'_>,
 ) -> Option<WmlEvent<'static>> {
@@ -608,7 +608,7 @@ fn build_leaf_event_owned(
 }
 
 /// Get an attribute value as an owned String.
-fn attr_string(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<String> {
+pub(crate) fn attr_string(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<String> {
     for attr in e.attributes().filter_map(|a| a.ok()) {
         if attr.key.as_ref() == qname {
             return Some(String::from_utf8_lossy(&attr.value).into_owned());
@@ -618,7 +618,7 @@ fn attr_string(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<St
 }
 
 /// Get an attribute value parsed as `i32`.
-fn attr_i32(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<i32> {
+pub(crate) fn attr_i32(e: &quick_xml::events::BytesStart<'_>, qname: &[u8]) -> Option<i32> {
     for attr in e.attributes().filter_map(|a| a.ok()) {
         if attr.key.as_ref() == qname {
             let s = std::str::from_utf8(&attr.value).ok()?;

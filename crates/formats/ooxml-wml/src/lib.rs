@@ -88,6 +88,8 @@ pub use document::{AppProperties, CoreProperties, Document, DocumentSettings, Im
 #[cfg(feature = "reader-batch")]
 pub mod batch;
 #[cfg(feature = "reader-batch")]
+mod chunked_events;
+#[cfg(feature = "reader-batch")]
 pub use batch::{BatchParser, Handler, StreamingParser};
 
 // Error types — always available.

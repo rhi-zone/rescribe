@@ -34,43 +34,45 @@
 //! the main document body to. Every other part's `PartData` chunks are
 //! discarded the moment they arrive, without ever being accumulated.
 //!
-//! `word/document.xml`'s own `PartData` chunks *are* accumulated into one
-//! buffer (see "Memory model" below for why) until its `PartEnd`, at which
-//! point the complete bytes are handed to [`crate::events::events`] — the
-//! same hand-rolled `quick_xml::Reader`-based SAX iterator `events()`
-//! already uses — and each [`OwnedWmlEvent`] it yields is forwarded to the
-//! caller's [`Handler`] as it is produced, not collected into a `Vec`
-//! first.
+//! `word/document.xml`'s own `PartData` chunks are fed to
+//! [`crate::chunked_events::ChunkedWmlReader`] as they arrive (see "Memory
+//! model" below) — a genuinely independent, chunk-resumable
+//! re-implementation of [`crate::events::WmlEventIter`]'s state machine
+//! (not a wrapper around `events()` — see that module's docs for the full
+//! technique and CLAUDE.md's "three independent implementations" rule).
+//! Each [`OwnedWmlEvent`] it resolves is forwarded to the caller's
+//! [`Handler`] as soon as it is provably complete, not collected into a
+//! `Vec` first.
 //!
-//! ## Memory model: O(main part size + nesting depth), not O(full archive)
+//! ## Memory model: O(nesting depth + largest token/props-element/lookahead-chain)
 //!
-//! This is a real, documented improvement over [`BatchParser`] (was
-//! O(full DOCX), now O(largest single part + nesting depth)), but **not**
-//! the tightest possible bound, and that gap is deliberate, not
-//! accidental — now confined to a different layer than before. As of
-//! 2026-08-08, `ooxml_opc::StreamingParser` itself delivers a generic
-//! part's content sub-entry (`PartData` chunks as they decompress, not one
-//! final `Vec<u8>` — see its own module docs), so the OPC container layer
-//! is no longer the bottleneck. What *is* still O(part size) is this
-//! crate's own XML layer: [`crate::events::events`] takes `bytes: &[u8]`
-//! — a `quick_xml::Reader<&[u8]>` over the complete input — because this
-//! crate has no chunk-fed XML tokenizer today. This module therefore still
-//! accumulates `word/document.xml`'s `PartData` chunks into one buffer
-//! before calling `events()` on the complete result. Reaching true
-//! O(largest XML token) for `word/document.xml` would require feeding XML
-//! bytes into a `quick_xml::Reader` (or an equivalent incremental
-//! tokenizer) as `PartData` chunks arrive, before the whole part has
-//! streamed past — a real architectural addition to this crate's XML
-//! layer (not `ooxml-opc`'s container layer, which now already supports
-//! sub-entry delivery), out of scope for this task and left as a follow-up
-//! rather than silently left undocumented. What *is* genuinely incremental
-//! on top of the one buffered part: `events()`'s `quick_xml::Reader` state
-//! machine never builds a DOM or a full `WmlEvent` list — it holds only
-//! the open-container stack (O(nesting depth)) and, transiently, one props
-//! element (`pPr`/`rPr`/…) being parsed for the container that owns it. So
-//! peak *additional* memory beyond the one buffered part is O(nesting
-//! depth + largest props element), matching `events()`'s own bound
-//! exactly.
+//! As of 2026-08-08, `ooxml_opc::StreamingParser` delivers a generic part's
+//! content sub-entry (`PartData` chunks as they decompress, not one final
+//! `Vec<u8>` — see its own module docs), so the OPC container layer was
+//! already not the bottleneck. This module's own XML layer was: it used to
+//! accumulate `word/document.xml`'s `PartData` chunks into one buffer
+//! before calling [`crate::events::events`] on the complete result, making
+//! peak memory O(main part size). That is now closed:
+//! [`crate::chunked_events::ChunkedWmlReader`] feeds `PartData` chunks
+//! directly into a chunk-resumable `quick_xml::Reader`-based tokenizer (the
+//! same technique `docbook_fmt::batch::StreamingParser` uses, extended to
+//! WML's props lookahead — see `chunked_events.rs`'s module docs for the
+//! full argument), so `word/document.xml` itself is never buffered as a
+//! whole. Peak memory is now O(nesting depth + largest still-in-progress
+//! XML token, props element, or props-lookahead-recursion chain) — matching
+//! [`crate::events::WmlEventIter`]'s own bound, just achieved
+//! chunk-resumably instead of over one fully-buffered part.
+//!
+//! **One documented exception, inherited from the same technique
+//! `docbook_fmt` uses:** a genuine XML syntax error (as opposed to a merely
+//! truncated buffer that will resolve once more input arrives) cannot be
+//! told apart from "needs more bytes" using quick-xml's return value alone.
+//! `ChunkedWmlReader` therefore treats every such error as "wait for more
+//! input" until `finish()`, which means a genuinely malformed (not just
+//! not-yet-fully-arrived) construct forces buffering of the rest of that
+//! malformed run until the part ends. This only affects malformed input;
+//! well-formed `word/document.xml` — the case this module exists to
+//! handle efficiently — never hits it.
 //!
 //! Every other part (media, styles, numbering, etc.) is never buffered at
 //! all by this module — its `PartData` chunks are dropped as they arrive,
@@ -115,7 +117,9 @@
 
 use crate::Result;
 use crate::document::Document;
+use std::cell::RefCell;
 use std::io::Cursor;
+use std::rc::Rc;
 
 /// Chunk-driven DOCX parser.
 ///
@@ -146,11 +150,13 @@ impl BatchParser {
 // StreamingParser<H>: genuinely incremental, Handler-driven WmlEvent stream.
 // ---------------------------------------------------------------------------
 
+use rescribe_format_api::Severity;
 /// Handler trait for streaming WML events — the shared
 /// [`rescribe_format_api::Handler`], not a locally declared trait.
 /// Implemented automatically for any `FnMut(OwnedWmlEvent)`.
 pub use rescribe_format_api::{Diagnostic, Handler};
 
+use crate::chunked_events::ChunkedWmlReader;
 use crate::generated_events::OwnedWmlEvent;
 
 /// The conventional OPC part path for a DOCX's main document body. See the
@@ -158,17 +164,28 @@ use crate::generated_events::OwnedWmlEvent;
 /// rather than resolving it via `_rels/.rels`.
 const MAIN_PART_PATH: &str = "word/document.xml";
 
-/// Adapts `ooxml_opc::batch::Event` to `OwnedWmlEvent`. Accumulates
-/// `word/document.xml`'s `PartData` chunks (see the module docs for why
-/// this crate's own XML layer still needs the complete part) and forwards
-/// the result to `events()` on that part's `PartEnd`; every other part's
-/// `PartData` chunks are dropped as they arrive, never accumulated.
-struct InnerHandler<H: Handler<OwnedWmlEvent>> {
+/// State shared between [`InnerHandler`] (owned by the inner
+/// `ooxml_opc::StreamingParser`, consumed by its `finish()`) and the outer
+/// [`StreamingParser`] (which needs to read the accumulated diagnostics
+/// back out after that consuming `finish()` call returns) — the same
+/// `Rc<RefCell<Shared<H>>>` shape `ooxml_opc::batch`'s own `StreamingParser`
+/// uses for the identical reason (see that module's `Shared`).
+struct Shared<H: Handler<OwnedWmlEvent>> {
     handler: H,
+    diagnostics: Vec<Diagnostic>,
+}
+
+/// Adapts `ooxml_opc::batch::Event` to `OwnedWmlEvent`. Feeds
+/// `word/document.xml`'s `PartData` chunks directly into a
+/// [`ChunkedWmlReader`] as they arrive (see the module docs for the memory
+/// model) instead of accumulating them; every other part's `PartData`
+/// chunks are dropped as they arrive, never accumulated.
+struct InnerHandler<H: Handler<OwnedWmlEvent>> {
+    shared: Rc<RefCell<Shared<H>>>,
     /// Whether the part currently open (since the last `PartStart`) is
     /// `word/document.xml`.
     in_target: bool,
-    buf: Vec<u8>,
+    reader: ChunkedWmlReader,
 }
 
 impl<H: Handler<OwnedWmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
@@ -176,16 +193,22 @@ impl<H: Handler<OwnedWmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHand
         match event {
             ooxml_opc::StreamingEvent::PartStart { path, .. } => {
                 self.in_target = path == MAIN_PART_PATH;
-                self.buf.clear();
+                if self.in_target {
+                    self.reader = ChunkedWmlReader::new();
+                }
             }
             ooxml_opc::StreamingEvent::PartData(chunk) if self.in_target => {
-                self.buf.extend_from_slice(&chunk);
+                let mut shared = self.shared.borrow_mut();
+                self.reader
+                    .feed(&chunk, &mut |ev| shared.handler.handle(ev));
             }
             ooxml_opc::StreamingEvent::PartEnd if self.in_target => {
-                for wml_event in crate::events::events(&self.buf) {
-                    self.handler.handle(wml_event.into_owned());
+                let mut shared = self.shared.borrow_mut();
+                if let Some(message) = self.reader.finish(&mut |ev| shared.handler.handle(ev)) {
+                    shared
+                        .diagnostics
+                        .push(Diagnostic::new(Severity::Warning, message));
                 }
-                self.buf.clear();
                 self.in_target = false;
             }
             // `ContentTypes`, `Relationships`, and every other part's
@@ -204,17 +227,24 @@ impl<H: Handler<OwnedWmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHand
 /// `Vec` first.
 pub struct StreamingParser<H: Handler<OwnedWmlEvent>> {
     inner: ooxml_opc::StreamingParser<InnerHandler<H>>,
+    shared: Rc<RefCell<Shared<H>>>,
 }
 
 impl<H: Handler<OwnedWmlEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
+        let shared = Rc::new(RefCell::new(Shared {
+            handler,
+            diagnostics: Vec::new(),
+        }));
+        let inner_handler = InnerHandler {
+            shared: shared.clone(),
+            in_target: false,
+            reader: ChunkedWmlReader::new(),
+        };
         StreamingParser {
-            inner: ooxml_opc::StreamingParser::new(InnerHandler {
-                handler,
-                in_target: false,
-                buf: Vec::new(),
-            }),
+            inner: ooxml_opc::StreamingParser::new(inner_handler),
+            shared,
         }
     }
 
@@ -226,8 +256,17 @@ impl<H: Handler<OwnedWmlEvent>> StreamingParser<H> {
 
     /// Signal end of input. Returns diagnostics accumulated by the
     /// underlying OPC/ZIP layers (malformed `[Content_Types].xml`,
-    /// unparseable `.rels` parts, truncated archive, etc.).
+    /// unparseable `.rels` parts, truncated archive, etc.) plus any
+    /// truncated/malformed trailing content in `word/document.xml` itself
+    /// (see [`ChunkedWmlReader::finish`]).
     pub fn finish(self) -> Vec<Diagnostic> {
-        self.inner.finish()
+        let opc_diagnostics = self.inner.finish();
+        let mut shared = Rc::try_unwrap(self.shared)
+            .unwrap_or_else(|_| {
+                panic!("ooxml-wml StreamingParser: internal state still referenced after finish")
+            })
+            .into_inner();
+        shared.diagnostics.extend(opc_diagnostics);
+        shared.diagnostics
     }
 }
