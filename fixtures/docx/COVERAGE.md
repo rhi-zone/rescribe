@@ -49,16 +49,16 @@ spec.
 - [x] endnote reference — `endnote`
 - [x] image (inline `<w:drawing>`) — `image`
 - [ ] inline code (monospace run style) — (missing)
-- [ ] line break (`<w:br w:type="textWrapping">`) — (missing)
-- [ ] page break (`<w:br w:type="page">`) — (missing)
-- [ ] column break (`<w:br w:type="column">`) — (missing)
-- [ ] tab stop (`<w:tab>`) — (missing)
+- [x] line break (`<w:br w:type="textWrapping">`) — `inline_line_break`
+- [x] page break (`<w:br w:type="page">`) — `inline_page_break`
+- [x] column break (`<w:br w:type="column">`) — `inline_column_break`
+- [x] tab stop (`<w:tab>`) — `inline_tab_stop`
 - [ ] field code (`<w:fldChar>`/`<w:instrText>`) — (missing)
 - [ ] bookmark (`<w:bookmarkStart>`/`<w:bookmarkEnd>`) — (missing)
 - [ ] comment reference (`<w:commentReference>`) — (missing)
 - [ ] revision marks (tracked changes: ins/del) — (missing)
-- [ ] font name (`<w:rFonts>`) — (missing)
-- [ ] language (`<w:lang>`) — (missing)
+- [x] font name (`<w:rFonts>`) — `inline_font_name`
+- [x] language (`<w:lang>`) — `inline_language`
 
 ## Paragraph properties
 - [x] paragraph alignment (left/center/right/justify) — `alignment`

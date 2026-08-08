@@ -1,0 +1,10 @@
+{
+  "description": "DOCX run with w:lang produces a span with the language property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "language": "fr-FR" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Bonjour" } }
+  ]
+}

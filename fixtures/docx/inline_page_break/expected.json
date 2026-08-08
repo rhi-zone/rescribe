@@ -1,0 +1,11 @@
+{
+  "description": "DOCX <w:br w:type=\"page\"> produces a line_break node flagged as a page break",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "before" } },
+    { "path": "/0/1",  "kind": "line_break", "props": { "layout:page_break": true } },
+    { "path": "/0/2",  "kind": "text", "props": { "content": "after" } }
+  ]
+}

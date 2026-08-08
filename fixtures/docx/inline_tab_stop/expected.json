@@ -1,0 +1,9 @@
+{
+  "description": "DOCX <w:tab/> run content is preserved as a literal tab character in text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "before\tafter" } }
+  ]
+}

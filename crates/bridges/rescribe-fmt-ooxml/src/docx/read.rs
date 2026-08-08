@@ -581,19 +581,52 @@ fn convert_run<R: Read + Seek>(
         converter.warn_lost("VML picture content not fully supported");
     }
 
-    let text = run.text();
-
-    // If we already pushed image nodes, skip empty text
-    if text.is_empty() {
-        return Ok(result);
+    // Walk run content directly (instead of the flattened `run.text()`) so that
+    // `<w:br>` elements can be modeled as distinct `line_break` nodes rather than
+    // collapsed into an opaque newline character. Tab (`<w:tab/>`) and carriage
+    // return (`<w:cr/>`) content is preserved as literal `\t`/`\n` characters in the
+    // surrounding text — lossless because the writer emits those characters back as
+    // literal run text, and rescribe's own reader/writer pair treats them identically
+    // on the next parse.
+    let mut buf = String::new();
+    for item in &run.run_content {
+        match item {
+            RunContent::T(t) => {
+                if let Some(text) = &t.text {
+                    buf.push_str(text);
+                }
+            }
+            RunContent::Tab(_) => buf.push('\t'),
+            RunContent::Cr(_) => buf.push('\n'),
+            RunContent::Br(br) => {
+                flush_run_text_buf(&mut buf, run, &mut result);
+                let mut node = Node::new(node::LINE_BREAK);
+                match br.r#type {
+                    Some(ooxml_wml::types::STBrType::Page) => {
+                        node = node.prop(prop::LAYOUT_PAGE_BREAK, true);
+                    }
+                    Some(ooxml_wml::types::STBrType::Column) => {
+                        node = node.prop(prop::LAYOUT_COLUMN, true);
+                    }
+                    _ => {}
+                }
+                result.push(apply_formatting(run, node));
+            }
+            _ => {}
+        }
     }
-
-    // Create text node with formatting
-    let text_node = create_text_node(&text);
-    let formatted = apply_formatting(run, text_node);
-    result.push(formatted);
+    flush_run_text_buf(&mut buf, run, &mut result);
 
     Ok(result)
+}
+
+/// Flush accumulated run text into a formatted text node, if non-empty.
+fn flush_run_text_buf(buf: &mut String, run: &Run, result: &mut Vec<Node>) {
+    if !buf.is_empty() {
+        let text_node = create_text_node(buf);
+        result.push(apply_formatting(run, text_node));
+        buf.clear();
+    }
 }
 
 fn convert_image<R: Read + Seek>(
@@ -717,6 +750,12 @@ fn apply_formatting(run: &Run, mut node: Node) -> Node {
             if color_str != "none" {
                 span_props.set(prop::STYLE_BG_COLOR, color_str);
             }
+        }
+        if let Some(lang) = props.language()
+            && let Some(v) = &lang.value
+            && !v.is_empty()
+        {
+            span_props.set(prop::LANGUAGE, v.clone());
         }
     }
 

@@ -6,6 +6,7 @@
 //! Writes files to `fixtures/docx/{feature}/input.docx` relative to the
 //! workspace root. Re-run whenever fixture input files need to be regenerated.
 
+use ooxml_wml::types;
 use ooxml_wml::types::STUnderline;
 use ooxml_wml::writer::{DocumentBuilder, ListType};
 use std::io::Cursor;
@@ -144,6 +145,95 @@ fn main() {
         let ref_run = para.add_run();
         ref_run.add_footnote_ref(fn_id);
         write_docx(&format!("{}/footnote/input.docx", base), b);
+    }
+
+    // --- inline_font_name ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let run = para.add_run();
+        run.set_text("Courier text");
+        run.set_fonts(types::Fonts {
+            ascii: Some("Courier New".to_string()),
+            h_ansi: Some("Courier New".to_string()),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/inline_font_name/input.docx", base), b);
+    }
+
+    // --- inline_language ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let run = para.add_run();
+        run.set_text("Bonjour");
+        run.set_properties(types::RunProperties {
+            lang: Some(Box::new(types::LanguageElement {
+                value: Some("fr-FR".to_string()),
+                east_asia: None,
+                bidi: None,
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/inline_language/input.docx", base), b);
+    }
+
+    // --- inline_line_break ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("before");
+        let br_run = para.add_run();
+        br_run
+            .run_content
+            .push(types::RunContent::Br(Box::new(types::CTBr {
+                r#type: None,
+                clear: None,
+                extra_attrs: Default::default(),
+            })));
+        para.add_run().set_text("after");
+        write_docx(&format!("{}/inline_line_break/input.docx", base), b);
+    }
+
+    // --- inline_page_break ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("before");
+        para.add_page_break();
+        para.add_run().set_text("after");
+        write_docx(&format!("{}/inline_page_break/input.docx", base), b);
+    }
+
+    // --- inline_column_break ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("before");
+        para.add_column_break();
+        para.add_run().set_text("after");
+        write_docx(&format!("{}/inline_column_break/input.docx", base), b);
+    }
+
+    // --- inline_tab_stop ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let run = para.add_run();
+        run.run_content
+            .push(types::RunContent::T(Box::new(types::Text {
+                text: Some("before".to_string()),
+                extra_children: Vec::new(),
+            })));
+        run.run_content
+            .push(types::RunContent::Tab(Box::new(types::CTEmpty)));
+        run.run_content
+            .push(types::RunContent::T(Box::new(types::Text {
+                text: Some("after".to_string()),
+                extra_children: Vec::new(),
+            })));
+        write_docx(&format!("{}/inline_tab_stop/input.docx", base), b);
     }
 
     println!("Done generating DOCX fixtures.");

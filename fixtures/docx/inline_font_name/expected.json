@@ -1,0 +1,10 @@
+{
+  "description": "DOCX run with rFonts ascii font name produces a span with style:font",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "style:font": "Courier New" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Courier text" } }
+  ]
+}

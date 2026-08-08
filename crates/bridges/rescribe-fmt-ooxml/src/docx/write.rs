@@ -534,6 +534,7 @@ struct FormattingState {
     color: Option<String>,
     font: Option<String>,
     font_size_half_pts: Option<i64>,
+    language: Option<String>,
 }
 
 /// Walk inline nodes and emit runs into `para`.
@@ -625,6 +626,9 @@ fn write_inline_to_para(
                         _ => None,
                     };
                     next.font_size_half_pts = half_pts;
+                }
+                if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
+                    next.language = Some(lang.to_string());
                 }
                 write_inline_to_para(
                     para,
@@ -734,9 +738,30 @@ fn write_inline_to_para(
                     image_map,
                 );
             }
-            node::LINE_BREAK | node::SOFT_BREAK => {
-                // Emit an empty run as a line break approximation
-                let _run = para.add_run();
+            node::LINE_BREAK => {
+                let run = para.add_run();
+                apply_run_formatting(run, fmt);
+                let br_type = if node
+                    .props
+                    .get_bool(prop::LAYOUT_PAGE_BREAK)
+                    .unwrap_or(false)
+                {
+                    Some(types::STBrType::Page)
+                } else if node.props.get_bool(prop::LAYOUT_COLUMN).unwrap_or(false) {
+                    Some(types::STBrType::Column)
+                } else {
+                    None
+                };
+                run.run_content
+                    .push(types::RunContent::Br(Box::new(types::CTBr {
+                        r#type: br_type,
+                        clear: None,
+                        extra_attrs: Default::default(),
+                    })));
+            }
+            node::SOFT_BREAK => {
+                // DOCX has no "soft wrap" markup; a soft break reflows as a space.
+                emit_run(para, " ", fmt);
             }
             _ => {
                 // Recurse into children
@@ -857,6 +882,11 @@ fn emit_run(para: &mut types::Paragraph, text: &str, fmt: &FormattingState) {
 /// Apply text and formatting to an existing run reference.
 fn emit_run_content(run: &mut types::Run, text: &str, fmt: &FormattingState) {
     run.set_text(text);
+    apply_run_formatting(run, fmt);
+}
+
+/// Apply formatting (but not text content) to a run.
+fn apply_run_formatting(run: &mut types::Run, fmt: &FormattingState) {
     if fmt.bold {
         run.set_bold(true);
     }
@@ -908,5 +938,16 @@ fn emit_run_content(run: &mut types::Run, text: &str, fmt: &FormattingState) {
             h_ansi: Some(font_name.clone()),
             ..Default::default()
         });
+    }
+    if let Some(ref lang) = fmt.language {
+        let rpr = run
+            .r_pr
+            .get_or_insert_with(|| Box::new(types::RunProperties::default()));
+        rpr.lang = Some(Box::new(types::LanguageElement {
+            value: Some(lang.clone()),
+            east_asia: None,
+            bidi: None,
+            extra_attrs: Default::default(),
+        }));
     }
 }
