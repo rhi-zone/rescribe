@@ -3,10 +3,13 @@
 //! Parses ODF/ODT documents into rescribe's document IR by delegating to
 //! the rest of this crate for all ZIP unpacking and XML parsing.
 
-use crate::ast::{Inline, ListItem, NoteClass, OdfBody, OdfDocument, StyleEntry, TextBlock};
+use crate::ast::{
+    DrawShape, DrawShapeContent, Inline, ListItem, NoteClass, OdfBody, OdfDocument,
+    PresentationBody, SheetCell, SpreadsheetBody, StyleEntry, TextBlock,
+};
 use rescribe_core::{
-    ConversionResult, Document, ParseError, ParseOptions, Properties, Resource, ResourceId,
-    ResourceMap,
+    ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Resource,
+    ResourceId, ResourceMap, Severity, WarningKind,
 };
 use rescribe_std::{Node, node, prop};
 
@@ -121,23 +124,59 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
     };
 
     // Convert body
-    let empty_blocks: Vec<crate::ast::TextBlock> = Vec::new();
-    let body_blocks = match &odf.body {
-        OdfBody::Text(blocks) => blocks,
-        OdfBody::Empty => &empty_blocks,
-        _ => {
-            return Err(ParseError::Invalid(
-                "Not an ODT text document (body is not office:text)".to_owned(),
-            ));
+    match &odf.body {
+        OdfBody::Text(blocks) => {
+            let doc = convert_text_body(blocks, &ctx);
+            Ok(ConversionResult::ok(Document {
+                content: doc,
+                resources,
+                metadata,
+                source: None,
+            }))
         }
-    };
+        OdfBody::Empty => {
+            let doc = convert_text_body(&[], &ctx);
+            Ok(ConversionResult::ok(Document {
+                content: doc,
+                resources,
+                metadata,
+                source: None,
+            }))
+        }
+        OdfBody::Spreadsheet(body) => {
+            let doc = convert_spreadsheet_body(body, &ctx);
+            Ok(ConversionResult::ok(Document {
+                content: doc,
+                resources,
+                metadata,
+                source: None,
+            }))
+        }
+        OdfBody::Presentation(body) => {
+            let (doc, warnings) = convert_presentation_body(body, &ctx);
+            Ok(ConversionResult::with_warnings(
+                Document {
+                    content: doc,
+                    resources,
+                    metadata,
+                    source: None,
+                },
+                warnings,
+            ))
+        }
+    }
+}
 
+/// Convert an `office:text` body's blocks into the `document` node,
+/// resolving blockquote runs and footnote defs (see `pending_blockquote`/
+/// `pending_footnotes` below).
+fn convert_text_body(body_blocks: &[TextBlock], ctx: &StyleCtx<'_>) -> Node {
     let mut doc = Node::new(node::DOCUMENT);
     let mut pending_footnotes: Vec<Node> = Vec::new();
     let mut pending_blockquote: Option<Vec<Node>> = None;
 
     for block in body_blocks {
-        let (nodes, footnotes) = convert_block(block, &ctx);
+        let (nodes, footnotes) = convert_block(block, ctx);
         pending_footnotes.extend(footnotes);
         for n in nodes {
             let is_bq = n.kind.as_str() == node::PARAGRAPH
@@ -158,13 +197,297 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
         }
     }
     flush_pending_blockquote(&mut pending_blockquote, &mut doc);
+    doc
+}
 
-    Ok(ConversionResult::ok(Document {
-        content: doc,
-        resources,
-        metadata,
-        source: None,
-    }))
+// ── Spreadsheet body conversion (ADR 0015) ─────────────────────────────────────
+
+fn convert_spreadsheet_body(body: &SpreadsheetBody, ctx: &StyleCtx<'_>) -> Node {
+    let mut doc = Node::new(node::DOCUMENT);
+    for sheet in &body.sheets {
+        let mut sheet_node = Node::new(node::SHEET);
+        if let Some(name) = &sheet.name {
+            sheet_node = sheet_node.prop("odf:name", name.as_str());
+        }
+        if let Some(sn) = &sheet.style_name {
+            sheet_node = sheet_node.prop("odf:style-name", sn.as_str());
+        }
+        if sheet.print {
+            sheet_node = sheet_node.prop("odf:print", true);
+        }
+        for row in &sheet.rows {
+            let mut row_node = Node::new(node::SHEET_ROW);
+            if let Some(sn) = &row.style_name {
+                row_node = row_node.prop("odf:style-name", sn.as_str());
+            }
+            if let Some(r) = row.repeated.filter(|&v| v > 1) {
+                row_node = row_node.prop("odf:repeated", r as i64);
+            }
+            for cell in &row.cells {
+                row_node = row_node.child(convert_sheet_cell(cell, ctx));
+            }
+            sheet_node = sheet_node.child(row_node);
+        }
+        doc = doc.child(sheet_node);
+    }
+    doc
+}
+
+fn convert_sheet_cell(cell: &SheetCell, ctx: &StyleCtx<'_>) -> Node {
+    let mut n = Node::new(node::SHEET_CELL);
+    if let Some(vt) = &cell.value_type {
+        n = n.prop(prop::VALUE_TYPE, map_odf_value_type(vt));
+    }
+    if let Some(v) = &cell.value {
+        n = n.prop(prop::VALUE, v.as_str());
+    }
+    if let Some(f) = &cell.formula {
+        n = n.prop(prop::VALUE_FORMULA, f.as_str());
+    }
+    if let Some(sn) = &cell.style_name {
+        n = n.prop("odf:style-name", sn.as_str());
+    }
+    if let Some(cs) = cell.col_span.filter(|&v| v > 1) {
+        n = n.prop(prop::COLSPAN, cs as i64);
+    }
+    if let Some(rs) = cell.row_span.filter(|&v| v > 1) {
+        n = n.prop(prop::ROWSPAN, rs as i64);
+    }
+    if let Some(r) = cell.repeated.filter(|&v| v > 1) {
+        n = n.prop("odf:repeated", r as i64);
+    }
+    if cell.covered {
+        n = n.prop("odf:covered", true);
+    }
+    for block in &cell.content {
+        let (nodes, _footnotes) = convert_block(block, ctx);
+        for cn in nodes {
+            n = n.child(cn);
+        }
+    }
+    n
+}
+
+/// Map ODF's `office:value-type` string to `prop::VALUE_TYPE`'s vocabulary
+/// (ADR 0015). Only `"float"` differs in spelling (`"number"` in the IR,
+/// matching OOXML SpreadsheetML's `Number` case — see ADR 0015 Decision 2);
+/// every other ODF value-type name is passed through unchanged since it
+/// already matches the IR's union vocabulary.
+fn map_odf_value_type(odf_type: &str) -> &'static str {
+    match odf_type {
+        "float" => "number",
+        "percentage" => "percentage",
+        "currency" => "currency",
+        "date" => "date",
+        "time" => "time",
+        "boolean" => "boolean",
+        "string" => "string",
+        _ => "string",
+    }
+}
+
+// ── Presentation body conversion (ADR 0015) ────────────────────────────────────
+
+fn convert_presentation_body(
+    body: &PresentationBody,
+    ctx: &StyleCtx<'_>,
+) -> (Node, Vec<FidelityWarning>) {
+    let mut doc = Node::new(node::DOCUMENT);
+    let mut warnings = Vec::new();
+    for page in &body.pages {
+        let mut page_node = Node::new(node::DIV).prop("odf:type", "slide");
+        if let Some(name) = &page.name {
+            page_node = page_node.prop("odf:name", name.as_str());
+        }
+        if let Some(sn) = &page.style_name {
+            page_node = page_node.prop("odf:style-name", sn.as_str());
+        }
+        if let Some(mp) = &page.master_page_name {
+            page_node = page_node.prop("odf:master-page-name", mp.as_str());
+        }
+        if let Some(ln) = &page.layout_name {
+            page_node = page_node.prop("odf:layout-name", ln.as_str());
+        }
+        for (i, shape) in page.shapes.iter().enumerate() {
+            let (shape_node, mut w) = convert_draw_shape(shape, i as i64, ctx);
+            warnings.append(&mut w);
+            page_node = page_node.child(shape_node);
+        }
+        if let Some(notes) = &page.notes {
+            let mut notes_node = Node::new(node::DIV).prop("odf:type", "notes");
+            if let Some(sn) = &notes.style_name {
+                notes_node = notes_node.prop("odf:style-name", sn.as_str());
+            }
+            for (i, shape) in notes.shapes.iter().enumerate() {
+                let (shape_node, mut w) = convert_draw_shape(shape, i as i64, ctx);
+                warnings.append(&mut w);
+                notes_node = notes_node.child(shape_node);
+            }
+            page_node = page_node.child(notes_node);
+        }
+        doc = doc.child(page_node);
+    }
+    (doc, warnings)
+}
+
+fn convert_draw_shape(
+    shape: &DrawShape,
+    doc_order_index: i64,
+    ctx: &StyleCtx<'_>,
+) -> (Node, Vec<FidelityWarning>) {
+    let mut n = Node::new(node::POSITIONED_CONTAINER);
+    let mut warnings = Vec::new();
+
+    if let Some(x) = &shape.x {
+        n = n.prop("odf:x", x.as_str());
+        if let Some(emu) = parse_odf_length(x) {
+            n = n.prop(prop::POSITION_X, emu);
+        }
+    }
+    if let Some(y) = &shape.y {
+        n = n.prop("odf:y", y.as_str());
+        if let Some(emu) = parse_odf_length(y) {
+            n = n.prop(prop::POSITION_Y, emu);
+        }
+    }
+    if let Some(w) = &shape.width {
+        n = n.prop("odf:width", w.as_str());
+        if let Some(emu) = parse_odf_length(w) {
+            n = n.prop(prop::POSITION_WIDTH, emu);
+        }
+    }
+    if let Some(h) = &shape.height {
+        n = n.prop("odf:height", h.as_str());
+        if let Some(emu) = parse_odf_length(h) {
+            n = n.prop(prop::POSITION_HEIGHT, emu);
+        }
+    }
+
+    if let Some(t) = &shape.transform {
+        n = n.prop("odf:transform", t.as_str());
+        match parse_pure_rotate_degrees(t) {
+            Some(degrees) => {
+                n = n.prop(prop::POSITION_ROTATION, degrees_to_ooxml_units(degrees));
+            }
+            None => {
+                warnings.push(FidelityWarning::new(
+                    Severity::Minor,
+                    WarningKind::Simplified("draw:transform".to_owned()),
+                    "shape draw:transform is not a pure rotate(); preserved verbatim as \
+                     odf:transform but not projected to position:rotation (ADR 0015: only a \
+                     pure rotate() around a center-equivalent pivot converts losslessly)",
+                ));
+            }
+        }
+    }
+
+    // ADR 0015: z-order round-trips losslessly everywhere, so it's always
+    // set — from ODF's explicit draw:z-index when present, or derived from
+    // document order (ODF's own default stacking rule) otherwise.
+    n = n.prop(
+        prop::POSITION_Z_ORDER,
+        shape.z_index.unwrap_or(doc_order_index),
+    );
+
+    if let Some(name) = &shape.name {
+        n = n.prop("odf:name", name.as_str());
+    }
+    if let Some(sn) = &shape.style_name {
+        n = n.prop("odf:style-name", sn.as_str());
+    }
+    if let Some(ts) = &shape.text_style_name {
+        n = n.prop("odf:text-style-name", ts.as_str());
+    }
+    if let Some(pc) = &shape.presentation_class {
+        n = n.prop("odf:presentation-class", pc.as_str());
+    }
+
+    match &shape.content {
+        DrawShapeContent::TextBox(blocks) => {
+            for block in blocks {
+                let (nodes, _footnotes) = convert_block(block, ctx);
+                for cn in nodes {
+                    n = n.child(cn);
+                }
+            }
+        }
+        DrawShapeContent::Image { href, mime_type } => {
+            let src = ctx
+                .image_map
+                .get(href)
+                .map(String::as_str)
+                .unwrap_or(href.as_str());
+            let mut img = Node::new(node::IMAGE).prop("src", src);
+            if let Some(mt) = mime_type {
+                img = img.prop("odf:mime-type", mt.as_str());
+            }
+            n = n.child(img);
+        }
+        DrawShapeContent::Other(raw) => {
+            n = n.child(
+                Node::new(node::RAW_BLOCK)
+                    .prop(prop::FORMAT, "odf")
+                    .prop(prop::CONTENT, raw.as_str()),
+            );
+        }
+        DrawShapeContent::Empty => {}
+    }
+
+    (n, warnings)
+}
+
+/// Parse an ODF `svg:length`/`text:coordinate` attribute (a decimal number
+/// with a mandatory unit suffix) into EMU (ADR 0015 Decision 4). Returns
+/// `None` for unrecognized or missing units rather than guessing.
+fn parse_odf_length(s: &str) -> Option<i64> {
+    let s = s.trim();
+    let split_at = s.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))?;
+    let (num_part, unit) = s.split_at(split_at);
+    let value: f64 = num_part.parse().ok()?;
+    let emu_per_unit = match unit {
+        "in" => 914_400.0,
+        "cm" => 360_000.0,
+        "mm" => 36_000.0,
+        "pt" => 12_700.0,
+        "pc" => 152_400.0,
+        "px" => 9_525.0,
+        _ => return None,
+    };
+    Some((value * emu_per_unit).round() as i64)
+}
+
+/// Parse a `draw:transform` string as a *pure* `rotate(<angle>)` — the only
+/// case ADR 0015 Decision 5 accepts as losslessly convertible to a single
+/// OOXML-style rotation angle, since ODF's rotation pivot is a documented
+/// interop ambiguity for any more complex transform. Returns `None` for
+/// anything else (combined transforms, non-numeric arguments, absence).
+///
+/// ODF's `angle` datatype (used by `rotate()`'s argument) is decimal
+/// **degrees by default**, with an optional `deg`/`grad`/`rad` unit suffix
+/// (ADR 0015 Decision 5) — unlike SVG's `transform` attribute, which this
+/// otherwise resembles syntactically but which defaults to degrees too, so
+/// there is no cross-format radians default to assume here.
+fn parse_pure_rotate_degrees(t: &str) -> Option<f64> {
+    let t = t.trim();
+    let inner = t.strip_prefix("rotate(")?.strip_suffix(')')?.trim();
+    let (num_part, unit) = match inner.find(|c: char| {
+        !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E')
+    }) {
+        Some(idx) => inner.split_at(idx),
+        None => (inner, ""),
+    };
+    let value: f64 = num_part.parse().ok()?;
+    match unit.trim() {
+        "" | "deg" => Some(value),
+        "grad" => Some(value * 0.9),
+        "rad" => Some(value.to_degrees()),
+        _ => None,
+    }
+}
+
+/// Convert degrees to OOXML `ST_Angle`-style 60,000ths-of-a-degree (ADR 0015).
+fn degrees_to_ooxml_units(degrees: f64) -> i64 {
+    (degrees * 60_000.0).round() as i64
 }
 
 // ── Style context ─────────────────────────────────────────────────────────────
@@ -1177,5 +1500,172 @@ mod tests {
         let reparsed = crate::parser::parse(&bytes).unwrap().value;
         assert!(reparsed.extra_parts.contains_key("settings.xml"));
         assert!(reparsed.extra_parts.contains_key("META-INF/manifest.rdf"));
+    }
+
+    // ── Spreadsheet / presentation translation (ADR 0015) ───────────────────
+
+    #[test]
+    fn parse_spreadsheet_sheet_row_cell() {
+        let ods = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/odf/ods-body/input.ods"
+        ))
+        .unwrap();
+        let r = parse(&ods).unwrap();
+        assert!(r.warnings.is_empty());
+
+        let sheet = &r.value.content.children[0];
+        assert_eq!(sheet.kind.as_str(), node::SHEET);
+        assert_eq!(sheet.props.get_str("odf:name"), Some("Sales"));
+
+        let header_row = &sheet.children[0];
+        assert_eq!(header_row.kind.as_str(), node::SHEET_ROW);
+        let product_cell = &header_row.children[0];
+        assert_eq!(product_cell.kind.as_str(), node::SHEET_CELL);
+        assert_eq!(product_cell.props.get_str(prop::VALUE_TYPE), Some("string"));
+        assert_eq!(product_cell.props.get_str(prop::VALUE), Some("Product"));
+
+        let data_row = &sheet.children[1];
+        let revenue_cell = &data_row.children[1];
+        assert_eq!(revenue_cell.props.get_str(prop::VALUE_TYPE), Some("number"));
+        assert_eq!(revenue_cell.props.get_str(prop::VALUE), Some("1500"));
+    }
+
+    #[test]
+    fn parse_presentation_slide_positioned_shapes() {
+        let odp = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../fixtures/odf/odp-body/input.odp"
+        ))
+        .unwrap();
+        let r = parse(&odp).unwrap();
+        assert!(r.warnings.is_empty());
+
+        let page = &r.value.content.children[0];
+        assert_eq!(page.kind.as_str(), node::DIV);
+        assert_eq!(page.props.get_str("odf:type"), Some("slide"));
+        assert_eq!(page.props.get_str("odf:name"), Some("slide1"));
+        assert_eq!(page.props.get_str("odf:master-page-name"), Some("Default"));
+
+        let title = &page.children[0];
+        assert_eq!(title.kind.as_str(), node::POSITIONED_CONTAINER);
+        assert_eq!(title.props.get_str("odf:presentation-class"), Some("title"));
+        // svg:x="5.01cm" -> EMU, via ADR 0015's exact cm ratio (360,000 EMU/cm).
+        assert_eq!(title.props.get_int(prop::POSITION_X), Some(1_803_600));
+        assert_eq!(title.props.get_str("odf:x"), Some("5.01cm"));
+        assert_eq!(title.props.get_int(prop::POSITION_Z_ORDER), Some(0));
+
+        let subtitle = &page.children[1];
+        assert_eq!(
+            subtitle.props.get_str("odf:presentation-class"),
+            Some("subtitle")
+        );
+        assert_eq!(subtitle.props.get_int(prop::POSITION_Z_ORDER), Some(1));
+    }
+
+    #[test]
+    fn pure_rotate_transform_projects_to_position_rotation() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:presentation>
+      <draw:page draw:name="slide1">
+        <draw:frame svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"
+          draw:transform="rotate(90)">
+        </draw:frame>
+      </draw:page>
+    </office:presentation>
+  </office:body>
+</office:document-content>"#;
+        let odp = make_odp_bytes(xml);
+        let r = parse(&odp).unwrap();
+        assert!(r.warnings.is_empty());
+        let page = &r.value.content.children[0];
+        let shape = &page.children[0];
+        assert_eq!(shape.props.get_str("odf:transform"), Some("rotate(90)"));
+        // ODF's angle datatype is degrees by default (ADR 0015 Decision 5):
+        // 90 degrees == 90 * 60_000 = 5_400_000 OOXML units.
+        assert_eq!(
+            shape.props.get_int(prop::POSITION_ROTATION),
+            Some(5_400_000)
+        );
+    }
+
+    #[test]
+    fn rotate_rad_suffix_converts_to_degrees_first() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:presentation>
+      <draw:page draw:name="slide1">
+        <draw:frame svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"
+          draw:transform="rotate(1.5707963267948966rad)">
+        </draw:frame>
+      </draw:page>
+    </office:presentation>
+  </office:body>
+</office:document-content>"#;
+        let odp = make_odp_bytes(xml);
+        let r = parse(&odp).unwrap();
+        assert!(r.warnings.is_empty());
+        let page = &r.value.content.children[0];
+        let shape = &page.children[0];
+        // pi/2 rad == 90 deg == 5_400_000 OOXML units.
+        assert_eq!(
+            shape.props.get_int(prop::POSITION_ROTATION),
+            Some(5_400_000)
+        );
+    }
+
+    #[test]
+    fn combined_transform_is_preserved_raw_without_rotation_projection() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:presentation>
+      <draw:page draw:name="slide1">
+        <draw:frame svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"
+          draw:transform="translate(1cm 2cm) rotate(0.5)">
+        </draw:frame>
+      </draw:page>
+    </office:presentation>
+  </office:body>
+</office:document-content>"#;
+        let odp = make_odp_bytes(xml);
+        let r = parse(&odp).unwrap();
+        assert_eq!(r.warnings.len(), 1);
+        let page = &r.value.content.children[0];
+        let shape = &page.children[0];
+        assert_eq!(
+            shape.props.get_str("odf:transform"),
+            Some("translate(1cm 2cm) rotate(0.5)")
+        );
+        assert_eq!(shape.props.get_int(prop::POSITION_ROTATION), None);
+    }
+
+    fn make_odp_bytes(content_xml: &str) -> Vec<u8> {
+        use std::io::{Cursor, Write};
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
+
+        let mut buf = Cursor::new(Vec::new());
+        {
+            let mut zip = ZipWriter::new(&mut buf);
+            let options = SimpleFileOptions::default();
+            zip.start_file("mimetype", options).unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.presentation")
+                .unwrap();
+            zip.start_file("content.xml", options).unwrap();
+            zip.write_all(content_xml.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+        buf.into_inner()
     }
 }

@@ -1,12 +1,10 @@
 {
-  "description": "ODP presentation body with one slide containing a title and subtitle shape",
+  "description": "ODP presentation body with one slide containing a title and subtitle positioned shape (ADR 0015: positioned_container)",
   "category": "happy",
-  "metadata": {
-    "title": "Test Presentation"
-  },
+  "metadata": { "title": "Test Presentation" },
   "assertions": [
-    { "path": "/body/pages/0", "kind": "draw_page", "props": { "name": "slide1", "master_page_name": "Default" } },
-    { "path": "/body/pages/0/shapes/0", "kind": "draw_shape", "props": { "presentation_class": "title" } },
-    { "path": "/body/pages/0/shapes/1", "kind": "draw_shape", "props": { "presentation_class": "subtitle" } }
+    { "path": "/0", "kind": "div", "props": { "odf:type": "slide", "odf:name": "slide1", "odf:master-page-name": "Default" } },
+    { "path": "/0/0", "kind": "positioned_container", "props": { "odf:presentation-class": "title", "position:x": 1803600, "position:z_order": 0 } },
+    { "path": "/0/1", "kind": "positioned_container", "props": { "odf:presentation-class": "subtitle", "position:z_order": 1 } }
   ]
 }

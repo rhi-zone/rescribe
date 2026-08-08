@@ -4,11 +4,15 @@
 //! the rest of this crate for all ZIP building and XML serialisation.
 
 use crate::ast::{
-    Frame, FrameChild, Heading, Hyperlink, Inline, List, ListItem, OdfBody, OdfDocument, OdfMeta,
-    Paragraph, ParagraphProperties, Span, StyleEntry, Table, TableCell, TableRow, TextBlock,
-    TextProperties,
+    DrawPage, DrawShape, DrawShapeContent, Frame, FrameChild, Heading, Hyperlink, Inline, List,
+    ListItem, NotesPage, OdfBody, OdfDocument, OdfMeta, Paragraph, ParagraphProperties,
+    PresentationBody, Sheet, SheetCell, SheetRow, Span, SpreadsheetBody, StyleEntry, Table,
+    TableCell, TableRow, TextBlock, TextProperties,
 };
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node, ResourceMap};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, ResourceMap,
+    Severity, WarningKind,
+};
 use rescribe_std::{node, prop};
 use std::collections::HashMap;
 
@@ -22,10 +26,10 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let odf = convert_document(doc);
+    let (odf, warnings) = convert_document(doc);
     let bytes =
         crate::emit(&odf).map_err(|e| EmitError::Io(std::io::Error::other(e.to_string())))?;
-    Ok(ConversionResult::ok(bytes))
+    Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
 // ── Document conversion ───────────────────────────────────────────────────────
@@ -73,13 +77,39 @@ fn extension_for_mime(mime: &str) -> &'static str {
     }
 }
 
-fn convert_document(doc: &Document) -> OdfDocument {
-    let mut ctx = WriteCtx::new(&doc.resources);
-    let blocks = convert_nodes(&doc.content.children, &mut ctx);
+/// Which of ODF's three body shapes a `Document` maps to. Detected from the
+/// top-level content nodes rather than carried as an explicit field, since
+/// the IR has no document-type marker — mirrors how the reader recognizes
+/// `office:text`/`office:spreadsheet`/`office:presentation` from the body's
+/// own element name.
+enum BodyKind {
+    Text,
+    Spreadsheet,
+    Presentation,
+}
 
-    // Round-trip any raw-preserved package parts (settings.xml, RDF metadata)
-    // that `rescribe::read` exposed as resources — see its comment for why
-    // these have no IR node representation.
+fn detect_body_kind(content: &Node) -> BodyKind {
+    match content.children.first() {
+        Some(n) if n.kind.as_str() == node::SHEET => BodyKind::Spreadsheet,
+        Some(n) if n.kind.as_str() == node::DIV && n.props.get_str("odf:type") == Some("slide") => {
+            BodyKind::Presentation
+        }
+        _ => BodyKind::Text,
+    }
+}
+
+fn build_meta(doc: &Document) -> OdfMeta {
+    OdfMeta {
+        title: doc.metadata.get_str("title").map(str::to_owned),
+        creator: doc.metadata.get_str("author").map(str::to_owned),
+        ..OdfMeta::default()
+    }
+}
+
+/// Round-trip any raw-preserved package parts (settings.xml, RDF metadata)
+/// that `rescribe::read` exposed as resources — see its comment for why
+/// these have no IR node representation.
+fn build_extra_parts(doc: &Document) -> HashMap<String, Vec<u8>> {
     let mut extra_parts = HashMap::new();
     for resource in doc.resources.values() {
         let Some(name) = &resource.name else { continue };
@@ -87,20 +117,260 @@ fn convert_document(doc: &Document) -> OdfDocument {
             extra_parts.insert(name.clone(), resource.data.clone());
         }
     }
+    extra_parts
+}
 
-    OdfDocument {
-        mimetype: "application/vnd.oasis.opendocument.text".to_owned(),
-        meta: OdfMeta {
-            title: doc.metadata.get_str("title").map(str::to_owned),
-            creator: doc.metadata.get_str("author").map(str::to_owned),
-            ..OdfMeta::default()
-        },
+fn convert_document(doc: &Document) -> (OdfDocument, Vec<FidelityWarning>) {
+    let mut ctx = WriteCtx::new(&doc.resources);
+    let mut warnings = Vec::new();
+
+    let (mimetype, body) = match detect_body_kind(&doc.content) {
+        BodyKind::Spreadsheet => (
+            "application/vnd.oasis.opendocument.spreadsheet",
+            OdfBody::Spreadsheet(convert_spreadsheet_document(&doc.content, &mut ctx)),
+        ),
+        BodyKind::Presentation => (
+            "application/vnd.oasis.opendocument.presentation",
+            OdfBody::Presentation(convert_presentation_document(
+                &doc.content,
+                &mut ctx,
+                &mut warnings,
+            )),
+        ),
+        BodyKind::Text => (
+            "application/vnd.oasis.opendocument.text",
+            OdfBody::Text(convert_nodes(&doc.content.children, &mut ctx)),
+        ),
+    };
+
+    let odf = OdfDocument {
+        mimetype: mimetype.to_owned(),
+        meta: build_meta(doc),
         named_styles: build_named_styles(),
-        body: OdfBody::Text(blocks),
+        body,
         images: ctx.images,
-        extra_parts,
+        extra_parts: build_extra_parts(doc),
         ..OdfDocument::default()
+    };
+    (odf, warnings)
+}
+
+// ── Spreadsheet document conversion (ADR 0015) ─────────────────────────────────
+
+fn convert_spreadsheet_document(content: &Node, ctx: &mut WriteCtx<'_>) -> SpreadsheetBody {
+    let mut sheets = Vec::new();
+    for sheet_node in &content.children {
+        if sheet_node.kind.as_str() != node::SHEET {
+            continue;
+        }
+        let mut rows = Vec::new();
+        for row_node in &sheet_node.children {
+            if row_node.kind.as_str() != node::SHEET_ROW {
+                continue;
+            }
+            let cells = row_node
+                .children
+                .iter()
+                .filter(|c| c.kind.as_str() == node::SHEET_CELL)
+                .map(|c| convert_sheet_cell_node(c, ctx))
+                .collect();
+            rows.push(SheetRow {
+                style_name: row_node.props.get_str("odf:style-name").map(str::to_owned),
+                default_cell_style_name: None,
+                repeated: row_node.props.get_int("odf:repeated").map(|v| v as u32),
+                cells,
+            });
+        }
+        sheets.push(Sheet {
+            name: sheet_node.props.get_str("odf:name").map(str::to_owned),
+            style_name: sheet_node
+                .props
+                .get_str("odf:style-name")
+                .map(str::to_owned),
+            print: sheet_node.props.get_bool("odf:print").unwrap_or(false),
+            columns: Vec::new(),
+            rows,
+        });
     }
+    SpreadsheetBody {
+        sheets,
+        named_ranges: Vec::new(),
+    }
+}
+
+fn convert_sheet_cell_node(n: &Node, ctx: &mut WriteCtx<'_>) -> SheetCell {
+    SheetCell {
+        style_name: n.props.get_str("odf:style-name").map(str::to_owned),
+        value_type: n
+            .props
+            .get_str(prop::VALUE_TYPE)
+            .map(map_ir_value_type_to_odf)
+            .map(str::to_owned),
+        value: n.props.get_str(prop::VALUE).map(str::to_owned),
+        formula: n.props.get_str(prop::VALUE_FORMULA).map(str::to_owned),
+        col_span: n.props.get_int(prop::COLSPAN).map(|v| v as u32),
+        row_span: n.props.get_int(prop::ROWSPAN).map(|v| v as u32),
+        repeated: n.props.get_int("odf:repeated").map(|v| v as u32),
+        covered: n.props.get_bool("odf:covered").unwrap_or(false),
+        content: convert_nodes(&n.children, ctx),
+    }
+}
+
+/// Inverse of `rescribe::read::map_odf_value_type` (ADR 0015 Decision 2).
+fn map_ir_value_type_to_odf(ir_type: &str) -> &'static str {
+    match ir_type {
+        "number" => "float",
+        "percentage" => "percentage",
+        "currency" => "currency",
+        "date" => "date",
+        "time" => "time",
+        "boolean" => "boolean",
+        // A formula's computed-result type with no more specific IR type
+        // recorded: "float" is ODF's default value-type for formula cells.
+        "formula-result" => "float",
+        _ => "string",
+    }
+}
+
+// ── Presentation document conversion (ADR 0015) ────────────────────────────────
+
+fn convert_presentation_document(
+    content: &Node,
+    ctx: &mut WriteCtx<'_>,
+    warnings: &mut Vec<FidelityWarning>,
+) -> PresentationBody {
+    let mut pages = Vec::new();
+    for page_node in &content.children {
+        if page_node.kind.as_str() != node::DIV
+            || page_node.props.get_str("odf:type") != Some("slide")
+        {
+            continue;
+        }
+        let mut shapes = Vec::new();
+        let mut notes = None;
+        for (i, child) in page_node.children.iter().enumerate() {
+            if child.kind.as_str() == node::DIV && child.props.get_str("odf:type") == Some("notes")
+            {
+                let notes_shapes = child
+                    .children
+                    .iter()
+                    .enumerate()
+                    .map(|(j, nchild)| {
+                        convert_positioned_container(nchild, ctx, j as i64, warnings)
+                    })
+                    .collect();
+                notes = Some(Box::new(NotesPage {
+                    style_name: child.props.get_str("odf:style-name").map(str::to_owned),
+                    shapes: notes_shapes,
+                }));
+            } else if child.kind.as_str() == node::POSITIONED_CONTAINER {
+                shapes.push(convert_positioned_container(child, ctx, i as i64, warnings));
+            }
+        }
+        pages.push(DrawPage {
+            name: page_node.props.get_str("odf:name").map(str::to_owned),
+            style_name: page_node.props.get_str("odf:style-name").map(str::to_owned),
+            master_page_name: page_node
+                .props
+                .get_str("odf:master-page-name")
+                .map(str::to_owned),
+            layout_name: page_node
+                .props
+                .get_str("odf:layout-name")
+                .map(str::to_owned),
+            shapes,
+            notes,
+        });
+    }
+    PresentationBody { pages }
+}
+
+fn convert_positioned_container(
+    n: &Node,
+    ctx: &mut WriteCtx<'_>,
+    doc_order_index: i64,
+    warnings: &mut Vec<FidelityWarning>,
+) -> DrawShape {
+    let x = resolve_length(n, "odf:x", prop::POSITION_X);
+    let y = resolve_length(n, "odf:y", prop::POSITION_Y);
+    let width = resolve_length(n, "odf:width", prop::POSITION_WIDTH);
+    let height = resolve_length(n, "odf:height", prop::POSITION_HEIGHT);
+
+    let transform = if let Some(raw) = n.props.get_str("odf:transform") {
+        Some(raw.to_owned())
+    } else if let Some(units) = n.props.get_int(prop::POSITION_ROTATION) {
+        warnings.push(FidelityWarning::new(
+            Severity::Minor,
+            WarningKind::Simplified("position:rotation".to_owned()),
+            "position:rotation synthesized as an ODF draw:transform rotate(); ODF's rotation \
+             pivot may not match the pivot implied by the value's originating format, since \
+             this Document carried no raw odf:transform to preserve verbatim (ADR 0015)",
+        ));
+        // ODF's angle datatype is degrees by default (ADR 0015 Decision 5),
+        // so no unit suffix is needed here — unlike a radians-first grammar.
+        let degrees = units as f64 / 60_000.0;
+        Some(format!("rotate({degrees})"))
+    } else {
+        None
+    };
+
+    let z_index = n.props.get_int(prop::POSITION_Z_ORDER);
+
+    let content = if n.children.len() == 1 && n.children[0].kind.as_str() == node::IMAGE {
+        let img = &n.children[0];
+        let (href, mime_type) = img
+            .props
+            .get_str("src")
+            .and_then(|src| ctx.resolve_image(src))
+            .unwrap_or_else(|| {
+                (
+                    img.props.get_str("src").unwrap_or_default().to_owned(),
+                    img.props.get_str("odf:mime-type").map(str::to_owned),
+                )
+            });
+        DrawShapeContent::Image { href, mime_type }
+    } else if n.children.len() == 1
+        && n.children[0].kind.as_str() == node::RAW_BLOCK
+        && n.children[0].props.get_str(prop::FORMAT) == Some("odf")
+    {
+        DrawShapeContent::Other(
+            n.children[0]
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap_or_default()
+                .to_owned(),
+        )
+    } else if n.children.is_empty() {
+        DrawShapeContent::Empty
+    } else {
+        DrawShapeContent::TextBox(convert_nodes(&n.children, ctx))
+    };
+
+    DrawShape {
+        style_name: n.props.get_str("odf:style-name").map(str::to_owned),
+        text_style_name: n.props.get_str("odf:text-style-name").map(str::to_owned),
+        name: n.props.get_str("odf:name").map(str::to_owned),
+        presentation_class: n.props.get_str("odf:presentation-class").map(str::to_owned),
+        x,
+        y,
+        width,
+        height,
+        transform,
+        z_index: z_index.or(Some(doc_order_index)),
+        content,
+    }
+}
+
+/// Prefer the raw ODF coordinate string (byte-exact preservation) over
+/// synthesizing one from the EMU projection (ADR 0015 Decision 4).
+/// Synthesized lengths use `cm` as an arbitrary-but-fixed unit.
+fn resolve_length(n: &Node, raw_key: &str, emu_key: &str) -> Option<String> {
+    if let Some(raw) = n.props.get_str(raw_key) {
+        return Some(raw.to_owned());
+    }
+    n.props
+        .get_int(emu_key)
+        .map(|emu| format!("{}cm", emu as f64 / 360_000.0))
 }
 
 /// Build a minimal set of named styles for the IR constructs the writer emits.
@@ -651,5 +921,117 @@ mod tests {
             "expected image + caption text-box, got {:?}",
             frame.content
         );
+    }
+
+    // ── Spreadsheet / presentation translation (ADR 0015) ───────────────────
+
+    #[test]
+    fn spreadsheet_document_round_trips_through_ast() {
+        let sheet = Node::new(rescribe_std::node::SHEET)
+            .prop("odf:name", "Sales")
+            .child(
+                Node::new(rescribe_std::node::SHEET_ROW).child(
+                    Node::new(rescribe_std::node::SHEET_CELL)
+                        .prop(prop::VALUE_TYPE, "number")
+                        .prop(prop::VALUE, "42")
+                        .prop(prop::VALUE_FORMULA, "of:=1+41"),
+                ),
+            );
+        let document = Document {
+            content: Node::new(rescribe_std::node::DOCUMENT).child(sheet),
+            resources: Default::default(),
+            metadata: Default::default(),
+            source: None,
+        };
+
+        let bytes = emit(&document).unwrap().value;
+        let parsed = crate::parser::parse(&bytes).expect("parse failed");
+        assert_eq!(
+            parsed.value.mimetype,
+            "application/vnd.oasis.opendocument.spreadsheet"
+        );
+        let crate::ast::OdfBody::Spreadsheet(body) = &parsed.value.body else {
+            panic!("expected Spreadsheet body, got {:?}", parsed.value.body);
+        };
+        assert_eq!(body.sheets[0].name.as_deref(), Some("Sales"));
+        let cell = &body.sheets[0].rows[0].cells[0];
+        assert_eq!(cell.value_type.as_deref(), Some("float"));
+        assert_eq!(cell.value.as_deref(), Some("42"));
+        assert_eq!(cell.formula.as_deref(), Some("of:=1+41"));
+
+        // Full cycle back through the rescribe reader.
+        let reread = crate::rescribe::read::parse(&bytes).unwrap();
+        assert!(reread.warnings.is_empty());
+        let reread_sheet = &reread.value.content.children[0];
+        assert_eq!(reread_sheet.kind.as_str(), rescribe_std::node::SHEET);
+        let reread_cell = &reread_sheet.children[0].children[0];
+        assert_eq!(reread_cell.props.get_str(prop::VALUE_TYPE), Some("number"));
+        assert_eq!(reread_cell.props.get_str(prop::VALUE), Some("42"));
+        assert_eq!(
+            reread_cell.props.get_str(prop::VALUE_FORMULA),
+            Some("of:=1+41")
+        );
+    }
+
+    #[test]
+    fn presentation_document_round_trips_through_ast() {
+        let shape = Node::new(rescribe_std::node::POSITIONED_CONTAINER)
+            .prop(prop::POSITION_X, 914_400_i64) // 1 inch
+            .prop(prop::POSITION_Y, 0_i64)
+            .prop(prop::POSITION_WIDTH, 1_828_800_i64)
+            .prop(prop::POSITION_HEIGHT, 914_400_i64)
+            .prop(prop::POSITION_ROTATION, 5_400_000_i64) // 90 degrees
+            .prop(prop::POSITION_Z_ORDER, 0_i64)
+            .prop("odf:presentation-class", "title")
+            .child(
+                Node::new(rescribe_std::node::PARAGRAPH)
+                    .child(Node::new(rescribe_std::node::TEXT).prop(prop::CONTENT, "Title")),
+            );
+        let page = Node::new(rescribe_std::node::DIV)
+            .prop("odf:type", "slide")
+            .prop("odf:name", "slide1")
+            .child(shape);
+        let document = Document {
+            content: Node::new(rescribe_std::node::DOCUMENT).child(page),
+            resources: Default::default(),
+            metadata: Default::default(),
+            source: None,
+        };
+
+        let result = emit(&document).unwrap();
+        // No raw odf:transform was present, so rotation had to be synthesized —
+        // that's the documented lossy-pivot case and must warn (ADR 0015).
+        assert_eq!(result.warnings.len(), 1);
+        let bytes = result.value;
+        let parsed = crate::parser::parse(&bytes).expect("parse failed");
+        assert_eq!(
+            parsed.value.mimetype,
+            "application/vnd.oasis.opendocument.presentation"
+        );
+        let crate::ast::OdfBody::Presentation(body) = &parsed.value.body else {
+            panic!("expected Presentation body, got {:?}", parsed.value.body);
+        };
+        assert_eq!(body.pages[0].name.as_deref(), Some("slide1"));
+        let ast_shape = &body.pages[0].shapes[0];
+        // 914_400 EMU == 1in == 2.54cm exactly (ADR 0015's EMU/cm ratio).
+        assert_eq!(ast_shape.x.as_deref(), Some("2.54cm"));
+        assert!(
+            ast_shape
+                .transform
+                .as_deref()
+                .unwrap()
+                .starts_with("rotate(")
+        );
+        assert_eq!(ast_shape.z_index, Some(0));
+
+        // Full cycle back through the rescribe reader: the synthesized
+        // rotate() must project back to the same OOXML-style angle.
+        let reread = crate::rescribe::read::parse(&bytes).unwrap();
+        let reread_shape = &reread.value.content.children[0].children[0];
+        assert_eq!(
+            reread_shape.props.get_int(prop::POSITION_ROTATION),
+            Some(5_400_000)
+        );
+        assert_eq!(reread_shape.props.get_int(prop::POSITION_Z_ORDER), Some(0));
     }
 }
