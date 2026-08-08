@@ -8352,3 +8352,105 @@ failed) and `cargo test -q -p latex-fmt` (default features, unaffected: 48 passe
 clean; `cargo clippy --all-targets --all-features -p latex-fmt -- -D warnings` clean;
 `cargo fmt --check` (workspace-wide) clean. `Cargo.lock` diff confirmed purely additive (new
 transitive deps for `dirs`/`ureq` only, no existing entries touched/removed).
+
+## Cross-cutting goal: real memory-verification tests for every Tier-2 `StreamingParser` (2026-08-08)
+
+**Scope note first: this entry documents a goal, it does not implement one.** It is a
+separate, larger cross-cutting effort from the OOXML-specific streaming work just
+completed (commits `aa8f7f7fea` through `fa394c9cfd`), which covered `ooxml-wml`/
+`ooxml-sml`/`ooxml-pml`/`ooxml-opc` specifically. This entry is about every format crate
+in the repo that claims a Tier-2 `StreamingParser<H>` (see CLAUDE.md's "Streaming IR
+(planned architecture)" section for the O(nesting depth + largest token) bound the type
+claims to hold), not scoped to OOXML.
+
+**The goal, precisely:** for every format crate with a `StreamingParser<H: Handler>`,
+have a test that feeds genuinely large input (100MB+, synthetic or real) through `feed()`
+in a chunked/incremental way while *actually monitoring memory usage during the run* —
+not just asserting the output is correct and not just checking `feed()` doesn't panic on
+arbitrary bytes (that's the existing fuzz no-panic gate, a different and already-covered
+concern). The point is to verify the claimed O(nesting depth + largest token) bound holds
+in practice, under real scale, rather than resting on code review / design intent alone.
+
+**Two distinct dimensions, not one test category — keep them separately named so they
+don't get conflated:**
+
+1. **Large-benign-input tests.** A realistically-shaped 100MB+ document (synthetic
+   generator or a real large file) fed through `feed()` in chunks, with peak memory
+   measured during the run. Verifies the bound holds at real scale, not just that it's
+   flat across the much smaller sizes exercised by current tests (see below — current
+   tests top out around 100k synthetic paragraphs, not 100MB).
+
+2. **Adversarial-input tests.** Input that is small on disk but is deliberately crafted
+   to blow past the claimed bound despite that — e.g. zip-bomb-style deeply-nested or
+   highly-compressed structures, pathologically deep markup nesting, decompression bombs
+   for any format built on compression (this is specifically relevant to the
+   zip-backed formats — `epub-fmt`, `odf-fmt`, and the `ooxml-*` crates all sit on top of
+   `zip-fmt`). A crate can pass every large-benign-input test and still have an unbounded
+   blowup path that only a small malicious/malformed file triggers; this dimension exists
+   to catch that class of gap, which dimension 1 cannot catch by construction (a 100MB
+   benign file and a 100KB adversarial one are testing different failure modes).
+
+**Existing prior art — checked before writing this entry, per CLAUDE.md's "no guessing"
+rule, rather than assuming a clean slate.** A real pattern for dimension-1-style testing
+already exists and is in active use: a test-local `#[global_allocator]` that tracks
+peak-live-bytes (sometimes thread-local, to avoid cross-test noise under parallel `cargo
+test`; see `crates/formats/pod-fmt/src/alloc_probe.rs`'s doc comment for a documented
+real flake — a 407x false-positive ratio from cross-thread allocation noise — that drove
+the thread-local design), asserting the peak-heap ratio between a small and a much larger
+synthetic input stays roughly flat (e.g. `ratio < 2.0` for a 100x longer document). This
+pattern already exists in at least 9 crates: `man-fmt` (`test_alloc.rs`), `markua`, `muse-fmt`
+(`alloc_probe.rs`), `ooxml-sml` (`bench_streaming.rs` + `streaming_writer_memory.rs`),
+`ooxml-wml` (`streaming_writer_memory.rs`), `pod-fmt` (`alloc_probe.rs`), `rtf-fmt`
+(`alloc_probe.rs`), `texinfo` (`streaming_parser_memory.rs`), `tikiwiki`
+(`streaming_writer_memory.rs`). So **this is not a clean-slate gap** — the tooling
+approach (a custom peak-tracking global allocator) already has working precedent to
+build on, and the general shape of dimension-1 testing is not unprecedented.
+
+What's still missing, checked directly rather than assumed:
+
+- **Named-crate check** (`commonmark-fmt`, `rst-fmt`, `html-fmt` — the three CLAUDE.md
+  asked to be checked as already-migrated examples): none of the three has any
+  memory-tracking test file (`find` for `*memory*`/`*alloc_probe*`/`*test_alloc*` under
+  each crate returns nothing). So even among crates already migrated to the target
+  `rescribe`-feature architecture, coverage is not universal.
+- **Coverage across all `StreamingParser`-bearing crates**: a repo-wide grep found 42
+  crates defining `struct StreamingParser`; only the 9 listed above have the memory-test
+  pattern. The other ~33 (including `commonmark-fmt`, `rst-fmt`, `html-fmt`,
+  `asciidoc`, `docbook-fmt`, `jats-fmt`, `tei-fmt`, `epub-fmt`, `odf-fmt`, `zip-fmt`, the
+  `ooxml-pml`/`ooxml-opc` pair not covered by the just-completed OOXML pass, and more)
+  have no such test at all.
+- **Scale**: even where the pattern exists, it does not use real 100MB+ input. The
+  largest synthetic case found (`ooxml-wml`/`ooxml-sml`/`texinfo`/`markua`, etc.) is on
+  the order of 100,000 synthetic paragraphs — a few MB at most — not 100MB+. The existing
+  tests check that peak memory *shape* is flat as input scales up by ~100x within that
+  small range; they do not establish where (or whether) the bound holds at the scale the
+  design doc actually cares about (files too large to load into memory).
+- **Adversarial dimension (2 above)**: no crate's test suite was found to have anything
+  in this category — every existing memory test uses a benign, uniformly-repetitive
+  synthetic document generator, not an adversarially-crafted one. This dimension appears
+  entirely unaddressed anywhere in the repo, including in the 9 crates that already do
+  dimension-1-style testing.
+
+**Tooling gap for a future implementer to investigate (not decided here):** the existing
+peak-live-bytes global-allocator pattern is one viable category and has working
+precedent, but is not the only option and has real limits (it measures allocator-visible
+heap churn, not OS-level RSS, and page-level effects like mmap'd zip decompression
+buffers or allocator fragmentation could diverge from it). Categories worth evaluating
+for a real implementation pass, not chosen here:
+  - Extending the existing custom-`GlobalAlloc` peak-tracking approach (known precedent,
+    known false-positive pitfalls under parallel test execution — see the pod-fmt flake
+    above).
+  - A dedicated memory-profiling crate (e.g. something in the `dhat`/`peak_alloc`
+    family) for more detailed allocation profiling than a hand-rolled counter gives.
+  - OS-level RSS sampling around the `feed()` loop (e.g. reading `/proc/self/status` on
+    Linux, or a cross-platform crate for it) — closer to "real" memory pressure but
+    noisier and platform-dependent.
+  - For the adversarial/decompression-bomb dimension specifically: bounding the
+    `zip-fmt` decompression path itself (a decompression-ratio or output-size cap) is a
+    plausible mitigation to test *against*, separate from the measurement tooling
+    question.
+
+No implementation was attempted as part of this entry — this documents the goal and the
+prior-art/gap findings so a future pass has an accurate starting point instead of
+re-discovering both the existing 9-crate precedent and the scale/adversarial gaps from
+scratch.
