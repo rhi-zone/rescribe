@@ -584,11 +584,39 @@ fn convert_paragraph_content<R: Read + Seek>(
                     }
                 }
             }
-            ParagraphContent::BookmarkStart(_) | ParagraphContent::BookmarkEnd(_) => {
-                converter.warn("Bookmark marker not representable in IR");
+            // Bookmarks and comment ranges are zero-width position markers (no
+            // visible text) with no cross-format equivalent node -- raw-preserve
+            // as an empty `raw_inline` carrying the marker's id/name so a writer
+            // can restore the exact bookmarkStart/End or commentRangeStart/End
+            // pair, instead of dropping the marker (losing the anchor/range).
+            ParagraphContent::BookmarkStart(bm) => {
+                children.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::FORMAT, "docx")
+                        .prop("docx:bookmark-start-id", bm.id.to_string())
+                        .prop("docx:bookmark-start-name", bm.name.clone()),
+                );
             }
-            ParagraphContent::CommentRangeStart(_) | ParagraphContent::CommentRangeEnd(_) => {
-                converter.warn("Comment range marker not representable in IR");
+            ParagraphContent::BookmarkEnd(range) => {
+                children.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::FORMAT, "docx")
+                        .prop("docx:bookmark-end-id", range.id.to_string()),
+                );
+            }
+            ParagraphContent::CommentRangeStart(range) => {
+                children.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::FORMAT, "docx")
+                        .prop("docx:comment-range-start-id", range.id.to_string()),
+                );
+            }
+            ParagraphContent::CommentRangeEnd(range) => {
+                children.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::FORMAT, "docx")
+                        .prop("docx:comment-range-end-id", range.id.to_string()),
+                );
             }
             // Markers that carry no text content
             ParagraphContent::ProofErr(_)
@@ -701,6 +729,20 @@ fn convert_run<R: Read + Seek>(
                     _ => {}
                 }
                 result.push(apply_formatting(run, node));
+            }
+            RunContent::CommentReference(cm) => {
+                // `<w:commentReference>` anchors a comment (from comments.xml) at
+                // this position. No cross-format "comment" node kind exists, and
+                // resolving the referenced comment body would require pre-loading
+                // comments.xml the way footnotes/endnotes are pre-loaded; raw-
+                // preserve just the id so the marker isn't silently dropped and a
+                // writer can restore the `<w:commentReference>` element.
+                flush_run_text_buf(&mut buf, run, &mut result);
+                result.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::FORMAT, "docx")
+                        .prop("docx:comment-ref-id", cm.id.to_string()),
+                );
             }
             _ => {}
         }

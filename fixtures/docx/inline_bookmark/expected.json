@@ -1,0 +1,11 @@
+{
+  "description": "DOCX bookmarkStart/bookmarkEnd markers are raw-preserved as raw_inline nodes (no visible text, no cross-format equivalent) instead of being silently dropped",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "raw_inline", "props": { "format": "docx", "docx:bookmark-start-id": "1", "docx:bookmark-start-name": "MyBookmark" } },
+    { "path": "/0/1",  "kind": "text", "props": { "content": "bookmarked text" } },
+    { "path": "/0/2",  "kind": "raw_inline", "props": { "format": "docx", "docx:bookmark-end-id": "1" } }
+  ]
+}

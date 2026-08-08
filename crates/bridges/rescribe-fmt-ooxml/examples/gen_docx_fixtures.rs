@@ -753,5 +753,33 @@ fn main() {
         );
     }
 
+    // --- inline_bookmark ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_bookmark_start(1, "MyBookmark");
+        para.add_run().set_text("bookmarked text");
+        para.add_bookmark_end(1);
+        write_docx(&format!("{}/inline_bookmark/input.docx", base), b);
+    }
+
+    // --- inline_comment_reference ---
+    {
+        let mut b = DocumentBuilder::new();
+        let comment_id = {
+            let mut comment = b.add_comment();
+            comment.add_paragraph("This is a comment.");
+            comment.set_author("Jane Doe");
+            comment.id()
+        };
+        let para = b.body_mut().add_paragraph();
+        para.add_comment_range_start(comment_id);
+        para.add_run().set_text("commented text");
+        para.add_comment_range_end(comment_id);
+        let run = para.add_run();
+        run.add_comment_ref(comment_id as i64);
+        write_docx(&format!("{}/inline_comment_reference/input.docx", base), b);
+    }
+
     println!("Done generating DOCX fixtures.");
 }

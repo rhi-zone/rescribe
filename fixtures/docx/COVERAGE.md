@@ -54,8 +54,8 @@ spec.
 - [x] column break (`<w:br w:type="column">`) — `inline_column_break`
 - [x] tab stop (`<w:tab>`) — `inline_tab_stop`
 - [ ] field code (`<w:fldChar>`/`<w:instrText>`) — (missing)
-- [ ] bookmark (`<w:bookmarkStart>`/`<w:bookmarkEnd>`) — (missing)
-- [ ] comment reference (`<w:commentReference>`) — (missing)
+- [x] bookmark (`<w:bookmarkStart>`/`<w:bookmarkEnd>`) — `inline_bookmark` (raw-preserved as `raw_inline` markers; previously silently dropped)
+- [x] comment reference (`<w:commentReference>`) — `inline_comment_reference` (raw-preserved as `raw_inline` markers, including `commentRangeStart`/`End`, which were also previously silently dropped; the referenced comment body in comments.xml is not resolved/inlined)
 - [x] revision marks (tracked changes: ins/del) — `revision_ins`, `revision_del` (content wrapped in a `span` with `docx:tracked-change`; nested inline formatting *inside* a tracked change is flattened to plain text on write — see write.rs `write_tracked_change_to_para` doc comment)
 - [x] font name (`<w:rFonts>`) — `inline_font_name`
 - [x] language (`<w:lang>`) — `inline_language`

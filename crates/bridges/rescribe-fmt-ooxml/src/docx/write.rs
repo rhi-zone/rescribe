@@ -1155,6 +1155,9 @@ fn write_inline_to_para(
                 // DOCX has no "soft wrap" markup; a soft break reflows as a space.
                 emit_run(para, " ", fmt);
             }
+            node::RAW_INLINE if node.props.get_str(prop::FORMAT) == Some("docx") => {
+                write_raw_docx_marker(para, node);
+            }
             _ => {
                 // Recurse into children
                 write_inline_to_para(
@@ -1211,6 +1214,35 @@ fn flatten_text(nodes: &[Node], out: &mut String) {
         } else {
             flatten_text(&node.children, out);
         }
+    }
+}
+
+/// Re-emit a raw-preserved bookmark/comment-range marker (see read.rs's
+/// `raw_inline` construction for BookmarkStart/End and
+/// CommentRangeStart/End) as the matching `ParagraphContent` variant.
+fn write_raw_docx_marker(para: &mut types::Paragraph, node: &Node) {
+    if let Some(id) = node.props.get_str("docx:bookmark-start-id") {
+        let name = node.props.get_str("docx:bookmark-start-name").unwrap_or("");
+        if let Ok(id) = id.parse::<i64>() {
+            para.add_bookmark_start(id, name);
+        }
+    } else if let Some(id) = node.props.get_str("docx:bookmark-end-id") {
+        if let Ok(id) = id.parse::<i64>() {
+            para.add_bookmark_end(id);
+        }
+    } else if let Some(id) = node.props.get_str("docx:comment-range-start-id") {
+        if let Ok(id) = id.parse::<u32>() {
+            para.add_comment_range_start(id);
+        }
+    } else if let Some(id) = node.props.get_str("docx:comment-range-end-id") {
+        if let Ok(id) = id.parse::<u32>() {
+            para.add_comment_range_end(id);
+        }
+    } else if let Some(id) = node.props.get_str("docx:comment-ref-id")
+        && let Ok(id) = id.parse::<i64>()
+    {
+        let run = para.add_run();
+        run.add_comment_ref(id);
     }
 }
 

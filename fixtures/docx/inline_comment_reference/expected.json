@@ -1,0 +1,12 @@
+{
+  "description": "DOCX commentRangeStart/End and commentReference markers are raw-preserved as raw_inline nodes instead of being silently dropped; the comment body itself (comments.xml) is not resolved",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph" },
+    { "path": "/0/0",  "kind": "raw_inline", "props": { "format": "docx", "docx:comment-range-start-id": "0" } },
+    { "path": "/0/1",  "kind": "text", "props": { "content": "commented text" } },
+    { "path": "/0/2",  "kind": "raw_inline", "props": { "format": "docx", "docx:comment-range-end-id": "0" } },
+    { "path": "/0/3",  "kind": "raw_inline", "props": { "format": "docx", "docx:comment-ref-id": "0" } }
+  ]
+}
