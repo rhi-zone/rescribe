@@ -238,14 +238,14 @@ compatibility with the rest of the format ecosystem — not streaming performanc
 
 ---
 
-## `ooxml-fmt` and the streaming imperative
+## The ooxml crates and the streaming imperative
 
 DOCX, XLSX, and PPTX files routinely exceed available RAM in batch-over-corpus
 scenarios (legal discovery, academic corpus analysis, enterprise search indexing).
 `StreamingParser` is not optional for these formats — it is the primary use case.
 
-The `ooxml-fmt` rework (consolidating `ooxml-wml/sml/pml` into one crate) must
-implement the full three-API architecture with a real `StreamingParser`:
+The `ooxml-wml`/`ooxml-sml`/`ooxml-pml` rework must implement the full three-API
+architecture with a real `StreamingParser`, in each crate:
 
 - Chunked ZIP entry streaming (OPC layer reads entries without decompressing all at once)
 - XML SAX events fed directly to the format state machine

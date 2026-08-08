@@ -5635,8 +5635,18 @@ memory-safety pass per "scope discipline: fix minimally, fence the rest."
 ### ooxml-fmt rework (major milestone — after five-crate streaming upgrade)
 
 The ooxml-* crates are our biggest value proposition: no other Rust ecosystem library
-handles DOCX/XLSX/PPTX at production quality. The rework consolidates them and adds
-the full three-API streaming architecture from `docs/format-library-design.md`.
+handles DOCX/XLSX/PPTX at production quality. The rework adds the full three-API
+streaming architecture from `docs/format-library-design.md` to each crate.
+
+(A crate-consolidation plan — merging `ooxml-wml`/`ooxml-sml`/`ooxml-pml`/`ooxml-dml`/
+`ooxml-omml`/`ooxml-opc`/`ooxml-xml` into a single `ooxml-fmt` crate — was previously
+tracked here. It has been dropped: the item's rationale was never stated anywhere
+(traced to `53c21c77d6`, asserted with no derivation, restated as settled ever since),
+and ADR 0014's code-level-coupling test found no code dependency between `ooxml-wml`,
+`ooxml-sml`, and `ooxml-pml` themselves — they're independent consumers of the shared
+`opc`/`dml`/`omml`/`xml` foundation, not mutually coupled. See
+`docs/adr/0014-crate-merge-requires-code-level-coupling.md` for the full reasoning.
+The crates stay separate; the streaming rework below applies to each independently.)
 
 **Why streaming is non-optional for OOXML:**
 DOCX/XLSX/PPTX files in legal discovery, academic corpora, and enterprise search
@@ -5657,38 +5667,12 @@ depth + largest token) memory is the primary use case, not an afterthought.
 - `events()`: format-level pull iterator over a fully-loaded `&[u8]`. Wraps the same
   state machine as `StreamingParser` but driven by `Iterator::next()`.
 
-**Consolidation:**
-- [ ] **BLOCKED PENDING VERIFICATION (see ADR 0014):** Merge `ooxml-wml`, `ooxml-sml`,
-  `ooxml-pml`, `ooxml-dml`, `ooxml-omml`, `ooxml-opc`, `ooxml-xml` into a single
-  `ooxml-fmt` crate with feature flags. Shared infrastructure (`opc`, `xml`) always
-  compiled; `wml`/`sml`/`pml`/`dml`/`omml` feature-gated.
-  `crates/tools/ooxml-codegen` stays separate (build tool). This item's rationale was
-  never stated anywhere (traced to `53c21c77d6`, asserted with no derivation, restated
-  as settled ever since); `c2fea87315`'s "no principled reason to keep it external" is
-  about the git-repo merge, not the crate merge, and does not justify this item. ADR
-  0014's code-level-coupling test finds no code dependency between `ooxml-wml`,
-  `ooxml-sml`, and `ooxml-pml` themselves — they're independent consumers of the
-  shared `opc`/`dml`/`omml`/`xml` foundation, not mutually coupled — so the wml/sml/pml
-  portion of this merge does not currently meet the bar and should not proceed until
-  either (a) it's dropped in favor of keeping wml/sml/pml separate, each depending on
-  the shared foundation crates, or (b) someone independently verifies real code-level
-  coupling between wml/sml/pml themselves (not just their shared use of the foundation
-  crates), with the same forced-lockstep-coupling evidence ADR 0014's read/write-adapter
-  case has. The foundation-crate portion (opc/dml/omml/xml merging together) is
-  equally open and unverified, not closer to justified: `ooxml-wml`/`ooxml-pml`
-  importing and using `ooxml-dml`'s shape types is an ordinary shared-dependency
-  relationship (the same shape as "every crate here depends on serde"), not evidence
-  of forced-lockstep coupling between those crates specifically — ADR 0014 explains
-  why this doesn't clear the bar. Treat as open on the same footing as wml/sml/pml,
-  pending actual forced-lockstep evidence either way.
+**Streaming implementation:**
 - [ ] Implement `StreamingParser<H>` for DOCX (wml) first — largest user base.
 - [ ] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines.
 - [ ] Implement `StreamingParser<H>` for PPTX (pml).
 - [ ] `parse()` as direct recursive descent (independent of events()).
 - [ ] `events()` as true pull iterator (frame-stack, no block-granular buffering).
-- [ ] Publish `ooxml-fmt` to crates.io.
-- [ ] Deprecate individual crates — final version with deprecation notice pointing to
-  `ooxml-fmt`. Keep compiling; mark `#[deprecated]` on the re-exported API surface.
 
 ### Milestone: M2.5 — Streaming IR layer
 
