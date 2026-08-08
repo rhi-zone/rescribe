@@ -523,6 +523,15 @@ pub struct DrawShape {
     pub width: Option<String>,
     /// `svg:height`.
     pub height: Option<String>,
+    /// `draw:transform` — verbatim transform string (e.g. `rotate(...)
+    /// translate(...)`), when present. ODF expresses rotation (and other
+    /// affine transforms) via this attribute rather than a dedicated
+    /// rotation-angle attribute; preserved verbatim since ODF's rotation
+    /// pivot is not always losslessly convertible to a simple angle.
+    pub transform: Option<String>,
+    /// `draw:z-index` — explicit stacking order, when present. Absent for
+    /// shapes that rely on document order for stacking (the common case).
+    pub z_index: Option<i64>,
     /// The shape's content.
     pub content: DrawShapeContent,
 }

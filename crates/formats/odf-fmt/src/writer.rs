@@ -923,6 +923,12 @@ fn write_draw_shape(s: &mut String, shape: &DrawShape) {
     if let Some(h) = &shape.height {
         s.push_str(&format!(" svg:height=\"{}\"", xml_escape(h)));
     }
+    if let Some(t) = &shape.transform {
+        s.push_str(&format!(" draw:transform=\"{}\"", xml_escape(t)));
+    }
+    if let Some(z) = shape.z_index {
+        s.push_str(&format!(" draw:z-index=\"{z}\""));
+    }
     s.push_str(">\n");
     match &shape.content {
         DrawShapeContent::TextBox(blocks) => {

@@ -653,6 +653,8 @@ fn parse_draw_page_attrs(
                         y: attr_from_list(&a, "svg:y"),
                         width: attr_from_list(&a, "svg:width"),
                         height: attr_from_list(&a, "svg:height"),
+                        transform: attr_from_list(&a, "draw:transform"),
+                        z_index: attr_from_list(&a, "draw:z-index").and_then(|v| v.parse().ok()),
                         content: DrawShapeContent::Empty,
                     });
                 }
@@ -692,6 +694,8 @@ fn parse_draw_shape_attrs(
     let y = attr_from_list(attrs, "svg:y");
     let width = attr_from_list(attrs, "svg:width");
     let height = attr_from_list(attrs, "svg:height");
+    let transform = attr_from_list(attrs, "draw:transform");
+    let z_index = attr_from_list(attrs, "draw:z-index").and_then(|v| v.parse().ok());
     let content = parse_draw_shape_content(outer_tag, reader, diags);
     DrawShape {
         style_name,
@@ -702,6 +706,8 @@ fn parse_draw_shape_attrs(
         y,
         width,
         height,
+        transform,
+        z_index,
         content,
     }
 }
