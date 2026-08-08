@@ -199,41 +199,64 @@ impl<'input> SmlEventIter<'input> {
 
 impl<'input> SmlEventIter<'input> {
     fn build_start_event(&mut self, kind: SmlStartKind, tag_bytes: &[u8]) -> SmlEvent<'static> {
-        match props_strategy(kind) {
-            PropsStrategy::FromAttrs => {
-                // Re-construct a BytesStart from the cloned tag bytes and parse
-                // attributes into the typed props struct (no children consumed).
-                let tag_str = std::str::from_utf8(tag_bytes).unwrap_or("");
-                // Strip leading '<' if present (buf may include it).
-                let content = tag_str
-                    .trim_start_matches('<')
-                    .trim_end_matches('>')
-                    .trim_end_matches('/');
-                let name_len = content
-                    .bytes()
-                    .position(|b| b == b' ')
-                    .unwrap_or(content.len());
-                let start = quick_xml::events::BytesStart::from_content(content, name_len);
-                match kind {
-                    SmlStartKind::Row => {
-                        let props =
-                            Row::from_xml(&mut self.reader, &start, true).unwrap_or_default();
-                        SmlEvent::StartRow {
-                            props: Box::new(props),
-                        }
+        build_container_start_event(&mut self.reader, kind, tag_bytes)
+    }
+}
+
+/// Build the `Start…` event for a tracked container element (`worksheet`,
+/// `sheetData`, `row`, `c`, `is`) from its opening tag's own bytes.
+///
+/// This is a pure function of `tag_bytes` for [`PropsStrategy::FromAttrs`]
+/// kinds (`Row`/`Cell`): `is_empty` is always passed as `true` to
+/// [`FromXml::from_xml`], so the generated parser reads only the tag's own
+/// attributes and never touches `reader` to consume children — see the
+/// module docs' "Memory model" section for why row/cell props never require
+/// lookahead. `reader` is still threaded through because [`FromXml::from_xml`]'s
+/// signature requires one; it is never actually read from here.
+///
+/// Shared between [`SmlEventIter`] (which owns a single `Reader` for a whole
+/// worksheet's bytes) and [`crate::chunked_events::ChunkedSmlEvents`] (which
+/// builds a fresh `Reader` per `drain()` call over the yet-unconsumed tail)
+/// — the two container-element-start code paths are otherwise-independent
+/// implementations that share only this pure helper, not a common iterator
+/// type, per this repo's "three independent implementations" rule.
+pub(crate) fn build_container_start_event(
+    reader: &mut Reader<&[u8]>,
+    kind: SmlStartKind,
+    tag_bytes: &[u8],
+) -> SmlEvent<'static> {
+    match props_strategy(kind) {
+        PropsStrategy::FromAttrs => {
+            // Re-construct a BytesStart from the cloned tag bytes and parse
+            // attributes into the typed props struct (no children consumed).
+            let tag_str = std::str::from_utf8(tag_bytes).unwrap_or("");
+            // Strip leading '<' if present (buf may include it).
+            let content = tag_str
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .trim_end_matches('/');
+            let name_len = content
+                .bytes()
+                .position(|b| b == b' ')
+                .unwrap_or(content.len());
+            let start = quick_xml::events::BytesStart::from_content(content, name_len);
+            match kind {
+                SmlStartKind::Row => {
+                    let props = Row::from_xml(reader, &start, true).unwrap_or_default();
+                    SmlEvent::StartRow {
+                        props: Box::new(props),
                     }
-                    SmlStartKind::Cell => {
-                        let props =
-                            Cell::from_xml(&mut self.reader, &start, true).unwrap_or_default();
-                        SmlEvent::StartCell {
-                            props: Box::new(props),
-                        }
-                    }
-                    _ => start_event_no_props(kind),
                 }
+                SmlStartKind::Cell => {
+                    let props = Cell::from_xml(reader, &start, true).unwrap_or_default();
+                    SmlEvent::StartCell {
+                        props: Box::new(props),
+                    }
+                }
+                _ => start_event_no_props(kind),
             }
-            PropsStrategy::None => start_event_no_props(kind),
         }
+        PropsStrategy::None => start_event_no_props(kind),
     }
 }
 
@@ -241,7 +264,7 @@ impl<'input> SmlEventIter<'input> {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-fn local_name_owned(raw: &[u8]) -> Vec<u8> {
+pub(crate) fn local_name_owned(raw: &[u8]) -> Vec<u8> {
     raw.iter()
         .position(|&b| b == b':')
         .map_or_else(|| raw.to_vec(), |i| raw[i + 1..].to_vec())
@@ -285,7 +308,7 @@ fn read_text_content(reader: &mut Reader<&[u8]>) -> String {
     text
 }
 
-fn end_event_for(kind: SmlStartKind) -> SmlEvent<'static> {
+pub(crate) fn end_event_for(kind: SmlStartKind) -> SmlEvent<'static> {
     match kind {
         SmlStartKind::Worksheet => SmlEvent::EndWorksheet,
         SmlStartKind::SheetData => SmlEvent::EndSheetData,
@@ -295,7 +318,7 @@ fn end_event_for(kind: SmlStartKind) -> SmlEvent<'static> {
     }
 }
 
-fn start_event_no_props(kind: SmlStartKind) -> SmlEvent<'static> {
+pub(crate) fn start_event_no_props(kind: SmlStartKind) -> SmlEvent<'static> {
     match kind {
         SmlStartKind::Worksheet => SmlEvent::StartWorksheet,
         SmlStartKind::SheetData => SmlEvent::StartSheetData,
@@ -310,7 +333,7 @@ fn start_event_no_props(kind: SmlStartKind) -> SmlEvent<'static> {
 }
 
 /// Map a text-content element local name + text to the right SmlEvent leaf variant.
-fn text_leaf_event(local: &[u8], text: String) -> SmlEvent<'static> {
+pub(crate) fn text_leaf_event(local: &[u8], text: String) -> SmlEvent<'static> {
     match local {
         b"v" => SmlEvent::CellValue(Cow::Owned(text)),
         b"t" => SmlEvent::StringFragment(Cow::Owned(text)),
