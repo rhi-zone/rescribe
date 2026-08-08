@@ -88,7 +88,7 @@ pub use document::{AppProperties, CoreProperties, Document, DocumentSettings, Im
 #[cfg(feature = "reader-batch")]
 pub mod batch;
 #[cfg(feature = "reader-batch")]
-pub use batch::BatchParser;
+pub use batch::{BatchParser, Handler, StreamingParser};
 
 // Error types — always available.
 pub use error::{Error, ParseContext, Result, position_to_line_col};

@@ -35,7 +35,7 @@ full = [
 # API-mode flags
 reader-ast = []       # Document::open / parse — materialised tree
 reader-streaming = [] # events() — true SAX iterator over WmlEvent; no full-tree materialization
-reader-batch = ["reader-ast"] # BatchParser — chunk-driven; buffers all input, parses on finish()
+reader-batch = ["reader-ast", "reader-streaming"] # BatchParser (buffers all input) + StreamingParser<H> (genuinely incremental, needs events() for word/document.xml)
 writer-streaming = ["reader-streaming", "writer-builder"] # WmlWriter<W> — event-driven DOCX emit
 writer-builder = []   # DocumentBuilder — build and write a document
 wml-styling = []
@@ -62,6 +62,7 @@ quick-xml.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 base64.workspace = true
+rescribe-format-api.workspace = true
 
 [dev-dependencies]
 zip.workspace = true

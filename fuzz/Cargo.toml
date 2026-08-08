@@ -55,6 +55,9 @@ path = "../crates/writers/rescribe-write-rtf"
 [dependencies.rescribe-fmt-ooxml]
 path = "../crates/bridges/rescribe-fmt-ooxml"
 
+[dependencies.ooxml-wml]
+path = "../crates/formats/ooxml-wml"
+
 [dependencies.rescribe-read-man]
 path = "../crates/readers/rescribe-read-man"
 
