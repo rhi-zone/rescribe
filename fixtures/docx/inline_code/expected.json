@@ -1,0 +1,10 @@
+{
+  "description": "A run with a known monospace run style (rStyle=HTMLTypewriter, Word's own built-in style for inline <tt>/<code> content) becomes inline code; deliberately style-ID based, not font-based, same rationale as code_block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "code", "props": { "docx:rStyle": "HTMLTypewriter" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "inline_code()" } }
+  ]
+}

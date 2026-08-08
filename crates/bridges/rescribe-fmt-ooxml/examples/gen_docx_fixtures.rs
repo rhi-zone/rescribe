@@ -781,5 +781,241 @@ fn main() {
         write_docx(&format!("{}/inline_comment_reference/input.docx", base), b);
     }
 
+    // --- nested_list: numId+ilvl nesting (ilvl 0, 1, 0) ---
+    {
+        let mut b = DocumentBuilder::new();
+        let num_id = b.add_list(ListType::Bullet);
+        let p0 = b.body_mut().add_paragraph();
+        p0.set_numbering(num_id, 0);
+        p0.add_run().set_text("Level 0 item");
+        let p1 = b.body_mut().add_paragraph();
+        p1.set_numbering(num_id, 1);
+        p1.add_run().set_text("Level 1 item");
+        let p0b = b.body_mut().add_paragraph();
+        p0b.set_numbering(num_id, 0);
+        p0b.add_run().set_text("Level 0 item 2");
+        write_docx(&format!("{}/nested_list/input.docx", base), b);
+    }
+
+    // --- horizontal_rule: empty paragraph with a bottom-only pBdr ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            paragraph_border: Some(Box::new(types::CTPBdr {
+                bottom: Some(Box::new(types::CTBorder {
+                    value: types::STBorder::Single,
+                    color: Some("000000".to_string()),
+                    theme_color: None,
+                    theme_tint: None,
+                    theme_shade: None,
+                    size: Some(8),
+                    space: None,
+                    shadow: None,
+                    frame: None,
+                    extra_attrs: Default::default(),
+                })),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/horizontal_rule/input.docx", base), b);
+    }
+
+    // --- code_block: paragraph styled "HTMLPreformatted" ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            paragraph_style: Some(Box::new(types::CTString {
+                value: "HTMLPreformatted".to_string(),
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("let x = 1;");
+        write_docx(&format!("{}/code_block/input.docx", base), b);
+    }
+
+    // --- blockquote: paragraph indented 720 twips both sides ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_indent_left(720);
+        para.set_indent_right(720);
+        para.add_run().set_text("Quoted content.");
+        write_docx(&format!("{}/blockquote/input.docx", base), b);
+    }
+
+    // --- inline_code: run styled "HTMLTypewriter" ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let run = para.add_run();
+        run.set_text("inline_code()");
+        run.set_properties(types::RunProperties {
+            run_style: Some(Box::new(types::CTString {
+                value: "HTMLTypewriter".to_string(),
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        write_docx(&format!("{}/inline_code/input.docx", base), b);
+    }
+
+    // --- field_code: begin/instrText/separate/display/end run sequence ---
+    {
+        fn fld_char(t: types::STFldCharType) -> types::CTFldChar {
+            types::CTFldChar {
+                fld_char_type: t,
+                fld_lock: None,
+                dirty: None,
+                fld_data: None,
+                ff_data: None,
+                numbering_change: None,
+                extra_attrs: Default::default(),
+                extra_children: Vec::new(),
+            }
+        }
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.add_run().set_text("Page ");
+        para.add_run()
+            .run_content
+            .push(types::RunContent::FldChar(Box::new(fld_char(
+                types::STFldCharType::Begin,
+            ))));
+        para.add_run()
+            .run_content
+            .push(types::RunContent::InstrText(Box::new(types::Text {
+                text: Some(" PAGE ".to_string()),
+                extra_children: Vec::new(),
+            })));
+        para.add_run()
+            .run_content
+            .push(types::RunContent::FldChar(Box::new(fld_char(
+                types::STFldCharType::Separate,
+            ))));
+        para.add_run().set_text("1");
+        para.add_run()
+            .run_content
+            .push(types::RunContent::FldChar(Box::new(fld_char(
+                types::STFldCharType::End,
+            ))));
+        write_docx(&format!("{}/field_code/input.docx", base), b);
+    }
+
+    // --- sdt: block-level content control with tag/alias/richText type ---
+    {
+        let mut b = DocumentBuilder::new();
+        let mut run = types::Run::default();
+        run.run_content
+            .push(types::RunContent::T(Box::new(types::Text {
+                text: Some("Content control text".to_string()),
+                extra_children: Vec::new(),
+            })));
+        let mut inner_para = types::Paragraph::default();
+        inner_para
+            .paragraph_content
+            .push(types::ParagraphContent::R(Box::new(run)));
+        let sdt = types::CTSdtBlock {
+            sdt_pr: Some(Box::new(types::CTSdtPr {
+                tag: Some(Box::new(types::CTString {
+                    value: "MyTag".to_string(),
+                    extra_attrs: Default::default(),
+                })),
+                alias: Some(Box::new(types::CTString {
+                    value: "My Alias".to_string(),
+                    extra_attrs: Default::default(),
+                })),
+                rich_text: Some(Box::new(types::CTEmpty)),
+                ..Default::default()
+            })),
+            sdt_end_pr: None,
+            sdt_content: Some(Box::new(types::CTSdtContentBlock {
+                block_content: vec![types::BlockContentChoice::P(Box::new(inner_para))],
+                extra_children: Vec::new(),
+            })),
+            extra_children: Vec::new(),
+        };
+        b.body_mut()
+            .block_content
+            .push(types::BlockContent::Sdt(Box::new(sdt)));
+        write_docx(&format!("{}/sdt/input.docx", base), b);
+    }
+
+    // --- numbering_properties: raw numId/ilvl preserved on list_item (separate
+    // from the plain `list`/`list_ordered` happy-path fixtures, which only
+    // assert ordered-vs-bullet, not the raw numPr identity) ---
+    {
+        let mut b = DocumentBuilder::new();
+        let num_id = b.add_list(ListType::Decimal);
+        let para = b.body_mut().add_paragraph();
+        para.set_numbering(num_id, 0);
+        para.add_run().set_text("Numbered item");
+        write_docx(&format!("{}/numbering_properties/input.docx", base), b);
+    }
+
+    // --- para_frame: old-style paragraph text frame (<w:framePr>) ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            frame_pr: Some(Box::new(types::CTFramePr {
+                width: Some("4320".to_string()),
+                height: Some("1440".to_string()),
+                wrap: Some(types::STWrap::Around),
+                h_anchor: Some(types::STHAnchor::Page),
+                v_anchor: Some(types::STVAnchor::Page),
+                x: Some("1440".to_string()),
+                y: Some("1440".to_string()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Framed paragraph.");
+        write_docx(&format!("{}/para_frame/input.docx", base), b);
+    }
+
+    // --- text_box: DrawingML text box (<w:txbxContent>) content extraction ---
+    {
+        use ooxml_wml::{PositionedNode, RawXmlElement, RawXmlNode};
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let run = para.add_run();
+        let txbx_content = RawXmlElement {
+            name: "w:txbxContent".to_string(),
+            attributes: Vec::new(),
+            children: vec![RawXmlNode::Element(RawXmlElement {
+                name: "w:p".to_string(),
+                attributes: Vec::new(),
+                children: vec![RawXmlNode::Element(RawXmlElement {
+                    name: "w:r".to_string(),
+                    attributes: Vec::new(),
+                    children: vec![RawXmlNode::Element(RawXmlElement {
+                        name: "w:t".to_string(),
+                        attributes: Vec::new(),
+                        children: vec![RawXmlNode::Text("Text box content".to_string())],
+                        self_closing: false,
+                    })],
+                    self_closing: false,
+                })],
+                self_closing: false,
+            })],
+            self_closing: false,
+        };
+        let wps_txbx = RawXmlElement {
+            name: "wps:txbx".to_string(),
+            attributes: Vec::new(),
+            children: vec![RawXmlNode::Element(txbx_content)],
+            self_closing: false,
+        };
+        run.run_content
+            .push(types::RunContent::Drawing(Box::new(types::CTDrawing {
+                extra_children: vec![PositionedNode::new(0, RawXmlNode::Element(wps_txbx))],
+            })));
+        write_docx(&format!("{}/text_box/input.docx", base), b);
+    }
+
     println!("Done generating DOCX fixtures.");
 }

@@ -1,0 +1,14 @@
+{
+  "description": "A paragraph indented at least 720 twips on both left and right becomes a blockquote wrapping a plain paragraph; deliberately indentation-based, not style-name based -- see para_style, which uses pStyle=\"Quote\" with no indentation and must stay a plain paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "blockquote",
+      "props": { "docx:indent-left": 720, "docx:indent-right": 720 }
+    },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Quoted content." } }
+  ]
+}

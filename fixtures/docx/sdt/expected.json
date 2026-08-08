@@ -1,0 +1,18 @@
+{
+  "description": "A block-level structured document tag (<w:sdt>, content control) is converted to a div wrapping its inner content, with docx:sdt-tag/docx:sdt-alias/docx:sdt-type raw-preserved from sdtPr",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "div",
+      "props": {
+        "docx:sdt-tag": "MyTag",
+        "docx:sdt-alias": "My Alias",
+        "docx:sdt-type": "richText"
+      }
+    },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Content control text" } }
+  ]
+}

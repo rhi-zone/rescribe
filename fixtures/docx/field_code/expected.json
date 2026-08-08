@@ -1,0 +1,15 @@
+{
+  "description": "A complex field (<w:fldChar type=\"begin\"/><w:instrText/><w:fldChar type=\"separate\"/>...display...<w:fldChar type=\"end\"/>) is raw-preserved as a raw_inline carrying docx:field-instr, with the display content kept as real children instead of being dropped",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "Page " } },
+    {
+      "path": "/0/1",
+      "kind": "raw_inline",
+      "props": { "format": "docx", "docx:field-instr": " PAGE " }
+    },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "1" } }
+  ]
+}

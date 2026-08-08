@@ -1,0 +1,12 @@
+{
+  "description": "An empty DOCX paragraph whose only content is a bottom paragraph border (<w:pBdr><w:bottom>, Word's 'Insert Horizontal Line') is detected as horizontal_rule; the border itself is raw-preserved as docx:hr-border-bottom since STBorder has no cross-format equivalent",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",  "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "horizontal_rule",
+      "props": { "docx:hr-border-bottom": "single;8;000000" }
+    }
+  ]
+}

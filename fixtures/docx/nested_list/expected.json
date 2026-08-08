@@ -1,0 +1,15 @@
+{
+  "description": "DOCX list paragraphs with numId+ilvl produce a properly nested list/list_item structure (previously all ilvl levels flattened into one list -- see COVERAGE.md's 'nested list' entry)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Level 0 item" } },
+    { "path": "/0/0/1", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/1/0",   "kind": "list_item" },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "Level 1 item" } },
+    { "path": "/0/1",   "kind": "list_item" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Level 0 item 2" } }
+  ]
+}

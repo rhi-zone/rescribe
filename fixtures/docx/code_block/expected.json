@@ -1,0 +1,12 @@
+{
+  "description": "A paragraph styled with a known monospace/preformatted pStyle (HTMLPreformatted, Word's own built-in style for <pre> content) becomes a code_block; deliberately style-ID based, not font-based -- see inline_font_name, which sets a monospace run font directly and must stay a plain paragraph+span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "content": "let x = 1;", "docx:pStyle": "HTMLPreformatted" }
+    }
+  ]
+}

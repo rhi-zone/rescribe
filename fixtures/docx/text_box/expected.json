@@ -1,0 +1,11 @@
+{
+  "description": "DrawingML text box content (<w:txbxContent>, reached through foreign-namespace wps:txbx/DrawingML shape XML captured only as opaque raw XML) has its text extracted into a div carrying docx:frame-type=textbox; shape geometry/position are not modeled (reasonable subset -- see COVERAGE.md)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "paragraph" },
+    { "path": "/0/0",     "kind": "div", "props": { "docx:frame-type": "textbox" } },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Text box content" } }
+  ]
+}

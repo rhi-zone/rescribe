@@ -1,6 +1,6 @@
 use ooxml_wml::CoreProperties;
 use ooxml_wml::types;
-use ooxml_wml::writer::{DocumentBuilder, Drawing, ListType};
+use ooxml_wml::writer::{DocumentBuilder, Drawing, ListType, NumberingLevel};
 use rescribe_core::{
     ConversionResult, Document, EmitError, FidelityWarning, Node, PropValue, ResourceId, Severity,
     WarningKind,
@@ -365,40 +365,37 @@ fn convert_node(
             emit_image_to_para(para, node, image_map);
         }
         node::LIST => {
-            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let list_type = if ordered {
-                ListType::Decimal
-            } else {
-                ListType::Bullet
-            };
-            let num_id = builder.add_list(list_type);
-            for child in &node.children {
-                match child.kind.as_str() {
-                    node::LIST_ITEM => {
-                        let para = builder.body_mut().add_paragraph();
-                        para.set_numbering(num_id, 0);
-                        write_inline_to_para(
-                            para,
-                            &child.children,
-                            &FormattingState::default(),
-                            warnings,
-                            hyperlink_map,
-                            footnote_map,
-                            image_map,
-                        );
+            // Collect one numbering-level definition per nesting depth this
+            // list tree uses (a `list_item` whose children include a nested
+            // `list` node -- see read.rs's `ListFrame`/`close_list_frame`),
+            // then register a single custom multi-level list for the whole
+            // tree so nested items land at the right `ilvl` under one
+            // `numId`, instead of the old flat behavior (every `list_item`
+            // written at ilvl 0, silently discarding nesting).
+            let mut level_ordered: HashMap<u32, bool> = HashMap::new();
+            collect_list_levels(node, 0, &mut level_ordered);
+            let max_depth = level_ordered.keys().copied().max().unwrap_or(0);
+            let levels: Vec<NumberingLevel> = (0..=max_depth)
+                .map(|d| {
+                    let ordered = level_ordered.get(&d).copied().unwrap_or(false);
+                    if ordered {
+                        NumberingLevel::decimal(d)
+                    } else {
+                        NumberingLevel::bullet(d)
                     }
-                    _ => {
-                        convert_node(
-                            builder,
-                            child,
-                            warnings,
-                            hyperlink_map,
-                            footnote_map,
-                            image_map,
-                        )?;
-                    }
-                }
-            }
+                })
+                .collect();
+            let num_id = builder.add_custom_list(levels);
+            write_list_items(
+                builder,
+                node,
+                0,
+                num_id,
+                warnings,
+                hyperlink_map,
+                footnote_map,
+                image_map,
+            )?;
         }
         node::LIST_ITEM => {
             // List item outside a list — emit as bullet paragraph
@@ -426,30 +423,80 @@ fn convert_node(
             )?;
         }
         node::CODE_BLOCK => {
-            warn(
-                warnings,
-                "code_block emitted as plain paragraph; monospace styling and language lost",
-            );
-            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+            // Restore the exact source `pStyle` if the reader captured one
+            // (see read.rs's `code_block_style`); otherwise fall back to
+            // Word's own built-in preformatted style so the output is still
+            // recognizable as code when opened in Word.
+            let style = node
+                .props
+                .get_str("docx:pStyle")
+                .unwrap_or("HTMLPreformatted")
+                .to_string();
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let para = builder.body_mut().add_paragraph();
-            para.add_run().set_text(content);
+            para.set_properties(types::ParagraphProperties {
+                paragraph_style: Some(Box::new(types::CTString {
+                    value: style,
+                    extra_attrs: Default::default(),
+                })),
+                ..Default::default()
+            });
+            para.add_run().set_text(&content);
         }
         node::BLOCKQUOTE => {
-            warn(warnings, "blockquote flattened; indentation/styling lost");
+            // Indentation is the construct's defining feature (see read.rs's
+            // `is_blockquote_para`); restore the captured twips (or the
+            // detection threshold's default if this blockquote node didn't
+            // come from a DOCX read.rs invocation) on every child paragraph.
+            let indent_left = node.props.get_int("docx:indent-left").unwrap_or(720) as u32;
+            let indent_right = node.props.get_int("docx:indent-right").unwrap_or(720) as u32;
             for child in &node.children {
-                convert_node(
-                    builder,
-                    child,
-                    warnings,
-                    hyperlink_map,
-                    footnote_map,
-                    image_map,
-                )?;
+                if child.kind.as_str() == node::PARAGRAPH {
+                    let para = builder.body_mut().add_paragraph();
+                    apply_para_props(para, child);
+                    para.set_indent_left(indent_left);
+                    para.set_indent_right(indent_right);
+                    write_inline_to_para(
+                        para,
+                        &child.children,
+                        &FormattingState::default(),
+                        warnings,
+                        hyperlink_map,
+                        footnote_map,
+                        image_map,
+                    );
+                } else {
+                    convert_node(
+                        builder,
+                        child,
+                        warnings,
+                        hyperlink_map,
+                        footnote_map,
+                        image_map,
+                    )?;
+                }
             }
+        }
+        node::HORIZONTAL_RULE => {
+            // An empty paragraph with just a bottom paragraph border (see
+            // read.rs's `detect_horizontal_rule`).
+            let para = builder.body_mut().add_paragraph();
+            apply_para_border(para, node, "hr", "bottom");
         }
         node::FOOTNOTE_DEF => {
             // Footnote defs at document level: content was already written during
             // pre-registration. Skip.
+        }
+        node::DIV
+            if node.props.get_str("docx:sdt-tag").is_some()
+                || node.props.get_str("docx:sdt-alias").is_some()
+                || node.props.get_str("docx:sdt-type").is_some() =>
+        {
+            let sdt = build_sdt_block(node, warnings, hyperlink_map, footnote_map, image_map)?;
+            builder
+                .body_mut()
+                .block_content
+                .push(types::BlockContent::Sdt(Box::new(sdt)));
         }
         other => {
             // For unhandled block nodes, warn and try to preserve content.
@@ -605,15 +652,48 @@ fn apply_para_props(para: &mut types::Paragraph, node: &Node) {
         }));
     }
     // Paragraph border
-    apply_para_border(para, node, "top");
-    apply_para_border(para, node, "bottom");
-    apply_para_border(para, node, "left");
-    apply_para_border(para, node, "right");
+    apply_para_border(para, node, "para", "top");
+    apply_para_border(para, node, "para", "bottom");
+    apply_para_border(para, node, "para", "left");
+    apply_para_border(para, node, "para", "right");
+    // Paragraph frame (`<w:framePr>`; see read.rs's matching comment).
+    if node.props.get_bool("docx:frame").unwrap_or(false) {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.frame_pr = Some(Box::new(types::CTFramePr {
+            width: node
+                .props
+                .get_str("docx:frame-width")
+                .map(|s| s.to_string()),
+            height: node
+                .props
+                .get_str("docx:frame-height")
+                .map(|s| s.to_string()),
+            wrap: node
+                .props
+                .get_str("docx:frame-wrap")
+                .and_then(|s| s.parse().ok()),
+            h_anchor: node
+                .props
+                .get_str("docx:frame-h-anchor")
+                .and_then(|s| s.parse().ok()),
+            v_anchor: node
+                .props
+                .get_str("docx:frame-v-anchor")
+                .and_then(|s| s.parse().ok()),
+            x: node.props.get_str("docx:frame-x").map(|s| s.to_string()),
+            y: node.props.get_str("docx:frame-y").map(|s| s.to_string()),
+            ..Default::default()
+        }));
+    }
 }
 
-/// Re-apply a raw-preserved `docx:para-border-{side}` prop to a paragraph.
-fn apply_para_border(para: &mut types::Paragraph, node: &Node, side: &str) {
-    let Some(raw) = node.props.get_str(&format!("docx:para-border-{side}")) else {
+/// Re-apply a raw-preserved `docx:{scope}-border-{side}` prop to a paragraph
+/// (`scope` is `"para"` for ordinary paragraph borders, `"hr"` for the
+/// bottom-only border read.rs uses to detect/emit a horizontal rule).
+fn apply_para_border(para: &mut types::Paragraph, node: &Node, scope: &str, side: &str) {
+    let Some(raw) = node.props.get_str(&format!("docx:{scope}-border-{side}")) else {
         return;
     };
     let mut parts = raw.splitn(3, ';');
@@ -712,6 +792,232 @@ fn emit_image_to_para(
         let run = para.add_run();
         run.add_drawing(ct_drawing.clone());
     }
+}
+
+/// Build a `<w:sdt>` (structured document tag) block from a `div` node
+/// carrying `docx:sdt-*` raw props (see read.rs's `convert_sdt_block`).
+/// Only `paragraph`/`heading`, `table`, and nested `div`-as-SDT children are
+/// supported inside the content control; anything else is dropped with a
+/// fidelity warning (a reasonable subset -- SDT content covers the full
+/// block-content grammar, and this bridge doesn't have a use case for
+/// permission ranges/proof errors/etc. nested inside a content control).
+fn build_sdt_block(
+    node: &Node,
+    warnings: &mut Vec<FidelityWarning>,
+    hyperlink_map: &HashMap<String, String>,
+    footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
+) -> Result<types::CTSdtBlock, EmitError> {
+    let mut block_content = Vec::new();
+    for child in &node.children {
+        match child.kind.as_str() {
+            node::PARAGRAPH | node::HEADING => {
+                let mut para = types::Paragraph::default();
+                apply_para_props(&mut para, child);
+                write_inline_to_para(
+                    &mut para,
+                    &child.children,
+                    &FormattingState::default(),
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+                block_content.push(types::BlockContentChoice::P(Box::new(para)));
+            }
+            node::TABLE => {
+                let mut table = types::Table {
+                    range_markup: Vec::new(),
+                    table_properties: Box::new(types::TableProperties::default()),
+                    tbl_grid: Box::new(types::TableGrid::default()),
+                    rows: Vec::new(),
+                    extra_children: Vec::new(),
+                };
+                write_table_into(
+                    &mut table,
+                    child,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                )?;
+                block_content.push(types::BlockContentChoice::Tbl(Box::new(table)));
+            }
+            node::DIV
+                if child.props.get_str("docx:sdt-tag").is_some()
+                    || child.props.get_str("docx:sdt-alias").is_some()
+                    || child.props.get_str("docx:sdt-type").is_some() =>
+            {
+                let nested =
+                    build_sdt_block(child, warnings, hyperlink_map, footnote_map, image_map)?;
+                block_content.push(types::BlockContentChoice::Sdt(Box::new(nested)));
+            }
+            other => {
+                warn(
+                    warnings,
+                    format!("'{}' inside SDT content not supported; dropped", other),
+                );
+            }
+        }
+    }
+
+    let mut sdt_pr = types::CTSdtPr::default();
+    if let Some(tag) = node.props.get_str("docx:sdt-tag") {
+        sdt_pr.tag = Some(Box::new(types::CTString {
+            value: tag.to_string(),
+            extra_attrs: Default::default(),
+        }));
+    }
+    if let Some(alias) = node.props.get_str("docx:sdt-alias") {
+        sdt_pr.alias = Some(Box::new(types::CTString {
+            value: alias.to_string(),
+            extra_attrs: Default::default(),
+        }));
+    }
+    if let Some(sdt_type) = node.props.get_str("docx:sdt-type") {
+        apply_sdt_type(&mut sdt_pr, sdt_type);
+    }
+
+    Ok(types::CTSdtBlock {
+        sdt_pr: Some(Box::new(sdt_pr)),
+        sdt_end_pr: None,
+        sdt_content: Some(Box::new(types::CTSdtContentBlock {
+            block_content,
+            extra_children: Vec::new(),
+        })),
+        extra_children: Vec::new(),
+    })
+}
+
+/// Set the one `CTSdtPr` "type" child matching a `docx:sdt-type` value
+/// raw-preserved by read.rs's `sdt_type_name`. Sub-structure of the
+/// richer variants (`text`, `comboBox`, `dropDownList`, `date`,
+/// `docPartObj`, `docPartList`) isn't itself raw-preserved, so round-trip
+/// restores the *kind* of content control but not e.g. a combo box's list
+/// of choices -- a known, documented limitation of this reasonable-subset
+/// SDT implementation (see COVERAGE.md).
+fn apply_sdt_type(pr: &mut types::CTSdtPr, sdt_type: &str) {
+    match sdt_type {
+        "text" => pr.text = Some(Box::new(types::CTSdtText::default())),
+        "comboBox" => pr.combo_box = Some(Box::new(types::CTSdtComboBox::default())),
+        "dropDownList" => pr.drop_down_list = Some(Box::new(types::CTSdtDropDownList::default())),
+        "date" => pr.date = Some(Box::new(types::CTSdtDate::default())),
+        "richText" => pr.rich_text = Some(Box::new(types::CTEmpty)),
+        "picture" => pr.picture = Some(Box::new(types::CTEmpty)),
+        "citation" => pr.citation = Some(Box::new(types::CTEmpty)),
+        "group" => pr.group = Some(Box::new(types::CTEmpty)),
+        "bibliography" => pr.bibliography = Some(Box::new(types::CTEmpty)),
+        "equation" => pr.equation = Some(Box::new(types::CTEmpty)),
+        "docPartObj" => pr.doc_part_obj = Some(Box::new(types::CTSdtDocPart::default())),
+        "docPartList" => pr.doc_part_list = Some(Box::new(types::CTSdtDocPart::default())),
+        _ => {}
+    }
+}
+
+/// Walk a `list` IR node (and any `list` nodes nested inside its
+/// `list_item` children) recording the `ordered` flag seen at each nesting
+/// depth. If a depth is reached by more than one list in the tree with
+/// different `ordered` values, the first one encountered (document order)
+/// wins -- DOCX's numbering levels are per-`numId`, not per-list-node, so a
+/// single custom list can only carry one format per depth.
+fn collect_list_levels(list_node: &Node, depth: u32, levels: &mut HashMap<u32, bool>) {
+    let ordered = list_node.props.get_bool(prop::ORDERED).unwrap_or(false);
+    levels.entry(depth).or_insert(ordered);
+    for item in &list_node.children {
+        if item.kind.as_str() != node::LIST_ITEM {
+            continue;
+        }
+        // A raw-preserved `docx:ilvl` (see read.rs) can exceed the tree
+        // depth in a level-skipping source list; make sure a level
+        // definition still exists for it so `write_list_items`'s
+        // `set_numbering(num_id, ilvl)` never references an undefined level.
+        if let Some(raw_ilvl) = item.props.get_int("docx:ilvl") {
+            levels.entry(raw_ilvl as u32).or_insert(ordered);
+        }
+        for child in &item.children {
+            if child.kind.as_str() == node::LIST {
+                collect_list_levels(child, depth + 1, levels);
+            }
+        }
+    }
+}
+
+/// Write a `list` node's items at the given depth, recursing into any
+/// nested `list` node found among a `list_item`'s children at `depth + 1`.
+/// All items across the whole nested tree share one `num_id` (registered by
+/// the caller via `collect_list_levels` + `add_custom_list`); only `ilvl`
+/// changes with depth.
+#[allow(clippy::too_many_arguments)]
+fn write_list_items(
+    builder: &mut DocumentBuilder,
+    list_node: &Node,
+    depth: u32,
+    num_id: u32,
+    warnings: &mut Vec<FidelityWarning>,
+    hyperlink_map: &HashMap<String, String>,
+    footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
+) -> Result<(), EmitError> {
+    for item in &list_node.children {
+        if item.kind.as_str() != node::LIST_ITEM {
+            continue;
+        }
+        let para = builder.body_mut().add_paragraph();
+        // Prefer the raw-preserved source `ilvl` (see read.rs's `docx:ilvl`
+        // comment) over the depth recomputed from IR nesting structure --
+        // this restores level-skipping numbering (e.g. a list that starts
+        // directly at ilvl=2) that the tree-derived depth can't represent.
+        let ilvl = item
+            .props
+            .get_int("docx:ilvl")
+            .map(|v| v as u32)
+            .unwrap_or(depth);
+        para.set_numbering(num_id, ilvl);
+        let inline_children: Vec<&Node> = item
+            .children
+            .iter()
+            .filter(|c| c.kind.as_str() != node::LIST)
+            .collect();
+        // write_inline_to_para takes owned slices of Node, not references;
+        // items without a nested list can pass their children directly.
+        if inline_children.len() == item.children.len() {
+            write_inline_to_para(
+                para,
+                &item.children,
+                &FormattingState::default(),
+                warnings,
+                hyperlink_map,
+                footnote_map,
+                image_map,
+            );
+        } else {
+            let owned: Vec<Node> = inline_children.into_iter().cloned().collect();
+            write_inline_to_para(
+                para,
+                &owned,
+                &FormattingState::default(),
+                warnings,
+                hyperlink_map,
+                footnote_map,
+                image_map,
+            );
+        }
+        for child in &item.children {
+            if child.kind.as_str() == node::LIST {
+                write_list_items(
+                    builder,
+                    child,
+                    depth + 1,
+                    num_id,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                )?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A real (non-continuation) cell, positioned on the table grid.
@@ -924,6 +1230,7 @@ struct FormattingState {
     font: Option<String>,
     font_size_half_pts: Option<i64>,
     language: Option<String>,
+    run_style: Option<String>,
 }
 
 /// Walk inline nodes and emit runs into `para`.
@@ -1118,12 +1425,20 @@ fn write_inline_to_para(
                 );
             }
             node::CODE => {
-                // Code inline — no monospace font available in base DOCX without
-                // a style definition; just recurse for now.
+                // Restore the exact source `rStyle` if the reader captured
+                // one (see read.rs's `is_code_run_style`); otherwise fall
+                // back to Word's own built-in monospace run style.
+                let mut next = fmt.clone();
+                next.run_style = Some(
+                    node.props
+                        .get_str("docx:rStyle")
+                        .unwrap_or("HTMLTypewriter")
+                        .to_string(),
+                );
                 write_inline_to_para(
                     para,
                     &node.children,
-                    fmt,
+                    &next,
                     warnings,
                     hyperlink_map,
                     footnote_map,
@@ -1154,6 +1469,17 @@ fn write_inline_to_para(
             node::SOFT_BREAK => {
                 // DOCX has no "soft wrap" markup; a soft break reflows as a space.
                 emit_run(para, " ", fmt);
+            }
+            node::RAW_INLINE if node.props.get_str("docx:field-instr").is_some() => {
+                write_field_to_para(
+                    para,
+                    node,
+                    fmt,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
             }
             node::RAW_INLINE if node.props.get_str(prop::FORMAT) == Some("docx") => {
                 write_raw_docx_marker(para, node);
@@ -1220,6 +1546,80 @@ fn flatten_text(nodes: &[Node], out: &mut String) {
 /// Re-emit a raw-preserved bookmark/comment-range marker (see read.rs's
 /// `raw_inline` construction for BookmarkStart/End and
 /// CommentRangeStart/End) as the matching `ParagraphContent` variant.
+/// Re-emit a raw-preserved complex field (see read.rs's `FieldPhase`/
+/// `convert_run` field-code handling) as the `fldChar[begin]` /
+/// `instrText` / `fldChar[separate]` / display-content / `fldChar[end]`
+/// run sequence.
+fn write_field_to_para(
+    para: &mut types::Paragraph,
+    node: &Node,
+    fmt: &FormattingState,
+    warnings: &mut Vec<FidelityWarning>,
+    hyperlink_map: &HashMap<String, String>,
+    footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
+) {
+    let instr = node.props.get_str("docx:field-instr").unwrap_or("");
+
+    let begin_run = para.add_run();
+    apply_run_formatting(begin_run, fmt);
+    begin_run
+        .run_content
+        .push(types::RunContent::FldChar(Box::new(field_char(
+            types::STFldCharType::Begin,
+        ))));
+
+    if !instr.is_empty() {
+        let instr_run = para.add_run();
+        apply_run_formatting(instr_run, fmt);
+        instr_run
+            .run_content
+            .push(types::RunContent::InstrText(Box::new(types::Text {
+                text: Some(instr.to_string()),
+                extra_children: Vec::new(),
+            })));
+    }
+
+    let separate_run = para.add_run();
+    apply_run_formatting(separate_run, fmt);
+    separate_run
+        .run_content
+        .push(types::RunContent::FldChar(Box::new(field_char(
+            types::STFldCharType::Separate,
+        ))));
+
+    write_inline_to_para(
+        para,
+        &node.children,
+        fmt,
+        warnings,
+        hyperlink_map,
+        footnote_map,
+        image_map,
+    );
+
+    let end_run = para.add_run();
+    apply_run_formatting(end_run, fmt);
+    end_run
+        .run_content
+        .push(types::RunContent::FldChar(Box::new(field_char(
+            types::STFldCharType::End,
+        ))));
+}
+
+fn field_char(fld_char_type: types::STFldCharType) -> types::CTFldChar {
+    types::CTFldChar {
+        fld_char_type,
+        fld_lock: None,
+        dirty: None,
+        fld_data: None,
+        ff_data: None,
+        numbering_change: None,
+        extra_attrs: Default::default(),
+        extra_children: Vec::new(),
+    }
+}
+
 fn write_raw_docx_marker(para: &mut types::Paragraph, node: &Node) {
     if let Some(id) = node.props.get_str("docx:bookmark-start-id") {
         let name = node.props.get_str("docx:bookmark-start-name").unwrap_or("");
@@ -1354,6 +1754,15 @@ fn emit_run_content(run: &mut types::Run, text: &str, fmt: &FormattingState) {
 
 /// Apply formatting (but not text content) to a run.
 fn apply_run_formatting(run: &mut types::Run, fmt: &FormattingState) {
+    if let Some(ref style) = fmt.run_style {
+        let rpr = run
+            .r_pr
+            .get_or_insert_with(|| Box::new(types::RunProperties::default()));
+        rpr.run_style = Some(Box::new(types::CTString {
+            value: style.clone(),
+            extra_attrs: Default::default(),
+        }));
+    }
     if fmt.bold {
         run.set_bold(true);
     }

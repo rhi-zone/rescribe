@@ -1,0 +1,22 @@
+{
+  "description": "A paragraph frame (<w:framePr>, the pre-DrawingML text-frame-around-a-paragraph mechanism) is raw-preserved as docx:frame-* props; no cross-format equivalent construct exists",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",  "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": {
+        "docx:frame": true,
+        "docx:frame-width": "4320",
+        "docx:frame-height": "1440",
+        "docx:frame-wrap": "around",
+        "docx:frame-h-anchor": "page",
+        "docx:frame-v-anchor": "page",
+        "docx:frame-x": "1440",
+        "docx:frame-y": "1440"
+      }
+    },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Framed paragraph." } }
+  ]
+}

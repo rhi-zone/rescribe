@@ -1,0 +1,14 @@
+{
+  "description": "The source <w:numPr> (numId + ilvl) is raw-preserved on each list_item as docx:num-id/docx:ilvl, separate from the ordered/bullet detection already covered by the list/list_ordered fixtures",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",    "kind": "document" },
+    { "path": "/0",   "kind": "list", "props": { "ordered": true } },
+    {
+      "path": "/0/0",
+      "kind": "list_item",
+      "props": { "docx:num-id": 1, "docx:ilvl": 0 }
+    },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Numbered item" } }
+  ]
+}
