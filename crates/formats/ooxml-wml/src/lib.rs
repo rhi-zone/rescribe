@@ -118,4 +118,4 @@ pub use types::ns;
 pub use ooxml_omml::MathZone;
 
 // Re-export numbering helpers.
-pub use numbering::{is_ordered_num_fmt, parse_numbering_order};
+pub use numbering::{is_ordered_num_fmt, parse_numbering_levels, parse_numbering_order};

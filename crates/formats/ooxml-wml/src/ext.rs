@@ -756,6 +756,21 @@ pub trait DrawingExt {
 
     /// Get all image relationship IDs (inline + anchored).
     fn all_image_rel_ids(&self) -> Vec<&str>;
+
+    /// Extract the text content of every `<w:txbxContent>` found anywhere
+    /// in this drawing's DrawingML shape tree (`wps:txbx`/`v:textbox`
+    /// content), one `String` per `<w:p>` paragraph inside it (paragraphs
+    /// within one `txbxContent` are joined `\n`-separated within that
+    /// string; multiple `txbxContent` elements -- e.g. multiple text boxes
+    /// anchored to the same run -- produce separate `String`s).
+    ///
+    /// `txbxContent` itself is genuine WordprocessingML (`<w:p>`/`<w:r>`/
+    /// `<w:t>`), but it only appears nested inside foreign-namespace
+    /// DrawingML/VML shape XML (`wp:inline`/`a:graphic`/`wps:txbx` or
+    /// `v:shape`/`v:textbox`), which `CTDrawing`/`CTPicture` capture only as
+    /// opaque `extra_children` raw XML (see `ext.rs`'s existing
+    /// `collect_blip_rel_ids` for the same pattern applied to images).
+    fn txbx_content_texts(&self) -> Vec<String>;
 }
 
 #[cfg(all(feature = "wml-drawings", feature = "extra-children"))]
@@ -788,6 +803,61 @@ impl DrawingExt for types::CTDrawing {
         let mut ids = self.inline_image_rel_ids();
         ids.extend(self.anchored_image_rel_ids());
         ids
+    }
+
+    fn txbx_content_texts(&self) -> Vec<String> {
+        let mut texts = Vec::new();
+        for child in &self.extra_children {
+            if let ooxml_xml::RawXmlNode::Element(elem) = &child.node {
+                collect_txbx_content_texts(elem, &mut texts);
+            }
+        }
+        texts
+    }
+}
+
+/// Recursively search an XML element tree for `<w:txbxContent>` elements and
+/// extract one `\n`-joined string per element found (one line per `<w:p>`
+/// inside it).
+#[cfg(all(feature = "wml-drawings", feature = "extra-children"))]
+fn collect_txbx_content_texts(elem: &ooxml_xml::RawXmlElement, texts: &mut Vec<String>) {
+    if local_name_of(&elem.name) == "txbxContent" {
+        let paragraphs: Vec<String> = elem
+            .children
+            .iter()
+            .filter_map(|c| match c {
+                ooxml_xml::RawXmlNode::Element(p) if local_name_of(&p.name) == "p" => {
+                    let mut text = String::new();
+                    collect_element_text(p, &mut text);
+                    Some(text)
+                }
+                _ => None,
+            })
+            .collect();
+        texts.push(paragraphs.join("\n"));
+        return; // txbxContent elements don't nest.
+    }
+    for child in &elem.children {
+        if let ooxml_xml::RawXmlNode::Element(child_elem) = child {
+            collect_txbx_content_texts(child_elem, texts);
+        }
+    }
+}
+
+/// Recursively concatenate all `<w:t>` text descendant of an element.
+#[cfg(all(feature = "wml-drawings", feature = "extra-children"))]
+fn collect_element_text(elem: &ooxml_xml::RawXmlElement, out: &mut String) {
+    if local_name_of(&elem.name) == "t" {
+        for child in &elem.children {
+            if let ooxml_xml::RawXmlNode::Text(t) = child {
+                out.push_str(t);
+            }
+        }
+    }
+    for child in &elem.children {
+        if let ooxml_xml::RawXmlNode::Element(child_elem) = child {
+            collect_element_text(child_elem, out);
+        }
     }
 }
 

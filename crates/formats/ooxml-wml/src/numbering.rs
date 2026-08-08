@@ -15,8 +15,20 @@ use quick_xml::events::Event;
 /// level 0 `numFmt`. Decimal / roman / alphabetic → ordered (`true`);
 /// bullet → unordered (`false`).
 pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
-    // abstract_num_id → is_ordered (based on level 0 numFmt)
-    let mut abstract_ordered: HashMap<i64, bool> = HashMap::new();
+    parse_numbering_levels(xml)
+        .into_iter()
+        .filter_map(|(num_id, levels)| levels.get(&0).map(|ordered| (num_id, *ordered)))
+        .collect()
+}
+
+/// Parse the `numbering.xml` bytes and return a map from `numId` to a map of
+/// `ilvl` → `is_ordered`, covering every level defined on the referenced
+/// abstract numbering (not just level 0). Used for correctly nesting lists
+/// where sibling levels of the same `numId` mix bulleted and numbered
+/// formatting (a legal and common DOCX construct).
+pub fn parse_numbering_levels(xml: &[u8]) -> HashMap<i64, HashMap<i64, bool>> {
+    // (abstract_num_id, ilvl) → is_ordered
+    let mut abstract_ordered: HashMap<(i64, i64), bool> = HashMap::new();
     // num_id → abstract_num_id
     let mut num_to_abstract: HashMap<i64, i64> = HashMap::new();
 
@@ -25,7 +37,7 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
 
     // State: current abstract num being processed
     let mut current_abstract_id: Option<i64> = None;
-    let mut in_level0 = false;
+    let mut current_ilvl: Option<i64> = None;
     // Track nesting depth within abstractNum so we know when we exit
     let mut abstract_depth: usize = 0;
     // State: current num instance being processed
@@ -42,25 +54,23 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
                         let id = attr_i64(&e, b"abstractNumId");
                         current_abstract_id = id;
                         abstract_depth = 1;
-                        in_level0 = false;
+                        current_ilvl = None;
                     }
                     b"num" if current_abstract_id.is_none() => {
                         current_num_id = attr_i64(&e, b"numId");
                     }
                     b"lvl" if current_abstract_id.is_some() => {
                         if abstract_depth == 1 {
-                            // ilvl="0" means level 0
-                            let ilvl = attr_i64(&e, b"ilvl").unwrap_or(99);
-                            in_level0 = ilvl == 0;
+                            current_ilvl = Some(attr_i64(&e, b"ilvl").unwrap_or(0));
                         }
                         abstract_depth += 1;
                     }
-                    b"numFmt" if in_level0 => {
+                    b"numFmt" if current_ilvl.is_some() => {
                         // val attr tells us the format
                         if let Some(val) = attr_str(&e, b"val") {
                             let ordered = is_ordered_num_fmt(&val);
-                            if let Some(aid) = current_abstract_id {
-                                abstract_ordered.insert(aid, ordered);
+                            if let (Some(aid), Some(ilvl)) = (current_abstract_id, current_ilvl) {
+                                abstract_ordered.insert((aid, ilvl), ordered);
                             }
                         }
                     }
@@ -94,11 +104,11 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
                             num_to_abstract.insert(nid, val);
                         }
                     }
-                    b"numFmt" if in_level0 => {
+                    b"numFmt" if current_ilvl.is_some() => {
                         if let Some(val) = attr_str(&e, b"val") {
                             let ordered = is_ordered_num_fmt(&val);
-                            if let Some(aid) = current_abstract_id {
-                                abstract_ordered.insert(aid, ordered);
+                            if let (Some(aid), Some(ilvl)) = (current_abstract_id, current_ilvl) {
+                                abstract_ordered.insert((aid, ilvl), ordered);
                             }
                         }
                     }
@@ -112,7 +122,7 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
                     b"abstractNum" => {
                         current_abstract_id = None;
                         abstract_depth = 0;
-                        in_level0 = false;
+                        current_ilvl = None;
                     }
                     b"num" if current_abstract_id.is_none() => {
                         current_num_id = None;
@@ -120,7 +130,7 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
                     b"lvl" if current_abstract_id.is_some() => {
                         abstract_depth = abstract_depth.saturating_sub(1);
                         if abstract_depth == 1 {
-                            in_level0 = false;
+                            current_ilvl = None;
                         }
                     }
                     _ => {
@@ -137,11 +147,15 @@ pub fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
         buf.clear();
     }
 
-    // Build num_id → is_ordered
-    let mut result = HashMap::new();
+    // Build num_id → (ilvl → is_ordered)
+    let mut result: HashMap<i64, HashMap<i64, bool>> = HashMap::new();
     for (num_id, abstract_id) in &num_to_abstract {
-        let ordered = abstract_ordered.get(abstract_id).copied().unwrap_or(false);
-        result.insert(*num_id, ordered);
+        let levels: HashMap<i64, bool> = abstract_ordered
+            .iter()
+            .filter(|((aid, _), _)| aid == abstract_id)
+            .map(|((_, ilvl), ordered)| (*ilvl, *ordered))
+            .collect();
+        result.insert(*num_id, levels);
     }
     result
 }
