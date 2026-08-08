@@ -33,11 +33,11 @@
 //! # Ok::<(), ooxml_pml::Error>(())
 //! ```
 
-// Batch reader
+// Batch / streaming readers
 #[cfg(feature = "reader-batch")]
 pub mod batch;
 #[cfg(feature = "reader-batch")]
-pub use batch::BatchParser;
+pub use batch::{BatchParser, StreamingParser};
 
 pub mod error;
 pub mod ext;

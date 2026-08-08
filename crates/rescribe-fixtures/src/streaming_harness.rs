@@ -413,15 +413,33 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "pptx",
         events: ApiState::Wired,
+        // ooxml-pml::batch::StreamingParser (chunk-fed, driven by ooxml_opc::StreamingParser,
+        // per-slide XML translated via the same events()/PmlEventIter SAX machinery, slide
+        // order resolved from <p:sldIdLst> + presentation part relationships rather than ZIP
+        // entry order) was added 2026-08-08 with crate-level tests
+        // (crates/formats/ooxml-pml/src/batch.rs's `tests` module: display-order-vs-write-order,
+        // display-order-vs-filename-order, AST-reader cross-check, adversarial chunking,
+        // no-panic on empty/truncated/garbage input, missing-slide diagnostic). Still
+        // NotYetWired here specifically: this harness (rescribe-fixtures) has no fixture-driven
+        // check of its own yet — the crate-level tests establish correctness but this table
+        // tracks harness-level coverage, per this enum variant's own contract.
         streaming_parser: ApiState::NotYetWired(
-            "ooxml-pml::batch exists but not yet exercised by this harness",
+            "ooxml-pml::batch::StreamingParser exists (added 2026-08-08) with passing crate-level \
+             tests but is not yet exercised by a fixture-driven check in this harness",
         ),
-        streaming_writer: ApiState::NotYetWired(
-            "ooxml-pml::streaming::PmlWriter's non-rectangular-shape fidelity bug was \
-             already fixed and is pinned by a crate-level test, but this harness does not \
-             yet drive it against a byte-identical-to-builder check for the same \
-             full-zip-package reason as docx; tracked follow-up work",
-        ),
+        // Wired 2026-08-08: crates/rescribe-fixtures/tests/streaming_apis/ooxml_pml.rs's
+        // pml_streaming_writer_preserves_multi_slide_text drives PmlWriter through
+        // StartPresentation/StartShape/StartParagraph/StartRun/Text/new_slide()/EndPresentation,
+        // unzips the resulting PPTX (same byte-identical-to-builder-is-impossible-for-a-full-zip-
+        // package reasoning as ooxml-sml's precedent above), and checks each
+        // ppt/slides/slideN.xml part's text landed on the right slide — the two writer
+        // capabilities TODO.md's pml-writer checklist already marked done (multi-slide via
+        // new_slide(), the writer itself substantially existing) now have a real harness check.
+        // The one remaining pml-writer checklist item, shape geometry (EMU position/size needs
+        // YAML+codegen regen), is a separate, still-open fidelity gap — untouched by this check,
+        // which exercises only the text/shape/paragraph/run path with transform: None,
+        // geometry: None.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "xlsx",

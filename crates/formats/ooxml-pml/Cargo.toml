@@ -36,7 +36,7 @@ full = [
 # API-mode flags
 reader-ast = []       # Presentation::open / parse — materialised tree
 reader-streaming = [] # events() — iterator over PmlEvents (stub; impl pending)
-reader-batch = ["reader-ast"] # BatchParser — chunk-driven; buffers all input, parses on finish()
+reader-batch = ["reader-ast", "reader-streaming"] # BatchParser (buffers, parses on finish) + StreamingParser<H> (chunk-fed, O(nesting depth + largest token) via reader-streaming's per-part SAX events)
 writer-streaming = ["reader-streaming", "writer-builder"] # PmlWriter<W> — event-driven PPTX emit
 writer-builder = []   # PresentationBuilder — build and write a presentation
 # Individual feature flags (see spec/ooxml-features.yaml)
@@ -64,6 +64,7 @@ quick-xml.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 base64.workspace = true
+rescribe-format-api.workspace = true
 
 [dev-dependencies]
 zip.workspace = true

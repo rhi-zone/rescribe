@@ -15,9 +15,10 @@ use std::io::{BufReader, Cursor, Read, Seek};
 use std::path::Path;
 
 // Relationship types (ECMA-376 Part 1)
-const REL_OFFICE_DOCUMENT: &str =
+pub(crate) const REL_OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-const REL_SLIDE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+pub(crate) const REL_SLIDE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const REL_NOTES_SLIDE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
 const REL_SLIDE_MASTER: &str =
@@ -931,7 +932,12 @@ pub struct Hyperlink {
 // ============================================================================
 
 /// Parse presentation.xml to get slide relationship IDs in order.
-fn parse_presentation_slides(xml: &[u8]) -> Result<Vec<String>> {
+///
+/// `pub(crate)`: also used by [`crate::batch::StreamingParser`] to establish
+/// slide display order — PPTX slide order is defined by `<p:sldIdLst>` here,
+/// not by ZIP entry order or filename, and the streaming reader must match
+/// this same ground truth rather than re-deriving its own notion of order.
+pub(crate) fn parse_presentation_slides(xml: &[u8]) -> Result<Vec<String>> {
     let mut reader = Reader::from_reader(Cursor::new(xml));
     let mut buf = Vec::new();
     let mut slide_ids = Vec::new();
@@ -1014,7 +1020,11 @@ fn parse_notes_slide(xml: &[u8]) -> Option<String> {
 // ============================================================================
 
 /// Resolve a relative path against a base path, normalizing `..` segments.
-fn resolve_path(base: &str, target: &str) -> String {
+///
+/// `pub(crate)`: also used by [`crate::batch::StreamingParser`] (see
+/// [`parse_presentation_slides`] doc comment for why the streaming reader
+/// reuses this rather than reimplementing its own resolution).
+pub(crate) fn resolve_path(base: &str, target: &str) -> String {
     if target.starts_with('/') {
         // Absolute target — return as-is (preserve leading slash per OPC spec).
         return target.to_string();
