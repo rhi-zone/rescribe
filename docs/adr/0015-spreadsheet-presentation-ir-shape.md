@@ -135,9 +135,52 @@ three formats checked, so no flip or coordinate-system translation is needed in 
 direction. `i64` EMU gives a range of roughly 159 million miles at the extremes, matching
 OOXML's own native type's stated range exactly — not a narrowing.
 
-**Left open, not resolved by this session:** rotation representation and z-order semantics
-for ODF specifically were not verified this session. Flagged as a follow-up, not decided
-here.
+### 5. Rotation: EMU-style pattern extended, ODF projection is lossy in general
+
+Verified in a follow-up session:
+
+- ODF has no dedicated rotation-angle attribute. Rotation is expressed via `svg:transform`,
+  using an SVG-style transform-list grammar (`rotate(angle)`, combinable with `translate()`/
+  `scale()`/`matrix()`). The angle uses ODF's general `angle` datatype — unbounded-precision
+  decimal degrees by default, with optional `deg`/`grad`/`rad` suffixes.
+- The rotation pivot (the "origin of the shape's coordinate system" that `rotate()` turns
+  around) is a documented, real-world interop ambiguity in the ODF spec itself — not
+  consistently agreed on across implementations, per a cited OASIS-spec-quoting source (an
+  OpenOffice/ODF-TC contributor draft).
+- OOXML's `ST_Angle` is, by contrast, a fixed 60,000ths-of-a-degree integer, positive =
+  clockwise, pivoted at the shape's bounding-box center — a well-established, unambiguous
+  convention.
+- RTF's legacy `\shp` shape properties predate rotation support entirely: no dedicated
+  control word exists. Rotation would ride through RTF's generic named-property escape
+  hatch if present at all.
+
+Resolution: the same pattern as Decision 4's coordinate/EMU case. `position:rotation`
+stores the OOXML-style 60,000ths-of-a-degree integer projection, paired with a raw
+`odf:transform` property holding the verbatim `svg:transform` string (preserving pivot
+ambiguity and any combined translate/scale) so ODF round-trips stay exact regardless of the
+projection. OOXML→ODF is exact (a decimal string can represent the integer precisely).
+ODF→OOXML is **not** losslessly convertible in general — confirmed, not assumed — and is
+only a clean projection when the source transform is a pure `rotate()` around a
+center-equivalent pivot; anything else (a non-center pivot, or a `rotate()` combined with
+`translate()`/`scale()`/full `matrix()`) needs a fidelity warning on write, not a silent
+projection.
+
+### 6. Z-order: fully compatible across all three formats, no fallback needed
+
+Verified in a follow-up session:
+
+- ODF has an explicit `draw:z-index` (OASIS ODF spec §19.231); values increase back-to-front
+  and are independent of document order.
+- RTF has an explicit `shpz`.
+- OOXML has no explicit field: stacking is purely document order within `spTree`.
+
+Resolution: `position:z_order` stores an explicit integer always — derived from document
+order when reading OOXML-sourced content, read directly from ODF's `draw:z-index` or RTF's
+`shpz` otherwise. This round-trips losslessly in all directions: to ODF/RTF's explicit field
+directly, and to OOXML's implicit order by re-sorting children by the `z_order` value on
+write. Unlike rotation, no raw-property fallback is needed here — there is no precision-loss
+risk, only an explicit-vs-implicit representational difference that a canonical explicit
+field resolves cleanly.
 
 ## Consequences
 
@@ -149,8 +192,11 @@ here.
     `position:*`/`value:*` properties actually added to `rescribe-std`.
   - `rescribe-fmt-ooxml/src/xlsx.rs` migrated off `table`/`table_cell` onto `sheet`/
     `sheet_row`/`sheet_cell`, superseding its current paragraph-nested property placement.
-  - Rotation/z-order semantics for ODF verified before those properties are trusted for
-    ODF round-tripping.
+  - Rotation/z-order semantics for ODF are now verified (Decisions 5-6); the `odf-fmt`
+    read/write translation should implement `position:rotation`/`odf:transform` and
+    `position:z_order` per those decisions, including the write-side fidelity warning for
+    non-projectable ODF rotations (non-center pivot, or `rotate()` combined with other
+    transform-list functions).
 - Once implemented, `xlsx.rs` stops being a second, permanently-diverging pattern for
   spreadsheet content — there is one IR shape for spreadsheets, not one per format adapter.
 - `positioned_container` becomes available to RTF's currently-dropped `\shp`/`\do` shape
@@ -183,3 +229,14 @@ here.
   the twip conversion (the RTF case); ODF's arbitrary-precision decimal has no fixed
   resolution to serve as a canonical wire type, which is precisely why it is preserved
   raw alongside the EMU projection rather than promoted to canonical status itself.
+- **Storing ODF's verbatim `svg:transform` string as the sole canonical rotation
+  representation**, instead of an OOXML-style integer projection paired with a raw
+  fallback: rejected for the same reason twips/ODF-decimal was rejected as the canonical
+  coordinate unit — it would make every non-ODF reader/writer parse an SVG transform-list
+  grammar just to read a rotation angle, when only ODF has the pivot/combined-transform
+  ambiguity in the first place.
+- **Silently rounding all ODF rotations to the nearest OOXML 60,000th on write**, instead of
+  gating on a fidelity warning: rejected because a non-center pivot or a combined
+  `rotate()`+`translate()`/`scale()`/`matrix()` changes the shape's actual rendered
+  position, not just its angle — collapsing that to a bare integer without a warning is
+  exactly the silent-drop failure mode CLAUDE.md's losslessness section prohibits.
