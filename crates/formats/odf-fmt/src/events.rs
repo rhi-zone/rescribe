@@ -281,6 +281,17 @@ pub enum OdfEvent<'a> {
         data: Vec<u8>,
     },
 
+    /// Another raw-preserved package part with no cross-format IR
+    /// equivalent — `settings.xml` (application view state) or an ODF
+    /// 1.2+ RDF metadata part (`META-INF/manifest.rdf` and any other
+    /// `*.rdf` part) — carried verbatim. Mirrors
+    /// `ast::OdfDocument::extra_parts`; see that field's doc comment for
+    /// why these aren't parsed further.
+    ExtraPart {
+        name: String,
+        data: Vec<u8>,
+    },
+
     /// An element not otherwise handled, with its full XML captured verbatim
     /// (opening tag, children, closing tag) so a writer can re-emit it.
     ///
@@ -435,6 +446,22 @@ fn extract_events(input: &[u8]) -> VecDeque<OdfEvent<'static>> {
             let mut data = Vec::new();
             if f.read_to_end(&mut data).is_ok() && !data.is_empty() {
                 events.push_back(OdfEvent::EmbeddedImage {
+                    name: name.clone(),
+                    data,
+                });
+            }
+        }
+    }
+
+    // Other raw-preserved package parts — see `ast::OdfDocument::extra_parts`
+    // and `parser::parse_archive`'s matching scan.
+    for name in &file_names {
+        if (name == "settings.xml" || name.ends_with(".rdf"))
+            && let Ok(mut f) = archive.by_name(name)
+        {
+            let mut data = Vec::new();
+            if f.read_to_end(&mut data).is_ok() && !data.is_empty() {
+                events.push_back(OdfEvent::ExtraPart {
                     name: name.clone(),
                     data,
                 });

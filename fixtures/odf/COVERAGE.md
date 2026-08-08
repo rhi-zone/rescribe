@@ -1,5 +1,23 @@
 # ODF Fixture Coverage
 
+**This directory is not wired into any `rescribe-fixtures` test (found 2026-08-08).**
+`fixtures/odt/` is the actively-tested ODT fixture directory — every `[x]` below only
+means "an `input.{ext}` for this construct exists on disk," not "a test asserts anything
+about how it parses." Grep confirms no `run_format_fixtures`/`run_format_writer_fixtures`
+call anywhere in `crates/rescribe-fixtures` references `"odf"` as a format name — only
+`"odt"`, which reads `fixtures/odt/`, not this directory. See
+`fixtures/odt/COVERAGE.md`'s "Known suite fragmentation" section for the full writeup.
+
+For `.odt`-equivalent constructs, treat `fixtures/odt/COVERAGE.md` as the source of
+truth; several constructs listed as covered here (`rare-fields`, `rare-doc-stats`,
+`rare-endnote`, `rare-space-run`) have no counterpart fixture wired into the tested
+`fixtures/odt/` suite yet. `ods-body` and `odp-body` are the one genuinely distinct
+thing this directory has that `fixtures/odt/` cannot (spreadsheet/presentation bodies) —
+and per the same writeup, wiring them requires a spreadsheet/presentation `Document`
+translation in `odf-fmt`'s `rescribe` feature that does not exist yet (only `.odt`'s
+`office:text` body is translated; `.ods`/`.odp` inputs return
+`ParseError::Invalid`). Not attempted this pass; flagged rather than half-done.
+
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 

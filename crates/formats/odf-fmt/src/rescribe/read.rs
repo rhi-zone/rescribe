@@ -92,6 +92,26 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
         }
     }
 
+    // Other raw-preserved package parts (settings.xml, RDF metadata) have no
+    // IR node representation (see `ast::OdfDocument::extra_parts`), but are
+    // exposed as resources so a caller that round-trips through `Document`
+    // doesn't lose them, and so a caller that *does* want the RDF graph can
+    // get the bytes without going around this crate's `rescribe` feature.
+    for (path, data) in &odf.extra_parts {
+        if data.is_empty() {
+            continue;
+        }
+        let mime = if path.ends_with(".rdf") {
+            "application/rdf+xml"
+        } else {
+            "text/xml"
+        };
+        resources.insert(
+            ResourceId::new(),
+            Resource::new(mime, data.clone()).with_name(path.clone()),
+        );
+    }
+
     // Style maps: merge named + automatic
     let ctx = StyleCtx {
         named: &odf.named_styles,
@@ -1112,5 +1132,50 @@ mod tests {
         // Ordered detection via style name: "L1" is not a recognized ordered pattern,
         // so this tests the list structure at minimum.
         assert_eq!(list.children.len(), 2);
+    }
+
+    #[test]
+    fn settings_and_rdf_parts_exposed_as_resources_and_round_trip() {
+        use std::io::{Cursor, Write};
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
+
+        let xml = body("<text:p>Hello</text:p>");
+        let mut buf = Cursor::new(Vec::new());
+        {
+            let mut zip = ZipWriter::new(&mut buf);
+            let options = SimpleFileOptions::default();
+            zip.start_file("mimetype", options).unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.text")
+                .unwrap();
+            zip.start_file("content.xml", options).unwrap();
+            zip.write_all(xml.as_bytes()).unwrap();
+            zip.start_file("settings.xml", options).unwrap();
+            zip.write_all(b"<?xml version=\"1.0\"?><office:document-settings/>")
+                .unwrap();
+            zip.start_file("META-INF/manifest.rdf", options).unwrap();
+            zip.write_all(b"<?xml version=\"1.0\"?><rdf:RDF/>").unwrap();
+            zip.finish().unwrap();
+        }
+        let odt = buf.into_inner();
+
+        let result = parse(&odt).unwrap();
+        let has_settings = result
+            .value
+            .resources
+            .values()
+            .any(|r| r.name.as_deref() == Some("settings.xml"));
+        let has_rdf = result.value.resources.values().any(|r| {
+            r.name.as_deref() == Some("META-INF/manifest.rdf")
+                && r.mime_type == "application/rdf+xml"
+        });
+        assert!(has_settings, "settings.xml not exposed as a resource");
+        assert!(has_rdf, "manifest.rdf not exposed as a resource");
+
+        // Round-trip through the rescribe writer.
+        let bytes = crate::rescribe::write::emit(&result.value).unwrap().value;
+        let reparsed = crate::parser::parse(&bytes).unwrap().value;
+        assert!(reparsed.extra_parts.contains_key("settings.xml"));
+        assert!(reparsed.extra_parts.contains_key("META-INF/manifest.rdf"));
     }
 }

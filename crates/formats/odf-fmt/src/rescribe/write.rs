@@ -76,6 +76,18 @@ fn extension_for_mime(mime: &str) -> &'static str {
 fn convert_document(doc: &Document) -> OdfDocument {
     let mut ctx = WriteCtx::new(&doc.resources);
     let blocks = convert_nodes(&doc.content.children, &mut ctx);
+
+    // Round-trip any raw-preserved package parts (settings.xml, RDF metadata)
+    // that `rescribe::read` exposed as resources — see its comment for why
+    // these have no IR node representation.
+    let mut extra_parts = HashMap::new();
+    for resource in doc.resources.values() {
+        let Some(name) = &resource.name else { continue };
+        if resource.mime_type == "application/rdf+xml" || name == "settings.xml" {
+            extra_parts.insert(name.clone(), resource.data.clone());
+        }
+    }
+
     OdfDocument {
         mimetype: "application/vnd.oasis.opendocument.text".to_owned(),
         meta: OdfMeta {
@@ -86,6 +98,7 @@ fn convert_document(doc: &Document) -> OdfDocument {
         named_styles: build_named_styles(),
         body: OdfBody::Text(blocks),
         images: ctx.images,
+        extra_parts,
         ..OdfDocument::default()
     }
 }

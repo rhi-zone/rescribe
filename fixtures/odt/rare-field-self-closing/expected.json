@@ -1,0 +1,8 @@
+{
+  "description": "Self-closing field element (<text:date/>, no cached value) does not break parsing",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Printed on ." } }
+  ]
+}

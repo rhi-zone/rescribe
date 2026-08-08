@@ -43,6 +43,21 @@ pub fn emit(doc: &OdfDocument) -> Result<Vec<u8>, Error> {
         zip.write_all(data)?;
     }
 
+    // Other raw-preserved package parts (settings.xml, RDF metadata parts).
+    // Iterated in sorted key order (not just any `HashMap` iteration order):
+    // `events()`/`StreamingParser`'s independent reconstruction of the same
+    // `extra_parts` map starts from its own separately-hashed `HashMap`, so
+    // an unsorted iteration order here would make `emit()`'s output
+    // non-reproducible byte-for-byte across the two code paths even though
+    // the content is identical — see the `streaming_writer` cross-check in
+    // `rescribe-fixtures`.
+    let mut extra_paths: Vec<&String> = doc.extra_parts.keys().collect();
+    extra_paths.sort();
+    for path in extra_paths {
+        zip.start_file(path, deflated)?;
+        zip.write_all(&doc.extra_parts[path])?;
+    }
+
     let cursor = zip.finish()?;
     Ok(cursor.into_inner())
 }
@@ -77,6 +92,18 @@ fn build_manifest(doc: &OdfDocument) -> String {
     s.push_str(" <manifest:file-entry manifest:full-path=\"meta.xml\" manifest:media-type=\"text/xml\"/>\n");
     for path in doc.images.keys() {
         let mime = mime_from_path(path);
+        s.push_str(&format!(
+            " <manifest:file-entry manifest:full-path=\"{path}\" manifest:media-type=\"{mime}\"/>\n"
+        ));
+    }
+    let mut extra_paths: Vec<&String> = doc.extra_parts.keys().collect();
+    extra_paths.sort();
+    for path in extra_paths {
+        let mime = if path.ends_with(".rdf") {
+            "application/rdf+xml"
+        } else {
+            "text/xml"
+        };
         s.push_str(&format!(
             " <manifest:file-entry manifest:full-path=\"{path}\" manifest:media-type=\"{mime}\"/>\n"
         ));

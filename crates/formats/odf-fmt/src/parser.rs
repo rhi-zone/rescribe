@@ -92,6 +92,22 @@ fn parse_archive(
         }
     }
 
+    // Other package parts with no IR modeling target: settings.xml (app view
+    // state) and any RDF/XML metadata parts (META-INF/manifest.rdf and
+    // whatever other *.rdf parts it names) — preserved verbatim. See
+    // `OdfDocument::extra_parts`'s doc comment for why these aren't parsed.
+    let mut extra_parts = HashMap::new();
+    for name in &file_names {
+        if (name == "settings.xml" || name.ends_with(".rdf"))
+            && let Ok(mut f) = archive.by_name(name)
+        {
+            let mut data = Vec::new();
+            if f.read_to_end(&mut data).is_ok() && !data.is_empty() {
+                extra_parts.insert(name.clone(), data);
+            }
+        }
+    }
+
     // styles.xml
     let (named_styles, page_layouts) = if let Some(xml) = read_zip_text(archive, "styles.xml") {
         parse_styles_xml(&xml, diags)
@@ -123,6 +139,7 @@ fn parse_archive(
         list_styles,
         meta,
         images,
+        extra_parts,
     }
 }
 

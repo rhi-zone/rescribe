@@ -781,6 +781,47 @@ fn self_closing_field_element_is_not_dropped() {
     );
 }
 
+// ── settings.xml / RDF metadata raw preservation ────────────────────────────
+//
+// Previously dropped entirely: `settings.xml` (app view state) had no read
+// path at all, and ODF 1.2+'s package-level RDF metadata (`META-INF/
+// manifest.rdf` and any other `*.rdf` part it names) likewise went
+// unmentioned anywhere in the parser. Both have no cross-format IR
+// equivalent (implementation-specific view state; arbitrary RDF/XML
+// triples), so per CLAUDE.md's raw-preservation tier they're now carried
+// through verbatim via `OdfDocument::extra_parts` rather than parsed.
+
+#[test]
+fn settings_and_rdf_parts_round_trip_verbatim() {
+    let mut doc = minimal_text_doc();
+    doc.extra_parts.insert(
+        "settings.xml".to_string(),
+        b"<?xml version=\"1.0\"?><office:document-settings/>".to_vec(),
+    );
+    doc.extra_parts.insert(
+        "META-INF/manifest.rdf".to_string(),
+        b"<?xml version=\"1.0\"?><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/>"
+            .to_vec(),
+    );
+
+    let bytes = emit(&doc).expect("emit failed");
+    let parsed = parser::parse(&bytes).expect("parse failed").value;
+
+    assert_eq!(
+        parsed.extra_parts.get("settings.xml").map(Vec::as_slice),
+        Some(&b"<?xml version=\"1.0\"?><office:document-settings/>"[..]),
+    );
+    assert_eq!(
+        parsed
+            .extra_parts
+            .get("META-INF/manifest.rdf")
+            .map(Vec::as_slice),
+        Some(
+            &b"<?xml version=\"1.0\"?><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/>"[..]
+        ),
+    );
+}
+
 #[cfg(test)]
 mod parser_test_helpers {
     //! `parser::parse_content_xml` is crate-private; drive the same code

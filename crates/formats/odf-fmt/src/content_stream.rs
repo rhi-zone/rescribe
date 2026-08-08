@@ -447,6 +447,15 @@ fn handle_empty(
             out.push_back(OdfEvent::EndCell);
         }
         "table:table-column" => {}
+        // Self-closing field element (`<text:date/>` etc., no cached
+        // display value) — mirrors `events.rs`'s `Event::Empty` arm for
+        // `FIELD_ELEMENTS`.
+        _ if FIELD_ELEMENTS.contains(&name) => {
+            out.push_back(OdfEvent::Field {
+                name: name.to_string().into(),
+                value: std::borrow::Cow::Borrowed(""),
+            });
+        }
         _ => {}
     }
 }

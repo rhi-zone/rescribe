@@ -1,0 +1,8 @@
+{
+  "description": "settings.xml and META-INF/manifest.rdf raw-preserved alongside a normal document body",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document with settings and RDF metadata." } }
+  ]
+}

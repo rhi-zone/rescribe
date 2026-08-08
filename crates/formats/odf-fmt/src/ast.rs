@@ -29,6 +29,19 @@ pub struct OdfDocument {
     pub meta: OdfMeta,
     /// Embedded images keyed by path within the ZIP (e.g. `"Pictures/img1.png"`).
     pub images: HashMap<String, Vec<u8>>,
+    /// Other package parts with no cross-format IR equivalent, preserved
+    /// verbatim and keyed by their full ZIP path (raw-preservation tier,
+    /// per this repo's losslessness rules — see `CLAUDE.md`). Covers:
+    /// - `settings.xml` (application view state: cursor position, zoom,
+    ///   printer settings — implementation-specific, no IR modeling target).
+    /// - `META-INF/manifest.rdf` and any other `*.rdf` part — ODF 1.2+
+    ///   package-level RDF/DC metadata. RDF/XML triples (with blank nodes,
+    ///   containers, typed literals) have no cross-format equivalent in any
+    ///   format this crate's IR models, so they are preserved as opaque
+    ///   bytes rather than parsed into a triple store this crate has no use
+    ///   for. A caller that wants the graph can parse these bytes with an
+    ///   RDF/XML library of their choice.
+    pub extra_parts: HashMap<String, Vec<u8>>,
 }
 
 /// The body content of an ODF document.

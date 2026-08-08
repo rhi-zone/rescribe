@@ -113,6 +113,40 @@ fn make_odt_with_image(content_xml: &str, image_name: &str, image_bytes: Vec<u8>
     buf.into_inner()
 }
 
+/// An ODT with `content.xml` plus arbitrary extra raw ZIP parts (used for
+/// `settings.xml` / RDF metadata raw-preservation fixtures — see
+/// `ast::OdfDocument::extra_parts`).
+fn make_odt_with_parts(content_xml: &str, parts: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
+    zip.start_file("content.xml", opts).unwrap();
+    zip.write_all(content_xml.as_bytes()).unwrap();
+    for (name, data) in parts {
+        zip.start_file(*name, opts).unwrap();
+        zip.write_all(data).unwrap();
+    }
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
+fn write_fixture_parts(
+    name: &str,
+    content_xml: &str,
+    parts: &[(&str, &[u8])],
+    expected_json: &str,
+) {
+    let dir = format!("fixtures/odt/{name}");
+    std::fs::create_dir_all(&dir).unwrap();
+    let odt = make_odt_with_parts(content_xml, parts);
+    std::fs::write(format!("{dir}/input.odt"), &odt).unwrap();
+    std::fs::write(format!("{dir}/expected.json"), expected_json).unwrap();
+    println!("wrote {dir}/");
+}
+
 fn write_fixture_image(
     name: &str,
     content_xml: &str,
@@ -1874,10 +1908,12 @@ fn main() {
         "Pictures/photo.png",
         tiny_png(),
         r#"{
-  "description": "ODT draw:frame with image and caption text-box; image takes priority",
+  "description": "ODT draw:frame with image and caption text-box; both survive as a figure/caption pair",
   "category": "composition",
   "assertions": [
-    { "path": "/0", "kind": "image" }
+    { "path": "/0", "kind": "figure" },
+    { "path": "/0/0", "kind": "image" },
+    { "path": "/0/1", "kind": "caption" }
   ]
 }"#,
     );
@@ -2080,4 +2116,77 @@ fn main() {
 }"#,
         );
     }
+
+    // ── rare-field-self-closing ──────────────────────────────────────────────
+    // A self-closing field element (`<text:date/>`, no cached display text) —
+    // previously dropped entirely by both parse() and events(); see the
+    // 2026-08-06 TODO.md entry closing this gap. This fixture only asserts
+    // the surrounding paragraph structure survives (the fixture schema has
+    // no way to assert on a zero-width field with no props); the field's
+    // presence in the parsed `Inline`/`OdfEvent` stream is covered directly
+    // by `odf-fmt`'s own `roundtrip.rs` regression test.
+    write_fixture(
+        "rare-field-self-closing",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Printed on <text:date/>.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "Self-closing field element (<text:date/>, no cached value) does not break parsing",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Printed on ." } }
+  ]
+}"#,
+    );
+
+    // ── rare-settings-and-rdf ─────────────────────────────────────────────────
+    // `settings.xml` (app view state) and ODF 1.2+ package-level RDF metadata
+    // (`META-INF/manifest.rdf` and any other `*.rdf` part it names) have no
+    // cross-format IR equivalent and are raw-preserved verbatim rather than
+    // modeled — see `ast::OdfDocument::extra_parts`'s doc comment. This
+    // fixture only asserts the document body parses normally alongside them;
+    // byte-exact preservation of the raw parts is covered by odf-fmt's own
+    // `roundtrip.rs` and `rescribe/read.rs` regression tests (the fixture
+    // schema asserts against the document tree, not the ZIP package parts).
+    write_fixture_parts(
+        "rare-settings-and-rdf",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Document with settings and RDF metadata.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        &[
+            (
+                "settings.xml",
+                b"<?xml version=\"1.0\" encoding=\"UTF-8\"?><office:document-settings/>"
+                    as &[u8],
+            ),
+            (
+                "META-INF/manifest.rdf",
+                b"<?xml version=\"1.0\" encoding=\"UTF-8\"?><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/>"
+                    as &[u8],
+            ),
+        ],
+        r#"{
+  "description": "settings.xml and META-INF/manifest.rdf raw-preserved alongside a normal document body",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document with settings and RDF metadata." } }
+  ]
+}"#,
+    );
 }

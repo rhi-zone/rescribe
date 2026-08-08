@@ -9,6 +9,113 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-08: `odf-fmt`'s two open losslessness gaps (frame image+caption collision,
+self-closing field elements) closed, plus two silent-drop bugs found along the way, plus
+`settings.xml`/RDF metadata raw preservation added.** Follow-up to the 2026-08-06 assessment
+below (which found the 5-mode API itself was not the gap) and the 2026-08-03 entry further
+down that first documented the two open gaps.
+
+- **`ast::FrameContent` reshaped from an either/or enum to `{ children: Vec<FrameChild> }`.**
+  A `<draw:frame>` holding an image *and* a `<draw:text-box>` caption used to lose the
+  caption (`<draw:image>` always won) in `parser.rs`, `events.rs`, and `batch.rs` alike.
+  Every child a frame's XML has is now appended in document order and none are dropped.
+  `fixtures/odt/image-caption`'s `expected.json` updated: the frame now parses as
+  `figure > (image, caption)` instead of only `image`.
+- **Self-closing field elements** (`<text:date/>` etc. with no cached display value) —
+  previously dropped by both `parser::parse_inlines`'s and `events.rs`'s `Event::Empty`
+  arms, which only recognized the `<tag>value</tag>` form. Both now emit
+  `Inline::Field`/`OdfEvent::Field` with an empty value; the writer round-trips an
+  empty-valued field back to the self-closing form. New fixture
+  `fixtures/odt/rare-field-self-closing`.
+- **Found while fixing the above, both direct consequences of the same either/or
+  collapse:** the rescribe `write` module's `node::IMAGE` arm unconditionally dropped
+  images ("for now emit an empty span as placeholder" — no fidelity warning either), so
+  any `Document` with an image lost it entirely on `emit()`. `WriteCtx` now resolves the
+  image's `src` resource id against `doc.resources` and reconstructs a real
+  `<draw:frame><draw:image>`; a `figure` node with `image` + `caption` children
+  reconstructs both via `convert_figure_to_frame`. Separately, the streaming
+  `batch::Writer` never captured `<draw:image>` inside a *presentation* shape
+  (`<draw:frame>`/`<draw:custom-shape>` under `office:presentation`) at all — only inside
+  a text-document inline frame — so every image on a slide was dropped by the streaming
+  path specifically. Now routed to `DrawShapeContent::Image` too.
+- **`settings.xml` and ODF 1.2+ package-level RDF metadata** (`META-INF/manifest.rdf` and
+  any other `*.rdf` part it names) had no read path at all — `settings.xml` was never
+  mentioned anywhere in `parser.rs`, and RDF metadata was never looked for. Neither has a
+  cross-format IR equivalent (implementation-specific view state; arbitrary RDF/XML
+  triples with blank nodes/containers/typed literals that no format this crate's IR
+  targets can represent), so per CLAUDE.md's raw-preservation tier both are now carried
+  through verbatim via a new `ast::OdfDocument::extra_parts: HashMap<String, Vec<u8>>`,
+  written back with correct `manifest.xml` entries. Exposed through the `rescribe`
+  adapter as `Resource`s (mime `application/rdf+xml` for RDF parts) rather than IR nodes,
+  since there's no node kind for either. New fixture `fixtures/odt/rare-settings-and-rdf`
+  (asserts the surrounding document body still parses; byte-exact raw-part preservation
+  is covered by `odf-fmt`'s own Rust-level regression tests, since the fixture schema
+  asserts against the `Document` tree, not ZIP package parts).
+- **Scope decisions made explicit, not silently skipped** (see
+  `fixtures/odt/COVERAGE.md`'s new sections for the full reasoning): forms, OLE/embedded
+  objects, and digital signatures are flagged as real gaps not attempted this pass (each
+  is a substantial vertical of its own — forms have no IR equivalent to model against,
+  OLE objects are nested sub-documents the current one-`Document`-per-parse `rescribe`
+  integration point has no slot for, and digital signatures are pointless to preserve
+  without validation, which is out of scope for a document-format library). Change
+  tracking and macros are confirmed spec-fuzzy (ODF itself defines no standardized macro
+  language and is underspecified on change-tracking scope) — per CLAUDE.md's guidance
+  not to force artificial completeness where the spec doesn't define one, these fall
+  through to the existing raw-preservation catch-all rather than getting bespoke modeling.
+- **`fixtures/odf/` (a second, 30-fixture directory distinct from `fixtures/odt/`) is not
+  wired into any `rescribe-fixtures` test** — confirmed by grep: no
+  `run_format_fixtures`/`run_format_writer_fixtures` call anywhere references `"odf"` as a
+  format name, only `"odt"`. Every checkmark in `fixtures/odf/COVERAGE.md` predates this
+  finding and means "an input file exists on disk," not "a test asserts anything about
+  it." `fixtures/odf/ods-body` and `odp-body` are the one thing that directory has with no
+  `fixtures/odt/` counterpart (spreadsheet/presentation body constructs), and they can't
+  be wired into the standard fixture harness without a spreadsheet/presentation
+  `Document` translation in `odf-fmt`'s `rescribe` feature, which does not exist — the
+  `rescribe` adapter's `parse()` only handles `office:text` bodies; an `.ods`/`.odp` input
+  returns `ParseError::Invalid("Not an ODT text document...")`. That translation is a
+  vertical on the scale of the existing `.odt` translation (formulas, sheets, named
+  ranges, slides, shapes, animations) and was not attempted this pass — flagged here
+  rather than half-done. Both `fixtures/odf/COVERAGE.md` and `fixtures/odt/COVERAGE.md`
+  now document this fragmentation explicitly.
+
+Verified via `cargo test -q -p odf-fmt --all-features` (39 tests across the crate's lib
+and integration test binaries, all pass, including 7 new regression tests for the fixes
+above: 2 for the frame collision at the AST/streaming level, 1 for the field element, 2
+for the rescribe-level image/figure write fix, 2 for settings.xml/RDF preservation),
+`cargo clippy --all-targets --all-features -p odf-fmt -- -D warnings`, `cargo fmt --check`.
+
+The full `cargo test -q -p rescribe-fixtures` run was still in progress when this session
+ended and had not actually been observed to pass — a follow-up session ran it to
+completion and found it **did not** pass cleanly, catching two real, narrowly-scoped gaps
+this entry's `extra_parts`/self-closing-field work introduced or exposed, both now fixed
+(see the `content_stream.rs`/`events.rs`/`batch.rs`/`writer.rs` diffs in this commit):
+- `events()`/`batch::StreamingParser` (the true chunk-fed reader, `content_stream.rs`'s
+  `ContentDriver`) had no read path for `settings.xml`/RDF parts at all — only
+  `parser.rs`/`writer.rs` (the AST builder path) got `extra_parts` support above. Added
+  `OdfEvent::ExtraPart`, populated by `events::extract_events` and
+  `batch::Router::end_entry` (mirroring the existing `EmbeddedImage` pattern) and consumed
+  by `batch::DocBuilder::process`.
+- `content_stream.rs`'s `handle_empty` (the self-closing-element arm of the true streaming
+  parser) had no `FIELD_ELEMENTS` arm — only `events.rs`'s `Event::Empty` arm got the
+  self-closing-field fix above, so `batch::StreamingParser` alone kept dropping
+  `<text:date/>` etc. Caught by the new `rare-field-self-closing` fixture itself, via
+  `rescribe-fixtures`'s `odf::odf_streaming_parser_event_multiset_matches_events_under_adversarial_chunking`
+  cross-check.
+- Once both were fixed, `odf::odf_streaming_writer_byte_identical_to_builder_over_all_fixtures`
+  still failed intermittently (only for `rare-settings-and-rdf`, the one fixture with two
+  `extra_parts` entries): `writer.rs`'s `build_manifest` and `emit()` iterated
+  `doc.extra_parts` in raw `HashMap` order, which two independently-hashed `HashMap`s
+  holding the same two keys (one built directly by `parser::parse`, one reconstructed by
+  `batch::DocBuilder` from events) are not guaranteed to agree on — confirmed
+  non-deterministic by re-running the check 5+ times. Fixed by sorting `extra_parts` keys
+  before iterating in both places.
+
+Re-verified after these fixes: `cargo test -q -p odf-fmt --all-features` and
+`cargo test -q -p rescribe-fixtures` (full suite, 108/108 in the `streaming_apis` binary
+including both odf checks, 5 repeated runs of the odf-specific tests to confirm the
+ordering fix actually eliminated the flake rather than getting lucky), `cargo clippy
+--all-targets --all-features -p odf-fmt -- -D warnings`, `cargo fmt --check` — all clean.
+
 **2026-08-06: `odf-fmt`'s `Parse`/`Emit`/`StreamingParse` gaps closed — both were addressable,
 not load-bearing-blocked, per a same-session follow-up assessment.**
 

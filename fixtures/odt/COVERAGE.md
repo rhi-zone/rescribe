@@ -94,3 +94,119 @@ spec.
 - [x] list with many nesting levels — `path-deeply-nested-list`
 - [x] paragraph with hundreds of character runs — `path-many-char-runs`
 - [x] very large embedded image — `path-large-image`
+
+## Rare/edge inline constructs
+- [x] field elements (`<text:page-number>`, `<text:date>`, etc., both the
+      `<tag>value</tag>` and self-closing `<tag/>` forms) — `rare-fields`
+      (in `fixtures/odf/`, not wired into the `odt` fixture-suite test — see
+      the "Known suite fragmentation" note below) plus
+      `rare-field-self-closing` for the self-closing case specifically.
+      Both forms modeled as `Inline::Field`/`OdfEvent::Field`; not yet
+      surfaced as its own IR node (currently dropped as empty text on the
+      `rescribe` side unless the cached value is non-empty — see TODO.md).
+- [x] frame holding multiple children (image + caption text-box together) —
+      `image-caption` (fixed 2026-08-08; was previously an either/or loss,
+      see TODO.md)
+- [ ] ranged bookmark (`<text:bookmark-start>`/`<text:bookmark-end>` pair
+      spanning multiple runs) — currently collapsed to a single point
+      bookmark at the start position; the end position is dropped. Only a
+      `<text:bookmark>`/`<text:bookmark-start>` fixture (single point) is
+      covered (`bookmark`). Real gap, not yet fixtured or fixed.
+- [ ] index mark / table-of-contents entry (`<text:toc>`,
+      `<text:table-of-content>`, `<text:alphabetical-index>`, `<text:*-mark>`
+      family) — not modeled at all; falls through to the `Unknown`/raw-XML
+      catch-all in `parser.rs`'s block and inline readers, so structurally
+      present but not given any specific IR shape. No fixture yet.
+- [ ] change tracking (`<text:tracked-changes>`, `<text:change-start>`/
+      `<text:change-end>`, `<text:change>`) — ODF's own spec is
+      underspecified here (see CLAUDE.md's guidance on not forcing
+      artificial completeness where the spec itself doesn't define a target)
+      and this crate does not model editorial deltas as an IR construct
+      anywhere; per CLAUDE.md's raw-preservation tier this belongs as
+      `raw_inline`/`raw_block`-equivalent preservation once the AST reaches
+      that element, same as any other `Unknown` element. Falls through to
+      the existing raw-preservation catch-all already; not specifically
+      fixtured.
+
+## Master pages / list numbering (styles.xml surface)
+- [x] page layout (`<style:page-layout>`) — `page-layout`
+- [ ] master page definition (`<style:master-page>`) binding a page-layout
+      to header/footer content — `page_layouts` in the AST only captures
+      the `<style:page-layout>` geometry, not `<style:master-page>`'s
+      header/footer `<style:header>`/`<style:footer>` content. Real gap
+      (headers/footers are silently dropped — not currently raw-preserved
+      either, since `parser.rs` never visits `<office:master-styles>` at
+      all). No fixture yet.
+- [ ] list numbering format detail (`<text:list-level-style-number>`'s
+      `style:num-format`, prefix/suffix, `text:display-levels`) — the AST's
+      `list_styles: Vec<(String, bool)>` only records whether a list style
+      is ordered, not its numbering format/prefix/suffix. Real gap.
+
+## Document-level metadata beyond Dublin Core
+- [x] Dublin Core core fields, custom user-defined metadata, document
+      statistics — `meta-title`, `meta-author`, `meta-description`,
+      `meta-date`, `meta-language`, `meta-custom`, `rare-doc-stats` (in
+      `fixtures/odf/`, see fragmentation note)
+- [x] `settings.xml` (application view state — no cross-format IR meaning)
+      and ODF 1.2+ package-level RDF metadata (`META-INF/manifest.rdf` and
+      any other `*.rdf` part it names) — raw-preserved verbatim via
+      `ast::OdfDocument::extra_parts`, not parsed into an RDF triple store
+      (see that field's doc comment for why: RDF/XML triples have no
+      cross-format IR equivalent this crate's node kinds could hold, and a
+      hand-rolled RDF/XML parser is out of scope for a document-structure
+      library). `rare-settings-and-rdf`.
+
+## Out of scope for this crate (concrete reasons, not deferred)
+- **Forms** (`<office:forms>`, `<form:*>` control elements) — form controls
+  are an application/UI concept (buttons, checkboxes, list boxes bound to
+  data sources), not a document-content construct any format this crate's
+  IR targets has an equivalent for. No IR node kind fits; would need
+  raw-preservation at minimum. Not yet touched — flagged as a real gap
+  rather than silently ignored, but not attempted this pass given the size
+  (a forms model is closer in scope to a UI-toolkit serialization format
+  than a document format).
+- **OLE / embedded objects** (`<draw:object>`, `<draw:object-ole>`, embedded
+  spreadsheets/charts/formula objects as sub-documents) — each embedded
+  object is itself a nested ODF (or foreign-format) package inside the ZIP;
+  representing it losslessly means recursively parsing an embedded document
+  and attaching it as a sub-`Document`, which the current `rescribe`
+  integration point (one `Document` per top-level parse) doesn't have a
+  slot for. Real gap; not attempted this pass.
+- **Digital signatures** (`META-INF/documentsignatures.xml`) — signature
+  bytes over the *other* package parts; preserving them verbatim is
+  possible (same shape as `extra_parts`) but validating or regenerating
+  them is out of scope for a document-format library, and preserving them
+  without validating is close to pointless (any content edit invalidates
+  the signature anyway). Not attempted this pass; a future raw-preservation
+  pass could add it to `extra_parts` alongside `settings.xml`/RDF.
+- **Macros / scripting** (`Basic/`, `Scripts/` package folders,
+  `<office:scripts>`) — ODF defines no standardized macro language (each
+  implementation's Basic dialect differs); per CLAUDE.md's guidance this is
+  not a well-defined completeness target for any implementation. A
+  raw-preservation pass (same `extra_parts` shape) would be the correct
+  eventual treatment, not full modeling. Not attempted this pass.
+
+## Known suite fragmentation (documented, not fixed this pass)
+`fixtures/odf/` is a **separate, second fixture directory** for this format
+(30 subdirectories, including `.odt`/`.ods`/`.odp` fixtures with more
+constructs than this file lists: `rare-fields`, `rare-doc-stats`,
+`rare-endnote`, `rare-space-run`, `ods-body`, `odp-body`, ...) generated by
+`crates/formats/odf-fmt/tests/generate_fixtures.rs`. **It is not wired into
+any test in `rescribe-fixtures`** — grep confirms no `run_format_fixtures`
+call anywhere references `"odf"`, only `"odt"` (which reads from this
+directory, `fixtures/odt/`). `fixtures/odf/ods-body` and `fixtures/odf/
+odp-body` are the only fixtures in that directory covering a construct with
+literally no equivalent here: this crate's `rescribe` adapter
+(`src/rescribe/read.rs`) only translates `office:text` bodies — an `.ods` or
+`.odp` input returns `ParseError::Invalid("Not an ODT text document...")`.
+Building a real spreadsheet/presentation `Document` translation (formulas,
+sheets, named ranges, slides, shapes, animations) is a vertical on the
+scale of the existing `.odt` translation and was not attempted this pass —
+flagged in TODO.md rather than half-done. Until that translation exists,
+`fixtures/odf/ods-body`/`odp-body` cannot be wired into the standard
+fixture-suite harness (its `expected.json` schema asserts against a
+`Document` tree, and there is no `Document` for these bodies to assert
+against). The odf-fmt crate's own AST-level `parse()`/`emit()` round-trip
+*is* tested for spreadsheet/presentation bodies, just via
+`crates/formats/odf-fmt/tests/roundtrip.rs` Rust unit tests, not the
+language-agnostic fixture suite.

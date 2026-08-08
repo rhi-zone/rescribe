@@ -137,8 +137,11 @@ enum CurrentEntry {
     Styles(Vec<u8>),
     Content,
     Image(String, Vec<u8>),
-    /// Any other entry (`META-INF/manifest.xml`, `settings.xml`, ...) —
-    /// `events::extract_events` doesn't emit anything for these either.
+    /// A raw-preserved package part (`settings.xml`, any `*.rdf` part) — see
+    /// `ast::OdfDocument::extra_parts`.
+    Extra(String, Vec<u8>),
+    /// Any other entry (`META-INF/manifest.xml`, ...) — `events::extract_events`
+    /// doesn't emit anything for these either.
     Other,
 }
 
@@ -185,6 +188,9 @@ impl<H: Handler<OdfEvent<'static>>> Router<H> {
             _ if name.starts_with("Pictures/") || name.starts_with("media/") => {
                 CurrentEntry::Image(name.to_string(), Vec::new())
             }
+            _ if name == "settings.xml" || name.ends_with(".rdf") => {
+                CurrentEntry::Extra(name.to_string(), Vec::new())
+            }
             _ => CurrentEntry::Other,
         };
     }
@@ -198,7 +204,9 @@ impl<H: Handler<OdfEvent<'static>>> Router<H> {
             CurrentEntry::Mimetype(buf) | CurrentEntry::Meta(buf) | CurrentEntry::Styles(buf) => {
                 buf.extend_from_slice(chunk);
             }
-            CurrentEntry::Image(_, buf) => buf.extend_from_slice(chunk),
+            CurrentEntry::Image(_, buf) | CurrentEntry::Extra(_, buf) => {
+                buf.extend_from_slice(chunk);
+            }
             CurrentEntry::None | CurrentEntry::Other => {}
         }
     }
@@ -232,6 +240,11 @@ impl<H: Handler<OdfEvent<'static>>> Router<H> {
             CurrentEntry::Image(name, data) => {
                 if !data.is_empty() {
                     self.handler.handle(OdfEvent::EmbeddedImage { name, data });
+                }
+            }
+            CurrentEntry::Extra(name, data) => {
+                if !data.is_empty() {
+                    self.handler.handle(OdfEvent::ExtraPart { name, data });
                 }
             }
             CurrentEntry::None | CurrentEntry::Other => {}
@@ -998,6 +1011,9 @@ impl DocBuilder {
             }
             OdfEvent::EmbeddedImage { name, data } => {
                 self.doc.images.insert(name, data);
+            }
+            OdfEvent::ExtraPart { name, data } => {
+                self.doc.extra_parts.insert(name, data);
             }
 
             // Raw-preserved element. Where it lands depends on what is open,
