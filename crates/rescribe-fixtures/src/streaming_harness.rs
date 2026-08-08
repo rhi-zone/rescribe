@@ -407,12 +407,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         //
         // Memory-bound update (2026-08-08, same day follow-up): ooxml-opc's Event::Part
         // no longer buffers a ZIP entry's full decompressed bytes before delivery (fixed —
-        // see TODO.md's "ooxml-fmt rework" entry). word/document.xml's own bytes are still
-        // accumulated by this crate before crate::events::events runs over them (that
-        // function takes a complete &[u8]; no chunk-fed XML tokenizer exists here yet), so
-        // the memory bound for the main part is still O(part size + nesting depth) — but
-        // every other part (styles, media, core/app properties) is now dropped as it
-        // arrives, never buffered at all, which was not true before this fix.
+        // see TODO.md's "ooxml-fmt rework" entry). Every other part (styles, media,
+        // core/app properties) is dropped as it arrives, never buffered at all.
+        //
+        // Memory-bound update (2026-08-08, later same day): word/document.xml's own bytes
+        // are no longer accumulated either. crate::chunked_events::ChunkedWmlReader feeds
+        // PartData chunks directly into a chunk-resumable quick_xml::Reader-based tokenizer
+        // (the docbook-fmt technique — see that crate's batch.rs — extended to WML's
+        // read_props lookahead chains), so the memory bound for the main part is now
+        // genuinely O(nesting depth + largest in-progress token/props-element/lookahead-
+        // chain), matching WmlEventIter's own bound instead of requiring the whole part
+        // buffered first.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-wml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
              crate-level tests but is not yet exercised by a fixture-driven check in this \
@@ -448,6 +453,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // regardless). The two pre-existing buffering exceptions (parts before resolution
         // completes, slides arriving out of display order) are unchanged — see TODO.md's
         // "ooxml-fmt rework" entry.
+        //
+        // Memory-bound update (2026-08-08, later same day): per-slide XML-to-PmlEvent
+        // translation is now genuinely chunk-resumable (crate::chunked_events::
+        // ChunkedPmlTokenizer). For the common case (a slide already next in display order
+        // when its PartStart arrives), PartData chunks feed the tokenizer directly — memory
+        // for that slide is O(nesting depth + largest token/props/geometry element), not
+        // O(slide size). The two orthogonal buffering exceptions above are unchanged (when
+        // they apply, the same tokenizer is fed one accumulated blob instead of a chunk
+        // stream — still correct, not the fast path). A genuine sub-fork was found and
+        // fixed while doing this: the generated FromXml parsers for props/geometry elements
+        // silently returned partial data on Eof (unsafe against a chunk-truncated buffer) —
+        // fixed with a balanced-tag pre-scan gating the call.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-pml::batch::StreamingParser exists (added 2026-08-08) with passing crate-level \
              tests but is not yet exercised by a fixture-driven check in this harness",
@@ -480,9 +497,16 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // Memory-bound update (2026-08-08, same day follow-up): ooxml-opc's Event::Part no
         // longer buffers a ZIP entry's full decompressed bytes before delivery (fixed — see
         // TODO.md's "ooxml-fmt rework" entry). Worksheet/sharedStrings/generic classification
-        // now happens at PartStart (path + content type, never content). All three kinds
-        // still accumulate their own PartData for now — crate::events::events takes a
-        // complete &[u8], same full-slice limitation as ooxml-wml, not yet closed.
+        // now happens at PartStart (path + content type, never content).
+        //
+        // Memory-bound update (2026-08-08, later same day): worksheet parts no longer
+        // accumulate their PartData either. crate::chunked_events::ChunkedSmlEvents
+        // tokenizes a worksheet's XML incrementally as PartData chunks arrive (the
+        // docbook-fmt technique), so the bound for worksheet parts is now O(nesting depth +
+        // largest token), not O(worksheet size) — a million-row sheet streams through
+        // bounded memory. xl/sharedStrings.xml remains a deliberate, scoped exception (small
+        // bounded metadata, parsed via a typed path rather than events()); generic parts are
+        // unchanged.
         streaming_parser: ApiState::NotYetWired(
             "ooxml-sml::batch::StreamingParser<H> exists (added 2026-08-08) with passing \
              crate-level tests but is not yet exercised by a fixture-driven check in this \

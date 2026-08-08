@@ -1107,6 +1107,55 @@ Reaching true O(nesting depth) for XLSX's actual large-file case requires a
 chunk-fed XML tokenizer in this crate itself — real, scoped follow-up work, not
 attempted in this pass.
 
+**Update 2026-08-08 (later same day) — that chunk-fed XML tokenizer follow-up is
+closed, for `ooxml-wml`/`ooxml-sml`/`ooxml-pml` alike.** Investigated concretely
+(not guessed) whether quick-xml's own `Reader` could be driven incrementally
+before concluding a hand-rolled tokenizer or a thread-based adapter was required —
+found and reused a working precedent already in this codebase, `docbook-fmt`'s
+`StreamingParser::drain()` (`crates/formats/docbook-fmt/src/batch.rs`): quick-xml
+reports a truncated tag/comment/CDATA/PI/decl as `Err(Syntax(Unclosed*))`
+(unambiguous "need more data"), and the one ambiguous case — a `Text` token
+terminated by real end-of-input vs. merely running out of currently-buffered
+bytes — is resolved by checking whether the event's `buffer_position()` reached
+the full length of the currently-buffered slice. Each of the three crates now has
+its own genuinely independent, chunk-resumable `chunked_events.rs`
+(`ChunkedWmlReader`/`ChunkedSmlEvents`/`ChunkedPmlTokenizer` — CLAUDE.md's "three
+independent implementations" rule; `events()`/`WmlEventIter`/`SmlEventIter`/
+`PmlEventIter` are behaviorally unchanged, only sharing pure helper functions):
+
+- `ooxml-wml`: `word/document.xml`'s `PartData` chunks feed `ChunkedWmlReader`
+  directly, extending the technique to WML's `read_props` lookahead chains
+  (retried whole, bounded by nesting depth, if ambiguous). Achieved bound:
+  **O(nesting depth + largest in-progress token/props-element/lookahead-chain)**.
+- `ooxml-sml`: worksheet parts feed `ChunkedSmlEvents` directly; no lookahead
+  complication found (row/cell properties live on the opening tag's own
+  attributes). `xl/sharedStrings.xml` stays a deliberate, scoped, bounded-small-
+  metadata exception (same shape as `ooxml-opc`'s `[Content_Types].xml`/`.rels`).
+  Achieved bound: **O(nesting depth + largest token)** for worksheet parts.
+- `ooxml-pml`: a genuine sub-fork was found and fixed, not papered over — the
+  generated `FromXml` parsers for props/geometry elements silently returned
+  partial data on `Eof` (correct for a whole-buffer caller, unsafe against a
+  chunk-truncated buffer), fixed with a balanced-tag pre-scan gating the call so
+  they only ever see known-complete bytes. Per-slide tokenizing
+  (`ChunkedPmlTokenizer`) is chunk-fed for the common in-order case; the two
+  pre-existing, orthogonal ordering/resolution buffering exceptions are
+  unchanged. Achieved bound: **O(nesting depth + largest token/props/geometry
+  element)** in the common case.
+
+Verified per crate via adversarial chunk-size tests (1 byte through whole-buffer)
+asserting exact event-sequence equality against `events()`, a structural
+memory-bound test (large synthetic part fed in small chunks, asserting the
+tokenizer's own internal buffer stays bounded — mirrors `ooxml-opc`'s own
+`large_part_streams_as_multiple_bounded_chunks_after_content_types` test), and
+no-panic tests over truncated/arbitrary bytes. `cargo test -q` / `cargo clippy
+--all-targets --all-features -- -D warnings` / `cargo fmt --check` all clean per
+crate and workspace-wide. Full detail in the TODO.md "ooxml-fmt rework" entry.
+Reader-side memory bound for all three crates' main content part is now genuinely
+Tier-2 (O(nesting depth + largest token)), matching the target architecture —
+the remaining open OOXML streaming gaps (package-level `events()`, `parse()`
+direct-recursive-descent audit) are unrelated to this fix and tracked separately
+in TODO.md.
+
 ---
 
 ## Risk areas

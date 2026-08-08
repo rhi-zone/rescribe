@@ -5802,6 +5802,88 @@ depth + largest token) memory is the primary use case, not an afterthought.
   explicitly out of this task's scope) and not silently left undocumented —
   each crate's `batch.rs` module doc now states this precisely rather than
   the old, now-inaccurate "blocked on ooxml-opc" framing.
+- [x] **The `word/document.xml`/worksheet/slide chunk-fed-XML follow-up flagged
+  immediately above — closed (2026-08-08, later same day).** Investigated
+  concretely (not assumed either way, per CLAUDE.md's "no guessing" rule)
+  whether quick-xml's own `Reader` could be driven incrementally before
+  concluding a hand-rolled tokenizer or a thread-based push-to-pull adapter
+  was required: read quick-xml 0.39.4's source directly
+  (`~/.cargo/registry/.../quick-xml-0.39.4/src/reader/{slice_reader,state}.rs`,
+  `src/errors.rs`'s `SyntaxError` enum). Finding — a truncated tag/comment/
+  CDATA/PI/decl is reported as `Err(Syntax(Unclosed*))`, unambiguously
+  distinct from a real syntax error; the one ambiguous case is plain text,
+  where quick-xml terminates a `Text` token identically whether it hit a
+  real `<` or just ran out of currently-buffered bytes. That ambiguity is
+  resolvable (check whether the event's `buffer_position()` reached the
+  full length of the currently-buffered slice) and, critically, was already
+  solved and shipped in this exact codebase: `docbook-fmt`'s
+  `StreamingParser::drain()` (`crates/formats/docbook-fmt/src/batch.rs`) —
+  a fresh disposable `Reader` per attempt over the unconsumed tail, hand-
+  tracked tag-balance state persisted across attempts, ambiguous text/props
+  held back and retried whole on the next `feed()`. That existing, tested
+  precedent is what made the fork resolvable without guessing between a
+  full hand-rolled-tokenizer rewrite and a thread+channel adapter (a real,
+  consequential architectural choice CLAUDE.md's disposition rules require
+  stopping for, absent such a precedent).
+
+  Adapted to each crate independently (three background agents, one per
+  crate, disjoint files, no worktree — CLAUDE.md's "no worktree isolation"
+  constraint holds even under agent parallelism): each got its own new
+  `chunked_events.rs` (`ChunkedWmlReader`/`ChunkedSmlEvents`/
+  `ChunkedPmlTokenizer`) — a genuinely independent, chunk-resumable
+  implementation per CLAUDE.md's "three independent implementations, not
+  derived from one another" rule (sharing only pure helper functions with
+  `events()`/`WmlEventIter`/`SmlEventIter`/`PmlEventIter`, which are
+  otherwise completely unchanged).
+  - **wml**: `word/document.xml`'s `PartData` chunks feed
+    `ChunkedWmlReader` directly. WML's props-lookahead chains (`read_props`
+    scanning past a `<w:p>`/`<w:r>`/... start tag for `pPr`/`rPr`/...,
+    recursing into a child container if one appears first) extend the
+    docbook-fmt technique: a lookahead attempt that consumes exactly to the
+    end of buffered bytes is ambiguous and is retried whole (not
+    partially committed) once more bytes arrive — bounded by nesting depth,
+    same as `WmlEventIter`'s own recursion bound. Achieved bound: O(nesting
+    depth + largest in-progress token/props-element/lookahead chain).
+  - **sml**: worksheet parts (`xl/worksheets/sheetN.xml`) feed
+    `ChunkedSmlEvents` directly. No lookahead-chain complication was found —
+    SpreadsheetML's row/cell properties live entirely on the opening tag's
+    own attributes (per `events.rs`'s existing note), so no construct needed
+    a documented exception. `xl/sharedStrings.xml` stays fully buffered — a
+    deliberate, scoped exception (small bounded metadata part, parsed via a
+    different typed path, not `events()`), the same shape as `ooxml-opc`'s
+    `[Content_Types].xml`/`.rels` exceptions. Achieved bound: O(nesting
+    depth + largest token) for worksheet parts.
+  - **pml**: a genuine sub-fork was found and resolved, not papered over:
+    the generated `FromXml` parsers for `pPr`/`rPr`/`tblPr`/`tcPr`/shape-
+    transform elements silently return partial data on `Eof` instead of
+    erroring — correct for their original whole-buffer caller, unsafe
+    against a chunk-truncated buffer (would have silently produced wrong
+    props on a chunk boundary landing mid-props-element, a real fidelity
+    violation). Fixed with a cheap balanced-tag pre-scan
+    (`element_fully_buffered`) gating the call, so the generated parsers
+    only ever see bytes already known complete. Per-slide XML tokenizing
+    (`ChunkedPmlTokenizer`) is now chunk-fed for the common case (slide
+    already in display order when its bytes start arriving); the two
+    pre-existing, orthogonal ordering/resolution buffering exceptions are
+    unchanged (when they apply, the same tokenizer is just fed one
+    accumulated blob instead of a chunk stream — still correct, not the
+    memory-bound fast path). Achieved bound: O(nesting depth + largest
+    token/props/geometry element) in the common case.
+
+  Every crate's `events()`/`parse()`/`BatchParser` are behaviorally
+  unchanged — verified via adversarial-chunk-size tests (1 byte up through
+  whole-buffer) asserting exact event-sequence equality against `events()`
+  on the same complete input, plus a structural memory-bound test per
+  crate (mirrors `ooxml-opc`'s `large_part_streams_as_multiple_bounded_
+  chunks_after_content_types`: feed a large synthetic part in small
+  chunks, assert the tokenizer's own internal buffer never grows anywhere
+  near the part's total size — evidence the fix landed, not just that
+  output stayed correct) and no-panic tests over truncated/arbitrary bytes.
+  `cargo test -q` / `cargo clippy --all-targets --all-features -- -D
+  warnings` / `cargo fmt --check` all clean for ooxml-wml/sml/pml
+  individually and for `cargo check --workspace --all-features`.
+  Commits: `853e536a04` (wml), `4762b2aa82` + `c8696d5060` (sml),
+  `52298361` (pml).
 - [ ] `parse()` as direct recursive descent (independent of events()) — not evaluated
   in the 2026-08-08 `StreamingParser<H>` pass above; unclear whether existing `parse()`
   for wml/sml/pml already meets this bar or still routes through `events()`/an
