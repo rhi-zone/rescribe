@@ -465,6 +465,50 @@ fn apply_para_props(para: &mut types::Paragraph, node: &Node) {
     }
 }
 
+/// Re-apply a raw-preserved `docx:cell-border-{side}` prop to a table cell.
+fn apply_cell_border(cell: &mut types::TableCell, node: &Node, side: &str) {
+    let Some(raw) = node.props.get_str(&format!("docx:cell-border-{side}")) else {
+        return;
+    };
+    let mut parts = raw.splitn(3, ';');
+    let (Some(style_str), Some(size_str), Some(color)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return;
+    };
+    let Ok(value) = style_str.parse::<types::STBorder>() else {
+        return;
+    };
+    let border = types::CTBorder {
+        value,
+        color: if color.is_empty() {
+            None
+        } else {
+            Some(color.to_string())
+        },
+        theme_color: None,
+        theme_tint: None,
+        theme_shade: None,
+        size: size_str.parse().ok(),
+        space: None,
+        shadow: None,
+        frame: None,
+        extra_attrs: Default::default(),
+    };
+    let tcpr = cell
+        .cell_properties
+        .get_or_insert_with(|| Box::new(types::TableCellProperties::default()));
+    let borders = tcpr
+        .tc_borders
+        .get_or_insert_with(|| Box::new(types::CTTcBorders::default()));
+    match side {
+        "top" => borders.top = Some(Box::new(border)),
+        "bottom" => borders.bottom = Some(Box::new(border)),
+        "left" => borders.left = Some(Box::new(border)),
+        "right" => borders.right = Some(Box::new(border)),
+        _ => {}
+    }
+}
+
 /// Emit an image node as a drawing run in an existing paragraph.
 fn emit_image_to_para(
     para: &mut types::Paragraph,
@@ -480,6 +524,21 @@ fn emit_image_to_para(
     }
 }
 
+/// A real (non-continuation) cell, positioned on the table grid.
+struct GridCell<'a> {
+    col: i64,
+    colspan: i64,
+    rowspan: i64,
+    node: &'a Node,
+}
+
+/// A `vMerge`-continue placeholder cell scheduled for a later row by an
+/// earlier row's `rowspan`.
+struct ContinuationCell {
+    col: i64,
+    colspan: i64,
+}
+
 fn write_table(
     builder: &mut DocumentBuilder,
     table_node: &Node,
@@ -488,30 +547,105 @@ fn write_table(
     footnote_map: &HashMap<String, i64>,
     image_map: &HashMap<String, types::CTDrawing>,
 ) -> Result<(), EmitError> {
-    let table = builder.body_mut().add_table();
+    let row_nodes: Vec<&Node> = table_node
+        .children
+        .iter()
+        .filter(|n| n.kind.as_str() == node::TABLE_ROW)
+        .collect();
 
-    for row_node in &table_node.children {
-        if row_node.kind.as_str() != node::TABLE_ROW {
-            continue;
-        }
-        let row = table.add_row();
+    // Pass 1: place every real cell on the grid (row_idx, col) using colspan
+    // to advance the column cursor within its row.
+    let mut grid: Vec<Vec<GridCell>> = Vec::with_capacity(row_nodes.len());
+    for row_node in &row_nodes {
+        let mut col = 0i64;
+        let mut cells = Vec::new();
         for cell_node in &row_node.children {
             let kind = cell_node.kind.as_str();
             if kind != node::TABLE_CELL && kind != node::TABLE_HEADER {
                 continue;
             }
-            let cell = row.add_cell();
-            for para_node in &cell_node.children {
-                let para = cell.add_paragraph();
-                write_inline_to_para(
-                    para,
-                    &para_node.children,
-                    &FormattingState::default(),
-                    warnings,
-                    hyperlink_map,
-                    footnote_map,
-                    image_map,
-                );
+            let colspan = cell_node.props.get_int(prop::COLSPAN).unwrap_or(1).max(1);
+            let rowspan = cell_node.props.get_int(prop::ROWSPAN).unwrap_or(1).max(1);
+            cells.push(GridCell {
+                col,
+                colspan,
+                rowspan,
+                node: cell_node,
+            });
+            col += colspan;
+        }
+        grid.push(cells);
+    }
+
+    // Pass 2: for every cell with rowspan > 1, schedule a vMerge-continue
+    // placeholder in each subsequent row it covers.
+    let mut continuations: Vec<Vec<ContinuationCell>> =
+        (0..row_nodes.len()).map(|_| Vec::new()).collect();
+    for (row_idx, cells) in grid.iter().enumerate() {
+        for cell in cells {
+            for offset in 1..cell.rowspan {
+                let target = row_idx + offset as usize;
+                if let Some(bucket) = continuations.get_mut(target) {
+                    bucket.push(ContinuationCell {
+                        col: cell.col,
+                        colspan: cell.colspan,
+                    });
+                }
+            }
+        }
+    }
+
+    let table = builder.body_mut().add_table();
+    for (row_idx, cells) in grid.into_iter().enumerate() {
+        let row = table.add_row();
+        // Merge real cells and scheduled continuations in column order.
+        let mut entries: Vec<(i64, Option<&GridCell>, Option<&ContinuationCell>)> = cells
+            .iter()
+            .map(|c| (c.col, Some(c), None))
+            .chain(
+                continuations[row_idx]
+                    .iter()
+                    .map(|c| (c.col, None, Some(c))),
+            )
+            .collect();
+        entries.sort_by_key(|(col, ..)| *col);
+
+        for (_, real, cont) in entries {
+            if let Some(cell) = real {
+                let cell_node = cell.node;
+                let out_cell = row.add_cell();
+                if cell.colspan > 1 {
+                    out_cell.set_grid_span(cell.colspan as u32);
+                }
+                if cell.rowspan > 1 {
+                    out_cell.set_vertical_merge(ooxml_wml::convenience::VMergeType::Restart);
+                }
+                if let Some(bg) = cell_node.props.get_str(prop::STYLE_BG_COLOR) {
+                    out_cell.set_background_color(bg);
+                }
+                apply_cell_border(out_cell, cell_node, "top");
+                apply_cell_border(out_cell, cell_node, "bottom");
+                apply_cell_border(out_cell, cell_node, "left");
+                apply_cell_border(out_cell, cell_node, "right");
+                for para_node in &cell_node.children {
+                    let para = out_cell.add_paragraph();
+                    write_inline_to_para(
+                        para,
+                        &para_node.children,
+                        &FormattingState::default(),
+                        warnings,
+                        hyperlink_map,
+                        footnote_map,
+                        image_map,
+                    );
+                }
+            } else if let Some(cont) = cont {
+                let out_cell = row.add_cell();
+                if cont.colspan > 1 {
+                    out_cell.set_grid_span(cont.colspan as u32);
+                }
+                out_cell.set_vertical_merge(ooxml_wml::convenience::VMergeType::Continue);
+                out_cell.add_paragraph();
             }
         }
     }

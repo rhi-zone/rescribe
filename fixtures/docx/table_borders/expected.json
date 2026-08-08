@@ -1,0 +1,21 @@
+{
+  "description": "DOCX table cell borders (w:tcBorders) are raw-preserved as docx:cell-border-* props (no cross-format border-style equivalent)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_row" },
+    {
+      "path": "/0/0/0",
+      "kind": "table_cell",
+      "props": {
+        "docx:cell-border-top": "single;8;FF0000",
+        "docx:cell-border-bottom": "single;8;FF0000",
+        "docx:cell-border-left": "single;8;FF0000",
+        "docx:cell-border-right": "single;8;FF0000"
+      }
+    },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Bordered cell" } }
+  ]
+}

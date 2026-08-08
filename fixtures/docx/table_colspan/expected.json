@@ -1,0 +1,15 @@
+{
+  "description": "DOCX table cell with gridSpan produces a table_cell with colspan prop; continuation cells are not double-counted",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "table" },
+    { "path": "/0/0",      "kind": "table_row" },
+    { "path": "/0/0/0",    "kind": "table_cell", "props": { "colspan": 2 } },
+    { "path": "/0/0/0/0",  "kind": "paragraph" },
+    { "path": "/0/0/0/0/0","kind": "text", "props": { "content": "Spans two columns" } },
+    { "path": "/0/1",      "kind": "table_row" },
+    { "path": "/0/1/0",    "kind": "table_cell", "props": { "colspan": null } },
+    { "path": "/0/1/1",    "kind": "table_cell" }
+  ]
+}

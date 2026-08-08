@@ -1,0 +1,17 @@
+{
+  "description": "DOCX vMerge restart/continue cells collapse into one table_cell with a rowspan prop; the continuation cell is dropped from the tree",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "table" },
+    { "path": "/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0",   "kind": "table_cell", "props": { "rowspan": 2 } },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Spans two rows" } },
+    { "path": "/0/0/1",   "kind": "table_cell", "props": { "rowspan": null } },
+    { "path": "/0/1",     "kind": "table_row", "children_count": 1 },
+    { "path": "/0/1/0",   "kind": "table_cell" },
+    { "path": "/0/1/0/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0/0", "kind": "text", "props": { "content": "B2" } }
+  ]
+}

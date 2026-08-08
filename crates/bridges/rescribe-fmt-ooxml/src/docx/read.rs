@@ -678,12 +678,23 @@ fn convert_hyperlink<R: Read + Seek>(
     Ok(Some(node.children(children)))
 }
 
+/// Tracks a currently-open vertical merge (`vMerge`) run for one grid column,
+/// so continuation cells can be folded into the originating cell's `rowspan`
+/// instead of emitted as their own (invisible) `table_cell` nodes.
+struct OpenVMerge {
+    row_idx: usize,
+    cell_idx: usize,
+    count: i64,
+}
+
 fn convert_table<R: Read + Seek>(
     converter: &mut Converter,
     doc: &mut OoxmlDocument<R>,
     table: &Table,
 ) -> Result<Node, ParseError> {
-    let mut rows = Vec::new();
+    let mut rows: Vec<Node> = Vec::new();
+    // Indexed by grid column position.
+    let mut open_merges: Vec<Option<OpenVMerge>> = Vec::new();
 
     for row in table.rows() {
         let mut cells = Vec::new();
@@ -697,9 +708,27 @@ fn convert_table<R: Read + Seek>(
             })
             .unwrap_or(false);
 
+        let mut col: usize = 0;
         for cell in row.cells() {
-            let mut cell_children = Vec::new();
+            let props = cell.properties();
+            let grid_span = props
+                .and_then(|p| p.grid_span.as_deref())
+                .map(|g| g.value.max(1) as usize)
+                .unwrap_or(1);
+            let vmerge = props.and_then(|p| p.vertical_merge.as_deref());
+            let is_continuation = vmerge
+                .is_some_and(|vm| !matches!(vm.value, Some(ooxml_wml::types::STMerge::Restart)));
 
+            if is_continuation {
+                // Fold into the merge opened by the origin (restart) cell above.
+                if let Some(Some(open)) = open_merges.get_mut(col) {
+                    open.count += 1;
+                }
+                col += grid_span;
+                continue;
+            }
+
+            let mut cell_children = Vec::new();
             for para in cell.paragraphs() {
                 if let Some(node) = convert_paragraph(converter, doc, para)? {
                     cell_children.push(node);
@@ -712,13 +741,78 @@ fn convert_table<R: Read + Seek>(
                 node::TABLE_CELL
             };
 
-            cells.push(Node::new(cell_kind).children(cell_children));
+            let mut node = Node::new(cell_kind).children(cell_children);
+            if grid_span > 1 {
+                node = node.prop(prop::COLSPAN, grid_span as i64);
+            }
+            if let Some(shd) = props.and_then(|p| p.shading.as_deref())
+                && let Some(fill) = &shd.fill
+                && fill != "auto"
+            {
+                node = node.prop(prop::STYLE_BG_COLOR, fill.clone());
+            }
+            if let Some(borders) = props.and_then(|p| p.tc_borders.as_deref()) {
+                node = apply_cell_border_prop(node, "top", borders.top.as_deref());
+                node = apply_cell_border_prop(node, "bottom", borders.bottom.as_deref());
+                node = apply_cell_border_prop(node, "left", borders.left.as_deref());
+                node = apply_cell_border_prop(node, "right", borders.right.as_deref());
+            }
+
+            cells.push(node);
+            let cell_idx = cells.len() - 1;
+
+            if open_merges.len() <= col {
+                open_merges.resize_with(col + 1, || None);
+            }
+            let starts_merge = vmerge
+                .is_some_and(|vm| matches!(vm.value, Some(ooxml_wml::types::STMerge::Restart)));
+            open_merges[col] = if starts_merge {
+                Some(OpenVMerge {
+                    row_idx: rows.len(),
+                    cell_idx,
+                    count: 1,
+                })
+            } else {
+                None
+            };
+
+            col += grid_span;
         }
 
         rows.push(Node::new(node::TABLE_ROW).children(cells));
     }
 
+    for open in open_merges.into_iter().flatten() {
+        if open.count > 1
+            && let Some(cell) = rows[open.row_idx].children.get_mut(open.cell_idx)
+        {
+            cell.props.set(prop::ROWSPAN, open.count);
+        }
+    }
+
     Ok(Node::new(node::TABLE).children(rows))
+}
+
+/// Raw-preserve one side of a table cell border as `docx:cell-border-{side}`
+/// (`"style;eighths-of-a-point;hex-color"`) — DOCX border styles (STBorder has
+/// dozens of variants: wave, dashDotStroked, threeDEmboss, ...) have no
+/// cross-format equivalent, so this follows the existing `docx:para-props`
+/// raw-preservation pattern rather than lossily narrowing to a handful of
+/// common styles.
+fn apply_cell_border_prop(
+    mut node: Node,
+    side: &str,
+    border: Option<&ooxml_wml::types::CTBorder>,
+) -> Node {
+    if let Some(b) = border {
+        let color = b.color.clone().unwrap_or_default();
+        let size = b.size.map(|s| s.to_string()).unwrap_or_default();
+        node = node.prop(
+            format!("docx:cell-border-{side}"),
+            format!("{};{};{}", b.value, size, color),
+        );
+    }
+    node
 }
 
 fn create_text_node(text: &str) -> Node {

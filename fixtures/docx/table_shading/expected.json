@@ -1,0 +1,12 @@
+{
+  "description": "DOCX table cell shading (w:shd fill) produces style:bg_color on the cell",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell", "props": { "style:bg_color": "FFFF00" } },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Shaded cell" } }
+  ]
+}

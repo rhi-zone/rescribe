@@ -236,5 +236,63 @@ fn main() {
         write_docx(&format!("{}/inline_tab_stop/input.docx", base), b);
     }
 
+    // --- table_colspan ---
+    {
+        let mut b = DocumentBuilder::new();
+        let table = b.body_mut().add_table();
+        let row1 = table.add_row();
+        let wide_cell = row1.add_cell();
+        wide_cell.set_grid_span(2);
+        wide_cell
+            .add_paragraph()
+            .add_run()
+            .set_text("Spans two columns");
+        let row2 = table.add_row();
+        row2.add_cell().add_paragraph().add_run().set_text("A2");
+        row2.add_cell().add_paragraph().add_run().set_text("B2");
+        write_docx(&format!("{}/table_colspan/input.docx", base), b);
+    }
+
+    // --- table_rowspan ---
+    {
+        use ooxml_wml::convenience::VMergeType;
+        let mut b = DocumentBuilder::new();
+        let table = b.body_mut().add_table();
+        let row1 = table.add_row();
+        let merged = row1.add_cell();
+        merged.set_vertical_merge(VMergeType::Restart);
+        merged.add_paragraph().add_run().set_text("Spans two rows");
+        row1.add_cell().add_paragraph().add_run().set_text("B1");
+        let row2 = table.add_row();
+        let cont = row2.add_cell();
+        cont.set_vertical_merge(VMergeType::Continue);
+        cont.add_paragraph();
+        row2.add_cell().add_paragraph().add_run().set_text("B2");
+        write_docx(&format!("{}/table_rowspan/input.docx", base), b);
+    }
+
+    // --- table_shading ---
+    {
+        let mut b = DocumentBuilder::new();
+        let table = b.body_mut().add_table();
+        let row = table.add_row();
+        let cell = row.add_cell();
+        cell.set_background_color("FFFF00");
+        cell.add_paragraph().add_run().set_text("Shaded cell");
+        write_docx(&format!("{}/table_shading/input.docx", base), b);
+    }
+
+    // --- table_borders ---
+    {
+        use ooxml_wml::convenience::BorderStyle;
+        let mut b = DocumentBuilder::new();
+        let table = b.body_mut().add_table();
+        let row = table.add_row();
+        let cell = row.add_cell();
+        cell.set_borders(BorderStyle::Single, 8, "FF0000");
+        cell.add_paragraph().add_run().set_text("Bordered cell");
+        write_docx(&format!("{}/table_borders/input.docx", base), b);
+    }
+
     println!("Done generating DOCX fixtures.");
 }

@@ -23,8 +23,8 @@ spec.
 - [ ] definition list — (missing)
 - [x] table — `table`
 - [x] table with header row — `table_header`
-- [ ] table with colspan/rowspan (gridSpan/vMerge) — (missing)
-- [ ] table with borders/shading — (missing)
+- [x] table with colspan/rowspan (gridSpan/vMerge) — `table_colspan`, `table_rowspan`
+- [x] table with borders/shading — `table_borders`, `table_shading`
 - [ ] code block (monospace paragraph style) — (missing)
 - [ ] blockquote (indented paragraph style) — (missing)
 - [ ] horizontal rule (`<w:p><w:pBdr><w:bottom>`) — (missing)
