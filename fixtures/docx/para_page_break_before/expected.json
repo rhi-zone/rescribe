@@ -1,0 +1,9 @@
+{
+  "description": "DOCX w:pageBreakBefore maps to the semantic layout:page_break prop (shared with the inline page-break marker)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph", "props": { "layout:page_break": true } },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Starts a new page." } }
+  ]
+}

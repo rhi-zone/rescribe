@@ -1,0 +1,9 @@
+{
+  "description": "DOCX w:keepNext/w:keepLines are raw-preserved as docx:keep-next/docx:keep-lines",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph", "props": { "docx:keep-next": true, "docx:keep-lines": true } },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Keep with next paragraph." } }
+  ]
+}

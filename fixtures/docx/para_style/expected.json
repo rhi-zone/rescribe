@@ -1,0 +1,9 @@
+{
+  "description": "DOCX w:pStyle is raw-preserved as docx:pStyle (meaningless without the source styles.xml definition)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph", "props": { "docx:pStyle": "Quote" } },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Quoted paragraph." } }
+  ]
+}

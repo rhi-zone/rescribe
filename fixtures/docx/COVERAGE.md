@@ -16,7 +16,7 @@ spec.
 ## Block constructs
 - [x] paragraph — `paragraph`
 - [x] heading — `heading`
-- [ ] heading levels 1–6 individually — (missing; `heading` covers only one level)
+- [x] heading levels 1–6 individually — `heading_levels`
 - [x] unordered list — `list`
 - [x] ordered list — `list_ordered`
 - [ ] nested list — (missing)
@@ -64,12 +64,12 @@ spec.
 - [x] paragraph alignment (left/center/right/justify) — `alignment`
 - [x] paragraph indent — `para_indent`
 - [x] paragraph spacing (before/after) — `para_spacing`
-- [ ] paragraph border — (missing)
-- [ ] paragraph shading — (missing)
-- [ ] paragraph style (`<w:pStyle>`) — (missing)
-- [ ] keep-together / keep-with-next — (missing)
-- [ ] page break before — (missing)
-- [ ] outline level — (missing)
+- [x] paragraph border — `para_border`
+- [x] paragraph shading — `para_shading`
+- [x] paragraph style (`<w:pStyle>`) — `para_style`
+- [x] keep-together / keep-with-next — `para_keep`
+- [x] page break before — `para_page_break_before`
+- [x] outline level — covered via `heading_levels`/`heading` (outlineLvl already drives heading-level detection in `detect_heading_level`; there is no separate non-heading outline-level fixture since DOCX's own semantics tie outline level to heading style)
 - [ ] numbering properties (separate from list fixture) — (missing)
 
 ## Document properties / Metadata

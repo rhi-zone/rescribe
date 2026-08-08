@@ -294,5 +294,124 @@ fn main() {
         write_docx(&format!("{}/table_borders/input.docx", base), b);
     }
 
+    // --- para_style ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            paragraph_style: Some(Box::new(types::CTString {
+                value: "Quote".to_string(),
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Quoted paragraph.");
+        write_docx(&format!("{}/para_style/input.docx", base), b);
+    }
+
+    // --- para_keep ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            keep_next: Some(Box::new(types::OnOffElement {
+                value: None,
+                extra_attrs: Default::default(),
+            })),
+            keep_lines: Some(Box::new(types::OnOffElement {
+                value: None,
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Keep with next paragraph.");
+        write_docx(&format!("{}/para_keep/input.docx", base), b);
+    }
+
+    // --- para_page_break_before ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            page_break_before: Some(Box::new(types::OnOffElement {
+                value: None,
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Starts a new page.");
+        write_docx(&format!("{}/para_page_break_before/input.docx", base), b);
+    }
+
+    // --- para_border ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        let border = types::CTBorder {
+            value: types::STBorder::Single,
+            color: Some("0000FF".to_string()),
+            theme_color: None,
+            theme_tint: None,
+            theme_shade: None,
+            size: Some(8),
+            space: None,
+            shadow: None,
+            frame: None,
+            extra_attrs: Default::default(),
+        };
+        para.set_properties(types::ParagraphProperties {
+            paragraph_border: Some(Box::new(types::CTPBdr {
+                top: Some(Box::new(border.clone())),
+                bottom: Some(Box::new(border.clone())),
+                left: Some(Box::new(border.clone())),
+                right: Some(Box::new(border)),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Bordered paragraph.");
+        write_docx(&format!("{}/para_border/input.docx", base), b);
+    }
+
+    // --- para_shading ---
+    {
+        let mut b = DocumentBuilder::new();
+        let para = b.body_mut().add_paragraph();
+        para.set_properties(types::ParagraphProperties {
+            shading: Some(Box::new(types::CTShd {
+                value: types::STShd::Clear,
+                color: None,
+                theme_color: None,
+                theme_tint: None,
+                theme_shade: None,
+                fill: Some("CCFFCC".to_string()),
+                theme_fill: None,
+                theme_fill_tint: None,
+                theme_fill_shade: None,
+                extra_attrs: Default::default(),
+            })),
+            ..Default::default()
+        });
+        para.add_run().set_text("Shaded paragraph.");
+        write_docx(&format!("{}/para_shading/input.docx", base), b);
+    }
+
+    // --- heading_levels: one heading per level 1-6, exercising pStyle-based detection ---
+    {
+        let mut b = DocumentBuilder::new();
+        for level in 1..=6u8 {
+            let para = b.body_mut().add_paragraph();
+            para.set_properties(types::ParagraphProperties {
+                paragraph_style: Some(Box::new(types::CTString {
+                    value: format!("Heading{}", level),
+                    extra_attrs: Default::default(),
+                })),
+                ..Default::default()
+            });
+            para.add_run().set_text(format!("Heading level {}", level));
+        }
+        write_docx(&format!("{}/heading_levels/input.docx", base), b);
+    }
+
     println!("Done generating DOCX fixtures.");
 }

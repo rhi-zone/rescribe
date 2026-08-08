@@ -356,7 +356,56 @@ fn apply_para_layout_props(mut node: Node, para: &Paragraph) -> Node {
     if let Some(v) = para.indent_hanging() {
         node = node.prop("docx:indent-hanging", v);
     }
+
+    if let Some(props) = para.properties() {
+        // Paragraph style: format-specific (a docx:pStyle id is meaningless outside
+        // DOCX without the accompanying styles.xml definition) — raw-preserve.
+        if let Some(style) = &props.paragraph_style {
+            node = node.prop("docx:pStyle", style.value.clone());
+        }
+        // Keep-together / keep-with-next: no cross-format equivalent construct.
+        if props.keep_next.as_deref().is_some_and(is_on_off_true) {
+            node = node.prop("docx:keep-next", true);
+        }
+        if props.keep_lines.as_deref().is_some_and(is_on_off_true) {
+            node = node.prop("docx:keep-lines", true);
+        }
+        // Page break before: real cross-format concept (LaTeX \newpage, ODT
+        // fo:break-before="page"), so it gets the semantic layout prop rather
+        // than a docx:-namespaced raw one.
+        if props
+            .page_break_before
+            .as_deref()
+            .is_some_and(is_on_off_true)
+        {
+            node = node.prop(prop::LAYOUT_PAGE_BREAK, true);
+        }
+        // Paragraph border: STBorder has dozens of format-specific styles with no
+        // cross-format equivalent (see the identical table-cell-border rationale).
+        if let Some(bdr) = &props.paragraph_border {
+            node = apply_border_prop(node, "para", "top", bdr.top.as_deref());
+            node = apply_border_prop(node, "para", "bottom", bdr.bottom.as_deref());
+            node = apply_border_prop(node, "para", "left", bdr.left.as_deref());
+            node = apply_border_prop(node, "para", "right", bdr.right.as_deref());
+        }
+        // Paragraph shading: same semantic as a cell/run background color.
+        if let Some(shd) = &props.shading
+            && let Some(fill) = &shd.fill
+            && fill != "auto"
+        {
+            node = node.prop(prop::STYLE_BG_COLOR, fill.clone());
+        }
+    }
+
     node
+}
+
+/// `true` iff an on/off element is present and not explicitly set to `false`/`0`/`off`.
+fn is_on_off_true(elem: &ooxml_wml::types::OnOffElement) -> bool {
+    match &elem.value {
+        None => true, // element present with no val → on
+        Some(v) => matches!(v.as_str(), "1" | "true" | "on"),
+    }
 }
 
 fn detect_heading_level(para: &Paragraph) -> Option<u8> {
@@ -752,10 +801,10 @@ fn convert_table<R: Read + Seek>(
                 node = node.prop(prop::STYLE_BG_COLOR, fill.clone());
             }
             if let Some(borders) = props.and_then(|p| p.tc_borders.as_deref()) {
-                node = apply_cell_border_prop(node, "top", borders.top.as_deref());
-                node = apply_cell_border_prop(node, "bottom", borders.bottom.as_deref());
-                node = apply_cell_border_prop(node, "left", borders.left.as_deref());
-                node = apply_cell_border_prop(node, "right", borders.right.as_deref());
+                node = apply_border_prop(node, "cell", "top", borders.top.as_deref());
+                node = apply_border_prop(node, "cell", "bottom", borders.bottom.as_deref());
+                node = apply_border_prop(node, "cell", "left", borders.left.as_deref());
+                node = apply_border_prop(node, "cell", "right", borders.right.as_deref());
             }
 
             cells.push(node);
@@ -793,14 +842,15 @@ fn convert_table<R: Read + Seek>(
     Ok(Node::new(node::TABLE).children(rows))
 }
 
-/// Raw-preserve one side of a table cell border as `docx:cell-border-{side}`
+/// Raw-preserve one side of a cell/paragraph border as `docx:{scope}-border-{side}`
 /// (`"style;eighths-of-a-point;hex-color"`) — DOCX border styles (STBorder has
 /// dozens of variants: wave, dashDotStroked, threeDEmboss, ...) have no
 /// cross-format equivalent, so this follows the existing `docx:para-props`
 /// raw-preservation pattern rather than lossily narrowing to a handful of
 /// common styles.
-fn apply_cell_border_prop(
+fn apply_border_prop(
     mut node: Node,
+    scope: &str,
     side: &str,
     border: Option<&ooxml_wml::types::CTBorder>,
 ) -> Node {
@@ -808,7 +858,7 @@ fn apply_cell_border_prop(
         let color = b.color.clone().unwrap_or_default();
         let size = b.size.map(|s| s.to_string()).unwrap_or_default();
         node = node.prop(
-            format!("docx:cell-border-{side}"),
+            format!("docx:{scope}-border-{side}"),
             format!("{};{};{}", b.value, size, color),
         );
     }

@@ -463,6 +463,115 @@ fn apply_para_props(para: &mut types::Paragraph, node: &Node) {
             .get_or_insert_with(|| Box::new(types::CTInd::default()));
         ind.hanging = Some(v.to_string());
     }
+    // Paragraph style (raw-preserved; meaningless without the source styles.xml)
+    if let Some(style) = node.props.get_str("docx:pStyle") {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.paragraph_style = Some(Box::new(types::CTString {
+            value: style.to_string(),
+            extra_attrs: Default::default(),
+        }));
+    }
+    if node.props.get_bool("docx:keep-next").unwrap_or(false) {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.keep_next = Some(Box::new(types::OnOffElement {
+            value: None,
+            extra_attrs: Default::default(),
+        }));
+    }
+    if node.props.get_bool("docx:keep-lines").unwrap_or(false) {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.keep_lines = Some(Box::new(types::OnOffElement {
+            value: None,
+            extra_attrs: Default::default(),
+        }));
+    }
+    // Page break before (semantic prop, shared with the inline page-break marker)
+    if node
+        .props
+        .get_bool(prop::LAYOUT_PAGE_BREAK)
+        .unwrap_or(false)
+    {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.page_break_before = Some(Box::new(types::OnOffElement {
+            value: None,
+            extra_attrs: Default::default(),
+        }));
+    }
+    // Paragraph shading
+    if let Some(fill) = node.props.get_str(prop::STYLE_BG_COLOR) {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        ppr.shading = Some(Box::new(types::CTShd {
+            value: types::STShd::Clear,
+            color: None,
+            theme_color: None,
+            theme_tint: None,
+            theme_shade: None,
+            fill: Some(fill.to_string()),
+            theme_fill: None,
+            theme_fill_tint: None,
+            theme_fill_shade: None,
+            extra_attrs: Default::default(),
+        }));
+    }
+    // Paragraph border
+    apply_para_border(para, node, "top");
+    apply_para_border(para, node, "bottom");
+    apply_para_border(para, node, "left");
+    apply_para_border(para, node, "right");
+}
+
+/// Re-apply a raw-preserved `docx:para-border-{side}` prop to a paragraph.
+fn apply_para_border(para: &mut types::Paragraph, node: &Node, side: &str) {
+    let Some(raw) = node.props.get_str(&format!("docx:para-border-{side}")) else {
+        return;
+    };
+    let mut parts = raw.splitn(3, ';');
+    let (Some(style_str), Some(size_str), Some(color)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return;
+    };
+    let Ok(value) = style_str.parse::<types::STBorder>() else {
+        return;
+    };
+    let border = types::CTBorder {
+        value,
+        color: if color.is_empty() {
+            None
+        } else {
+            Some(color.to_string())
+        },
+        theme_color: None,
+        theme_tint: None,
+        theme_shade: None,
+        size: size_str.parse().ok(),
+        space: None,
+        shadow: None,
+        frame: None,
+        extra_attrs: Default::default(),
+    };
+    let ppr = para
+        .p_pr
+        .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+    let bdr = ppr
+        .paragraph_border
+        .get_or_insert_with(|| Box::new(types::CTPBdr::default()));
+    match side {
+        "top" => bdr.top = Some(Box::new(border)),
+        "bottom" => bdr.bottom = Some(Box::new(border)),
+        "left" => bdr.left = Some(Box::new(border)),
+        "right" => bdr.right = Some(Box::new(border)),
+        _ => {}
+    }
 }
 
 /// Re-apply a raw-preserved `docx:cell-border-{side}` prop to a table cell.

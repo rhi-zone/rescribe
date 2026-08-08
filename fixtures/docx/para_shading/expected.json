@@ -1,0 +1,9 @@
+{
+  "description": "DOCX w:shd (paragraph shading) fill maps to the semantic style:bg_color prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",     "kind": "document" },
+    { "path": "/0",    "kind": "paragraph", "props": { "style:bg_color": "CCFFCC" } },
+    { "path": "/0/0",  "kind": "text", "props": { "content": "Shaded paragraph." } }
+  ]
+}

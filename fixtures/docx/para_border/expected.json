@@ -1,0 +1,18 @@
+{
+  "description": "DOCX w:pBdr (paragraph border) is raw-preserved per side as docx:para-border-{side}, same rationale as table cell borders",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",  "kind": "document" },
+    {
+      "path": "/0",
+      "kind": "paragraph",
+      "props": {
+        "docx:para-border-top": "single;8;0000FF",
+        "docx:para-border-bottom": "single;8;0000FF",
+        "docx:para-border-left": "single;8;0000FF",
+        "docx:para-border-right": "single;8;0000FF"
+      }
+    },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Bordered paragraph." } }
+  ]
+}
