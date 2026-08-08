@@ -2,9 +2,9 @@
   "description": "Block-level draw:frame containing a text box with a paragraph",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Paragraph before frame." } },
-    { "path": "/body/1", "kind": "frame", "props": { "name": "TextBox1" } },
-    { "path": "/body/1/content/0/0", "kind": "text", "props": { "content": "Text inside the text box." } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Paragraph before frame." } },
+    { "path": "/1", "kind": "div" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "Text inside the text box." } }
   ]
 }

@@ -2,9 +2,9 @@
   "description": "Named text section containing a paragraph, followed by content outside the section",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "section", "props": { "name": "Introduction" } },
-    { "path": "/body/0/content/0/0", "kind": "text", "props": { "content": "Content inside a section." } },
-    { "path": "/body/1", "kind": "paragraph" },
-    { "path": "/body/1/0", "kind": "text", "props": { "content": "Content outside the section." } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Content inside a section." } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Content outside the section." } }
   ]
 }

@@ -2,7 +2,7 @@
   "description": "Automatic paragraph style with alignment=center and margin properties",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph", "props": { "style_name": "CenteredPara" } },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Centered paragraph." } }
+    { "path": "/0", "kind": "paragraph", "props": { "odt:style-name": "CenteredPara", "style:align": "center", "style:margin-top": "0.2cm", "style:margin-bottom": "0.2cm" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Centered paragraph." } }
   ]
 }

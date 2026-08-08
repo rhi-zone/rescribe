@@ -2,12 +2,15 @@
   "description": "Inline bold and italic spans plus a line break",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Normal " } },
-    { "path": "/body/0/1", "kind": "span", "props": { "style_name": "Bold" } },
-    { "path": "/body/0/1/0", "kind": "text", "props": { "content": "bold" } },
-    { "path": "/body/0/3", "kind": "span", "props": { "style_name": "Italic" } },
-    { "path": "/body/0/3/0", "kind": "text", "props": { "content": "italic" } },
-    { "path": "/body/0/5", "kind": "line_break" }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Normal " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " and " } },
+    { "path": "/0/3", "kind": "emphasis" },
+    { "path": "/0/3/0", "kind": "text", "props": { "content": "italic" } },
+    { "path": "/0/4", "kind": "text", "props": { "content": " text." } },
+    { "path": "/0/5", "kind": "line_break" },
+    { "path": "/0/6", "kind": "text", "props": { "content": "After line break." } }
   ]
 }

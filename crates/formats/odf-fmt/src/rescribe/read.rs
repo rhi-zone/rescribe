@@ -50,6 +50,12 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
     if let Some(v) = &odf.meta.description {
         metadata.set("description", v.as_str());
     }
+    if let Some(v) = &odf.meta.subject {
+        metadata.set("subject", v.as_str());
+    }
+    if !odf.meta.keywords.is_empty() {
+        metadata.set("keywords", odf.meta.keywords.join(", "));
+    }
     if let Some(v) = &odf.meta.language {
         metadata.set("language", v.as_str());
     }

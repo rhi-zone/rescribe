@@ -2,9 +2,10 @@
   "description": "Endnote inline element (text:note with note-class=endnote)",
   "category": "rare",
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Text with an endnote" } },
-    { "path": "/body/0/1", "kind": "note", "props": { "note_class": "endnote", "id": "edn1", "citation": "i" } },
-    { "path": "/body/0/1/body/0/0", "kind": "text", "props": { "content": "This is the endnote text." } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Text with an endnote" } },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "edn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "edn1", "odt:note-class": "endnote" } },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "This is the endnote text." } }
   ]
 }

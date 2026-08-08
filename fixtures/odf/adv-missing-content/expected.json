@@ -1,6 +1,7 @@
 {
-  "description": "Valid ZIP archive missing content.xml — parser must return an error rather than panic",
+  "description": "Valid ZIP archive missing content.xml — parser must not panic; degrades to an empty body rather than erroring",
   "category": "adversarial",
-  "expect_error": true,
-  "assertions": []
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
 }

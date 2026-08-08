@@ -2,8 +2,10 @@
   "description": "Hyperlink inline element with href and title",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/1", "kind": "hyperlink", "props": { "href": "https://example.com", "title": "Example" } },
-    { "path": "/body/0/1/0", "kind": "text", "props": { "content": "this link" } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com", "title": "Example" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "this link" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " for details." } }
   ]
 }

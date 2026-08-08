@@ -5,7 +5,7 @@
     "title": "Stats Document"
   },
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Document with statistics." } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document with statistics." } }
   ]
 }

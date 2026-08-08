@@ -2,6 +2,8 @@
   "description": "List nested 20 levels deep — tests stack-depth robustness",
   "category": "pathological",
   "assertions": [
-    { "path": "/body/0", "kind": "list" }
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Item at depth 20" } }
   ]
 }

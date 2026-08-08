@@ -2,9 +2,9 @@
   "description": "Ordered list with three items and a named list style",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "list", "props": { "style_name": "Ordered_20_List_20_1" } },
-    { "path": "/body/0/items/0/content/0/0", "kind": "text", "props": { "content": "First step" } },
-    { "path": "/body/0/items/1/content/0/0", "kind": "text", "props": { "content": "Second step" } },
-    { "path": "/body/0/items/2/content/0/0", "kind": "text", "props": { "content": "Third step" } }
+    { "path": "/0", "kind": "list", "props": { "ordered": true } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First step" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second step" } },
+    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Third step" } }
   ]
 }

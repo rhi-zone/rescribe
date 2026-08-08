@@ -1,8 +1,16 @@
 {
   "description": "Document with a page layout definition (A4 portrait with margins)",
   "category": "happy",
+  "metadata": {
+    "page-width": "21cm",
+    "page-height": "29.7cm",
+    "margin-top": "2cm",
+    "margin-bottom": "2cm",
+    "margin-left": "2.5cm",
+    "margin-right": "2.5cm"
+  },
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" },
-    { "path": "/body/0/0", "kind": "text", "props": { "content": "Document with custom page layout." } }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document with custom page layout." } }
   ]
 }

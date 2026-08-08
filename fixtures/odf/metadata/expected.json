@@ -3,12 +3,14 @@
   "category": "happy",
   "metadata": {
     "title": "My Document Title",
-    "creator": "Jane Author",
+    "author": "Jane Author",
     "description": "A test document with metadata.",
     "subject": "Testing",
+    "keywords": "test, odf",
     "language": "en-US"
   },
   "assertions": [
-    { "path": "/body/0", "kind": "paragraph" }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document with metadata." } }
   ]
 }

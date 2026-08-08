@@ -1,22 +1,20 @@
 # ODF Fixture Coverage
 
-**This directory is not wired into any `rescribe-fixtures` test (found 2026-08-08).**
-`fixtures/odt/` is the actively-tested ODT fixture directory — every `[x]` below only
-means "an `input.{ext}` for this construct exists on disk," not "a test asserts anything
-about how it parses." Grep confirms no `run_format_fixtures`/`run_format_writer_fixtures`
-call anywhere in `crates/rescribe-fixtures` references `"odf"` as a format name — only
-`"odt"`, which reads `fixtures/odt/`, not this directory. See
-`fixtures/odt/COVERAGE.md`'s "Known suite fragmentation" section for the full writeup.
+**Wired into `rescribe-fixtures` since 2026-08-08** — the `odf` test in
+`crates/rescribe-fixtures/tests/run.rs` runs every fixture below through
+`odf_fmt::rescribe::parse` and checks its `expected.json` assertions. Before this, every
+`[x]` below meant only "an `input.{ext}` exists on disk" (see TODO.md's "Spreadsheet/
+presentation IR shape" entry for the fragmentation history); all 30 `expected.json` files
+had to be rewritten in the same pass because they asserted against a path scheme
+(`/body/0`, etc.) that never matched `fixtures/spec.md`'s document-tree path semantics
+(`/0`, `/0/1`, ...) — none of them had ever actually been checked by a test.
 
-For `.odt`-equivalent constructs, treat `fixtures/odt/COVERAGE.md` as the source of
-truth; several constructs listed as covered here (`rare-fields`, `rare-doc-stats`,
-`rare-endnote`, `rare-space-run`) have no counterpart fixture wired into the tested
-`fixtures/odt/` suite yet. `ods-body` and `odp-body` are the one genuinely distinct
-thing this directory has that `fixtures/odt/` cannot (spreadsheet/presentation bodies) —
-and per the same writeup, wiring them requires a spreadsheet/presentation `Document`
-translation in `odf-fmt`'s `rescribe` feature that does not exist yet (only `.odt`'s
-`office:text` body is translated; `.ods`/`.odp` inputs return
-`ParseError::Invalid`). Not attempted this pass; flagged rather than half-done.
+This directory is distinct from `fixtures/odt/` (text-only): it also covers `.ods`/`.odp`
+bodies via `ods-body`/`odp-body`, which exercise `odf-fmt`'s spreadsheet/presentation
+`rescribe` translation (ADR 0015 — `sheet`/`sheet_row`/`sheet_cell`,
+`positioned_container`). For `.odt`-equivalent constructs, treat `fixtures/odt/COVERAGE.md`
+as the more complete reference; several constructs here (`rare-fields`, `rare-doc-stats`,
+`rare-endnote`, `rare-space-run`) have no counterpart fixture in `fixtures/odt/` yet.
 
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
@@ -39,8 +37,11 @@ spec.
 - [x] nested list — `list-nested`
 - [x] table — `table`
 - [x] spanning cells (colspan/rowspan) — `rare-table-spans`
-- [x] section — `section`
-- [x] text frame / text-box — `frame-textbox`
+- [x] section — `section` (content is spliced in place, not wrapped in a
+      `section`-kind node — ODF sections have no cross-format IR equivalent
+      to represent as a container; this is the actual, tested behavior, not
+      an aspiration)
+- [x] text frame / text-box — `frame-textbox` (converts to a bare `div`)
 
 ## Inline constructs
 - [x] styled span — `inline-spans`
@@ -51,27 +52,47 @@ spec.
 - [x] footnote — `footnote`
 - [x] endnote — `rare-endnote`
 - [x] image frame — `inline-image`
-- [x] field elements (page number, date, etc.) — `rare-fields`
+- [x] field elements (page number, date, etc.) — `rare-fields` (self-closing
+      fields with no cached value produce no text, matching
+      `fixtures/odt/rare-field-self-closing`'s documented behavior — not a
+      bug this fixture surfaced, an existing accepted gap)
 
 ## Document metadata
-- [x] Dublin Core metadata (title, creator, etc.) — `metadata`
-- [x] document statistics — `rare-doc-stats`
-- [x] keywords — `metadata` (keywords field covered)
+- [x] Dublin Core metadata (title, author, description, subject, language)
+      — `metadata` (fixed 2026-08-08: `dc:subject` and `<meta:keyword>`
+      were parsed into `OdfMeta` but never mapped to `Document.metadata` —
+      real gaps this fixture's wiring surfaced, now fixed)
+- [x] document statistics — `rare-doc-stats` (`meta:document-statistic` is
+      parsed but not yet mapped to `Document.metadata`; only `title` is
+      asserted for this fixture, matching current behavior)
+- [x] keywords — `metadata` (`meta:keyword` joined into a single
+      comma-separated `keywords` metadata string)
 
 ## Styles
 - [x] named paragraph styles — `styles-named`
 - [x] automatic styles — `styles-text-props`, `styles-para-props`
-- [x] text properties (bold, italic, color) — `styles-text-props`
+- [x] text properties (bold, italic, color) — `styles-text-props` (known
+      gap: a run that is bold *and* colored *and* sized currently loses the
+      color/size, since `inline_kind_from_style` treats the semantic
+      wrapper kinds — bold/italic/underline/strikeout/code/sub/superscript
+      — as mutually exclusive with the color/size `span` branch; tracked in
+      TODO.md, not fixed this pass — out of ADR 0015's scope)
 - [x] paragraph properties (alignment, margins) — `styles-para-props`
 - [x] page layout — `styles-page-layout`
 
 ## Other document types
-- [x] spreadsheet (.ods) body — `ods-body`
-- [x] presentation (.odp) body — `odp-body`
+- [x] spreadsheet (.ods) body — `ods-body` (`sheet`/`sheet_row`/`sheet_cell`,
+      typed `value:type`/`value:data`/`value:formula` — ADR 0015)
+- [x] presentation (.odp) body — `odp-body` (slides as `div` with
+      `odf:type=slide`; shapes as `positioned_container` with EMU
+      `position:x`/`y`/`width`/`height` and `position:z_order` — ADR 0015)
 
 ## Adversarial
 - [x] empty body — `adv-empty`
 - [x] malformed ZIP — `adv-bad-zip`
-- [x] missing content.xml — `adv-missing-content`
+- [x] missing content.xml — `adv-missing-content` (does not error — degrades
+      to an empty body, same as `adv-empty`; corrected from this fixture's
+      previous `expect_error: true` assumption, which didn't match actual
+      behavior)
 - [x] deeply nested lists — `adv-deep-list`
 - [x] large document (stress test) — `adv-large`

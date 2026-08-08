@@ -568,6 +568,20 @@ fn odt() {
     });
 }
 
+/// `fixtures/odf/` — the format-crate-named fixture directory covering all
+/// three ODF body kinds (`.odt`/`.ods`/`.odp`), distinct from `fixtures/odt/`
+/// (text-only, see that directory's COVERAGE.md for the naming history).
+/// Wired in now that `odf-fmt`'s `rescribe` feature translates spreadsheet
+/// and presentation bodies (ADR 0015), not just text.
+#[test]
+fn odf() {
+    run_format_fixtures(&fixtures_root(), "odf", |input| {
+        odf_fmt::rescribe::parse(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
 #[test]
 fn epub() {
     run_format_fixtures(&fixtures_root(), "epub", |input| {

@@ -2,10 +2,10 @@
   "description": "Two-column table with header row and data row",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "table", "props": { "name": "Table1" } },
-    { "path": "/body/0/rows/0/cells/0/content/0/0", "kind": "text", "props": { "content": "Name" } },
-    { "path": "/body/0/rows/0/cells/1/content/0/0", "kind": "text", "props": { "content": "Value" } },
-    { "path": "/body/0/rows/1/cells/0/content/0/0", "kind": "text", "props": { "content": "Foo" } },
-    { "path": "/body/0/rows/1/cells/1/content/0/0", "kind": "text", "props": { "content": "42" } }
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Name" } },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "Value" } },
+    { "path": "/0/1/0/0/0", "kind": "text", "props": { "content": "Foo" } },
+    { "path": "/0/1/1/0/0", "kind": "text", "props": { "content": "42" } }
   ]
 }

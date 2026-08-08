@@ -2,9 +2,9 @@
   "description": "Unordered list with three items",
   "category": "happy",
   "assertions": [
-    { "path": "/body/0", "kind": "list" },
-    { "path": "/body/0/items/0/content/0/0", "kind": "text", "props": { "content": "First item" } },
-    { "path": "/body/0/items/1/content/0/0", "kind": "text", "props": { "content": "Second item" } },
-    { "path": "/body/0/items/2/content/0/0", "kind": "text", "props": { "content": "Third item" } }
+    { "path": "/0", "kind": "list", "props": { "ordered": null } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Third item" } }
   ]
 }
