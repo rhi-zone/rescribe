@@ -62,21 +62,22 @@ down that first documented the two open gaps.
   language and is underspecified on change-tracking scope) — per CLAUDE.md's guidance
   not to force artificial completeness where the spec doesn't define one, these fall
   through to the existing raw-preservation catch-all rather than getting bespoke modeling.
-- **`fixtures/odf/` (a second, 30-fixture directory distinct from `fixtures/odt/`) is not
-  wired into any `rescribe-fixtures` test** — confirmed by grep: no
-  `run_format_fixtures`/`run_format_writer_fixtures` call anywhere references `"odf"` as a
-  format name, only `"odt"`. Every checkmark in `fixtures/odf/COVERAGE.md` predates this
-  finding and means "an input file exists on disk," not "a test asserts anything about
-  it." `fixtures/odf/ods-body` and `odp-body` are the one thing that directory has with no
-  `fixtures/odt/` counterpart (spreadsheet/presentation body constructs), and they can't
-  be wired into the standard fixture harness without a spreadsheet/presentation
-  `Document` translation in `odf-fmt`'s `rescribe` feature, which does not exist — the
-  `rescribe` adapter's `parse()` only handles `office:text` bodies; an `.ods`/`.odp` input
-  returns `ParseError::Invalid("Not an ODT text document...")`. That translation is a
-  vertical on the scale of the existing `.odt` translation (formulas, sheets, named
-  ranges, slides, shapes, animations) and was not attempted this pass — flagged here
-  rather than half-done. Both `fixtures/odf/COVERAGE.md` and `fixtures/odt/COVERAGE.md`
-  now document this fragmentation explicitly.
+- **Fixed 2026-08-08.** `fixtures/odf/` (30 fixtures, distinct from `fixtures/odt/`) is
+  now wired into `rescribe-fixtures` — see the `odf` test in
+  `crates/rescribe-fixtures/tests/run.rs`. This required two things beyond just adding
+  the test call: (1) the spreadsheet/presentation `Document` translation this bullet
+  originally flagged as missing, implemented per ADR 0015 (see this file's "Spreadsheet/
+  presentation IR shape" entry); (2) rewriting all 30 fixtures' `expected.json` files,
+  which — for every fixture, not just `ods-body`/`odp-body` — asserted against a path
+  scheme (`/body/0`, etc.) that never matched `fixtures/spec.md`'s document-tree path
+  semantics (`/0`, `/0/1`, ...). None of the 30 had ever actually been checked by a test
+  before, despite every box in `fixtures/odf/COVERAGE.md` being checked. Wiring surfaced
+  one real gap fixed in the same pass (`dc:subject` wasn't mapped to `Document` metadata
+  at all, despite `OdfMeta::subject` existing) and one real gap left open (see this file's
+  "Spreadsheet/presentation IR shape" entry's "Still open" list: bold+color+size runs
+  losing color/size to the `strong` wrapper). `fixtures/odf/COVERAGE.md` and
+  `fixtures/odt/COVERAGE.md` no longer need the fragmentation caveat they previously
+  carried, since `fixtures/odf/` assertions are now real.
 
 Verified via `cargo test -q -p odf-fmt --all-features` (39 tests across the crate's lib
 and integration test binaries, all pass, including 7 new regression tests for the fixes
@@ -8707,14 +8708,73 @@ prior-art/gap findings so a future pass has an accurate starting point instead o
 re-discovering both the existing 9-crate precedent and the scale/adversarial gaps from
 scratch.
 
-## Spreadsheet/presentation IR shape decided (ADR 0015, 2026-08-08) — implementation not started
+## Spreadsheet/presentation IR shape (ADR 0015) — implemented 2026-08-08
 
-**Scope note first: this entry records that a design decision was made, not that the
-feature exists.** The decision itself — how spreadsheet and presentation content should
-be modeled in rescribe's `Document` IR, the first time this repo has designed for that
-content category — is recorded in `docs/adr/0015-spreadsheet-presentation-ir-shape.md`.
-Nothing described there has been implemented yet. Do not read this entry (or the ADR) as
-"spreadsheet/presentation support shipped."
+**Update 2026-08-08: all four follow-up items below are now done.** See
+`docs/adr/0015-spreadsheet-presentation-ir-shape.md` (Decisions 1-6, including the
+rotation/z-order resolution added this session) for the full design record.
+
+Decided and implemented:
+
+- `rescribe-std` node kinds (`crates/nodes/rescribe-std/src/lib.rs`): `sheet`/
+  `sheet_row`/`sheet_cell` for spreadsheet content, with cell value as a typed scalar
+  (`value:type`/`value:data`/`value:formula`) directly on the cell node — not nested in a
+  child paragraph the way `rescribe-fmt-ooxml/src/xlsx.rs` used to.
+- `positioned_container` node kind for absolute (x/y/width/height/rotation/z-order)
+  positioning, shared across presentation shapes, DOCX text-boxes, PPTX shapes, and RTF's
+  currently-dropped `\shp`/`\do` shape control words (RTF consumer still unwritten — see
+  "still open" below).
+- Canonical positioning unit is EMU (`i64`), paired with a raw format-namespaced fallback
+  property (`odf:x`/`odf:y`/`odf:width`/`odf:height`) for ODF, whose native coordinate
+  type has no fixed resolution guarantee against EMU.
+- Rotation: `position:rotation` stores the OOXML-style 60,000ths-of-a-degree integer,
+  projected from ODF's `draw:transform` only when it is a *pure* `rotate()` (ODF's angle
+  datatype is decimal degrees by default, with optional `deg`/`grad`/`rad` suffix) around
+  a center-equivalent pivot; combined/non-pure transforms keep the verbatim `odf:transform`
+  raw property but skip the semantic projection and emit a fidelity warning on both read
+  (can't populate `position:rotation`) and write (synthesizing `draw:transform` from
+  `position:rotation` without a raw fallback to preserve verbatim).
+- Z-order: `position:z_order` is always set — from ODF's explicit `draw:z-index` when
+  present, or derived from document order otherwise. Round-trips losslessly in all
+  directions; no raw-property fallback needed (unlike rotation/coordinates).
+- Vocabulary placement follows the ADR 0005 (`bibliography`/`bibliography_entry`/
+  `bibliography_field`, commit `4e15c9966e`) precedent: shared `rescribe-std` kinds,
+  cross-format-schema-verified against both ODF and OOXML SpreadsheetML/PresentationML
+  before being added, not `odf:`-namespaced.
+
+Follow-up work completed:
+
+1. New node kinds and properties added to `rescribe-std` (commit `4e23eca71b`).
+2. `odf-fmt`'s spreadsheet (`.ods`) and presentation (`.odp`) `rescribe` read/write
+   translation implemented (commit `9c1b73034e`) — `SpreadsheetBody`/`PresentationBody`
+   no longer return `ParseError::Invalid` on read or go unproduced on write.
+   `ast::DrawShape` gained `transform`/`z_index` fields (commit `ea85aa1734`) as source
+   data, parsed from/emitted to `draw:transform`/`draw:z-index`.
+3. `rescribe-fmt-ooxml/src/xlsx.rs` migrated off `table`/`table_row`/`table_header`/
+   `table_cell` onto `sheet`/`sheet_row`/`sheet_cell` (commit `22fd5fe1c6`).
+4. ODF rotation/z-order semantics verified (ADR 0015 Decisions 5-6) and implemented per
+   above.
+
+Still open, not part of this pass:
+
+- `positioned_container` has no RTF consumer yet — RTF's `\shp`/`\do` shape control words
+  are still parsed-and-dropped (pre-existing gap this ADR's design closes the door on, but
+  doesn't itself fix).
+- `fixtures/odf/`'s `styles-text-props` fixture surfaced a real, pre-existing gap shared
+  with `fixtures/odt/`: `odf-fmt`'s `rescribe::read::inline_kind_from_style` treats
+  bold/italic/underline/strikeout/code/subscript/superscript as mutually exclusive with
+  the color/font-size `span` branch — a run that is bold *and* colored *and* sized
+  currently produces only a `strong` node, silently dropping the color/size. Not fixed
+  this session (pre-existing, out of ADR 0015's scope); needs `inline_kind_from_style`/
+  `wrap_inline_nodes` to support combining a semantic wrapper (`strong`/`emphasis`/...)
+  with a nested `span` carrying the leftover style properties, rather than picking one
+  wrapper kind exclusively.
+- `fixtures/odf/` (30 fixtures, all three ODF body kinds) is now wired into
+  `crates/rescribe-fixtures` (the `odf` test in `tests/run.rs`), fixing the
+  fixture-suite-fragmentation gap `fixtures/odf/COVERAGE.md` previously documented — but
+  its expected.json files needed rewriting first: they asserted against a path scheme
+  (`/body/sheets/0`) that never matched `fixtures/spec.md`'s document-tree path semantics,
+  so none of the 30 fixtures had ever actually been checked by a test before this session.
 
 Decided:
 

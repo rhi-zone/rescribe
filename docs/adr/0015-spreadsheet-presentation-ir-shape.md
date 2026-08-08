@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (design only — see "Consequences" for what remains unimplemented).
+Accepted and implemented (2026-08-08 — see "Consequences" for what remains open).
 
 ## Context
 
@@ -184,23 +184,28 @@ field resolves cleanly.
 
 ## Consequences
 
-- This ADR records the shape; it does not implement it. Still to be done, tracked
-  separately in TODO.md:
-  - `odf-fmt`'s spreadsheet/presentation `rescribe` read/write translation, built against
-    this shape.
-  - The new node kinds (`sheet`, `sheet_row`, `sheet_cell`, `positioned_container`) and
-    `position:*`/`value:*` properties actually added to `rescribe-std`.
-  - `rescribe-fmt-ooxml/src/xlsx.rs` migrated off `table`/`table_cell` onto `sheet`/
-    `sheet_row`/`sheet_cell`, superseding its current paragraph-nested property placement.
-  - Rotation/z-order semantics for ODF are now verified (Decisions 5-6); the `odf-fmt`
-    read/write translation should implement `position:rotation`/`odf:transform` and
-    `position:z_order` per those decisions, including the write-side fidelity warning for
-    non-projectable ODF rotations (non-center pivot, or `rotate()` combined with other
-    transform-list functions).
-- Once implemented, `xlsx.rs` stops being a second, permanently-diverging pattern for
-  spreadsheet content — there is one IR shape for spreadsheets, not one per format adapter.
+**Implemented 2026-08-08** (this ADR's status line predates this; treat this section as
+current, not the "Accepted (design only)" line above):
+
+- The new node kinds (`sheet`, `sheet_row`, `sheet_cell`, `positioned_container`) and
+  `position:*`/`value:*` properties are in `rescribe-std` (commit `4e23eca71b`).
+- `odf-fmt`'s spreadsheet/presentation `rescribe` read/write translation is built against
+  this shape (commit `9c1b73034e`), including the rotation/z-order handling from
+  Decisions 5-6 (pure-`rotate()` projection with a write-side fidelity warning for
+  non-projectable transforms; explicit `position:z_order` always set). `ast::DrawShape`
+  gained `transform`/`z_index` fields as source data (commit `ea85aa1734`).
+- `rescribe-fmt-ooxml/src/xlsx.rs` is migrated off `table`/`table_cell` onto `sheet`/
+  `sheet_row`/`sheet_cell` (commit `22fd5fe1c6`) — it no longer diverges from ODF's shape.
+- `fixtures/odf/` (30 fixtures, all three ODF body kinds) is wired into
+  `crates/rescribe-fixtures` and passing.
+
+Still open, tracked in TODO.md:
+
+- `positioned_container` has no RTF consumer yet — RTF's `\shp`/`\do` shape control words
+  are still parsed-and-dropped. This ADR makes that gap closeable, not closed.
 - `positioned_container` becomes available to RTF's currently-dropped `\shp`/`\do` shape
-  control words as well, closing a documented existing gap, not just serving ODF/OOXML.
+  control words as well, closing a documented existing gap, not just serving ODF/OOXML —
+  once that consumer is written.
 - The EMU-plus-raw-property pattern (semantic projection paired with a raw fallback
   property scoped to the one format whose native precision the projection can't
   theoretically guarantee) is usable as precedent for future format-specific

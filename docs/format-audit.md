@@ -1215,9 +1215,28 @@ in TODO.md.
 - Standalone `odf-fmt` crate covering ODT/ODS/ODP; no rescribe dependency
 - Full AST: TextBlock, Inline, SpreadsheetBody, PresentationBody, styles, metadata
 - API modes: parse(), events(), emit(), batch::BatchParser, batch::Writer
-- Fixture suite complete: 30 fixtures, all COVERAGE.md boxes checked
+- Fixture suite complete: 30 fixtures, all COVERAGE.md boxes checked (superseded by the
+  2026-08-08 note below: the suite was complete on disk but not wired into any test until
+  then)
 - Fuzz targets: fuzz_odf_fmt_reader (no-panic) + fuzz_odf_fmt_roundtrip (AST roundtrip)
 - ADR-001 documents unified-crate decision (vs per-application-type split)
+
+**2026-08-08: `rescribe` feature (level 4, not part of the R/W columns above, which track
+only the standalone crate) gains real `Spreadsheet`/`Presentation` body translation.**
+Previously `crate::rescribe::{parse,emit}` only handled `office:text`; `.ods`/`.odp` input
+returned `ParseError::Invalid` on read and was never produced on write. Now implemented
+against ADR 0015's `sheet`/`sheet_row`/`sheet_cell`/`positioned_container` IR shape (new
+`rescribe-std` node kinds). Same session: `fixtures/odf/` (30 fixtures, all three ODF
+body kinds) wired into `crates/rescribe-fixtures` for the first time — every fixture's
+`expected.json` needed rewriting first, since none of them had ever matched
+`fixtures/spec.md`'s path semantics despite `fixtures/odf/COVERAGE.md` showing all boxes
+checked. `rescribe-fmt-ooxml/src/xlsx.rs` also migrated onto the same `sheet`/`sheet_row`/
+`sheet_cell` shape, so xlsx and odf spreadsheet content now share one IR pattern instead
+of two diverging ones. See `docs/adr/0015-spreadsheet-presentation-ir-shape.md` and
+TODO.md's "Spreadsheet/presentation IR shape" entry for the full record, including two
+gaps this pass found and left open: no RTF `positioned_container` consumer yet, and a
+pre-existing `inline_kind_from_style` gap (bold+color+size runs lose color/size) shared
+with `fixtures/odt/`.
 
 ### RST reader — 5-Production (2026-03-22)
 - Pandoc harness: 100% word coverage on rst-reader.rst (ref=618, ours=668)
