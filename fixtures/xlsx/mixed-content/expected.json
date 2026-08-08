@@ -5,319 +5,158 @@
       "path": "/"
     },
     {
-      "kind": "heading",
+      "kind": "sheet",
       "path": "/0",
       "props": {
-        "level": 2
+        "title": "Summary"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0",
+      "kind": "sheet_row",
+      "path": "/0/0"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "content": "Summary"
+        "value:data": "Metric",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table",
-      "path": "/1"
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
+      "props": {
+        "value:data": "Value",
+        "value:type": "string"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
+      "path": "/0/1"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
+      "props": {
+        "value:data": "Total",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
+      "props": {
+        "value:data": "100",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
+      "props": {
+        "value:data": "Passed",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
+      "props": {
+        "value:data": "true",
+        "value:type": "boolean"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/3"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
+      "props": {
+        "value:data": "Rate",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
+      "props": {
+        "value:data": "",
+        "value:formula": "B3/B2",
+        "value:type": "formula-result"
+      }
+    },
+    {
+      "kind": "sheet",
+      "path": "/1",
+      "props": {
+        "title": "Details"
+      }
+    },
+    {
+      "kind": "sheet_row",
       "path": "/1/0"
     },
     {
-      "kind": "table_header",
-      "path": "/1/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Name",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/1/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/0/1",
       "props": {
-        "content": "Metric"
+        "value:data": "Result",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/1/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/1/0/1/0/0",
-      "props": {
-        "content": "Value"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/1/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/1/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Test A",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/1/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/1/1",
       "props": {
-        "content": "Total"
+        "value:data": "passed",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/1/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/1/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/1/1/1/0/0",
-      "props": {
-        "content": "100"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/1/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/1/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Test B",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/1/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/1/2/1",
       "props": {
-        "content": "Passed"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/1/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/2/1/0",
-      "props": {
-        "xlsx:cell-type": "b"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/1/2/1/0/0",
-      "props": {
-        "content": "TRUE"
-      }
-    },
-    {
-      "kind": "table_row",
-      "path": "/1/3"
-    },
-    {
-      "kind": "table_cell",
-      "path": "/1/3/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/3/0/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/1/3/0/0/0",
-      "props": {
-        "content": "Rate"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/1/3/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/1/3/1/0",
-      "props": {
-        "xlsx:formula": "B3/B2"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/1/3/1/0/0",
-      "props": {
-        "content": ""
-      }
-    },
-    {
-      "kind": "heading",
-      "path": "/2",
-      "props": {
-        "level": 2
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/2/0",
-      "props": {
-        "content": "Details"
-      }
-    },
-    {
-      "kind": "table",
-      "path": "/3"
-    },
-    {
-      "kind": "table_row",
-      "path": "/3/0"
-    },
-    {
-      "kind": "table_header",
-      "path": "/3/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/0/0/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/0/0/0/0",
-      "props": {
-        "content": "Name"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/3/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/0/1/0/0",
-      "props": {
-        "content": "Result"
-      }
-    },
-    {
-      "kind": "table_row",
-      "path": "/3/1"
-    },
-    {
-      "kind": "table_cell",
-      "path": "/3/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/1/0/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/1/0/0/0",
-      "props": {
-        "content": "Test A"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/3/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/1/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/1/1/0/0",
-      "props": {
-        "content": "passed"
-      }
-    },
-    {
-      "kind": "table_row",
-      "path": "/3/2"
-    },
-    {
-      "kind": "table_cell",
-      "path": "/3/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/2/0/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/2/0/0/0",
-      "props": {
-        "content": "Test B"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/3/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/2/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/2/1/0/0",
-      "props": {
-        "content": "passed"
+        "value:data": "passed",
+        "value:type": "string"
       }
     }
   ],

@@ -5,73 +5,46 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Heights"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Header",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
-      "props": {
-        "content": "Header"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Tall row",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
-      "props": {
-        "content": "Tall row"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
-      "props": {
-        "content": "Normal row"
+        "value:data": "Normal row",
+        "value:type": "string"
       }
     }
   ],

@@ -5,87 +5,50 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Sheet1"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Name",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Name"
+        "value:data": "Value",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Value"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Alice",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "Alice"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "42"
+        "value:data": "42",
+        "value:type": "number"
       }
     }
   ],

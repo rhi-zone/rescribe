@@ -5,181 +5,94 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "AutoFilter"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Product",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Product"
+        "value:data": "Category",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Price",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Category"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/2/0/0",
-      "props": {
-        "content": "Price"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Widget",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "Widget"
+        "value:data": "Tools",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "9.99",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "Tools"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2/0/0",
-      "props": {
-        "content": "9.99"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Gadget",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
       "props": {
-        "content": "Gadget"
+        "value:data": "Electronics",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/2",
       "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/1/0/0",
-      "props": {
-        "content": "Electronics"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/2/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/2/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/2/0/0",
-      "props": {
-        "content": "29.99"
+        "value:data": "29.99",
+        "value:type": "number"
       }
     }
   ],

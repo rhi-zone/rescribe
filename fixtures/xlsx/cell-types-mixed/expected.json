@@ -5,207 +5,111 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Mixed"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Type",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Type"
+        "value:data": "Value",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Value"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "String",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "String"
+        "value:data": "hello",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "hello"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Number",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
       "props": {
-        "content": "Number"
+        "value:data": "42",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/1/0/0",
-      "props": {
-        "content": "42"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/3"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/3/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/3/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Boolean",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/3/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
       "props": {
-        "content": "Boolean"
+        "value:data": "true",
+        "value:type": "boolean"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/3/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/3/1/0",
-      "props": {
-        "xlsx:cell-type": "b"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/3/1/0/0",
-      "props": {
-        "content": "TRUE"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/4"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/4/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/4/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/4/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Formula",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/4/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/4/1",
       "props": {
-        "content": "Formula"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/4/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/4/1/0",
-      "props": {
-        "xlsx:formula": "B3*2"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/4/1/0/0",
-      "props": {
-        "content": ""
+        "value:data": "",
+        "value:formula": "B3*2",
+        "value:type": "formula-result"
       }
     }
   ],

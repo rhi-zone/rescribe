@@ -5,250 +5,133 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Numbers"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Label",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Label"
+        "value:data": "Value",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Value"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Integer",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "Integer"
+        "value:data": "42",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "42"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Float",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
       "props": {
-        "content": "Float"
+        "value:data": "3.141592653589793",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/1/0/0",
-      "props": {
-        "content": "3.141592653589793"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/3"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/3/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/3/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Negative",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/3/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
       "props": {
-        "content": "Negative"
+        "value:data": "-7",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/3/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/3/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/3/1/0/0",
-      "props": {
-        "content": "-7"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/4"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/4/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/4/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/4/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Zero",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/4/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/4/1",
       "props": {
-        "content": "Zero"
+        "value:data": "0",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/4/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/4/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/4/1/0/0",
-      "props": {
-        "content": "0"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/5"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/5/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/5/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/5/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Large",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/5/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/5/1",
       "props": {
-        "content": "Large"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/5/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/5/1/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/5/1/0/0",
-      "props": {
-        "content": "1000000"
+        "value:data": "1000000",
+        "value:type": "number"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX numeric cell values — integers and floats mapped to text nodes"
+  "description": "XLSX numeric cell values — integers and floats mapped to value:type=number sheet_cell props"
 }

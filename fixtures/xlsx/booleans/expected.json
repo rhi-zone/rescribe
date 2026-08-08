@@ -5,130 +5,73 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Booleans"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Label",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Label"
+        "value:data": "Value",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Value"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "True",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "True"
+        "value:data": "true",
+        "value:type": "boolean"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
-      "props": {
-        "xlsx:cell-type": "b"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "TRUE"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "False",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
       "props": {
-        "content": "False"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/1/0",
-      "props": {
-        "xlsx:cell-type": "b"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/1/0/0",
-      "props": {
-        "content": "FALSE"
+        "value:data": "false",
+        "value:type": "boolean"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX boolean cells map to TRUE/FALSE text with xlsx:cell-type=b"
+  "description": "XLSX boolean cells map to value:type=boolean, value:data=true/false"
 }

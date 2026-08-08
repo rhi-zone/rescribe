@@ -23,14 +23,22 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
 
     let mut props_map = serde_json::Map::new();
     // String props
-    for key in &["content", "xlsx:cell-type", "xlsx:formula"] {
+    for key in &[
+        "content",
+        "title",
+        "value:type",
+        "value:data",
+        "value:formula",
+    ] {
         if let Some(val) = node.props.get_str(key) {
             props_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
         }
     }
     // Int props
-    if let Some(level) = node.props.get_int("level") {
-        props_map.insert("level".to_string(), serde_json::Value::Number(level.into()));
+    for key in &["level", "rowspan", "colspan"] {
+        if let Some(val) = node.props.get_int(key) {
+            props_map.insert(key.to_string(), serde_json::Value::Number(val.into()));
+        }
     }
     if !props_map.is_empty() {
         obj["props"] = serde_json::Value::Object(props_map);
@@ -132,7 +140,7 @@ fn main() {
             s2.set_cell("A2", "Widget");
             s2.set_cell("B2", 9.99f64);
         }),
-        "XLSX workbook with two sheets — each sheet produces heading + table",
+        "XLSX workbook with two sheets — each sheet produces a `sheet` node",
     );
 
     // ── Cell value types ──────────────────────────────────────────────────
@@ -149,7 +157,7 @@ fn main() {
             s.set_cell("B2", 20i64);
             s.set_formula("C2", "A2+B2");
         }),
-        "XLSX formula cells have xlsx:formula property preserved for round-trip",
+        "XLSX formula cells have value:formula (source) and value:type=formula-result (computed value) preserved for round-trip",
     );
 
     write_fixture(
@@ -169,7 +177,7 @@ fn main() {
             s.set_cell("A6", "Large");
             s.set_cell("B6", 1_000_000i64);
         }),
-        "XLSX numeric cell values — integers and floats mapped to text nodes",
+        "XLSX numeric cell values — integers and floats mapped to value:type=number sheet_cell props",
     );
 
     write_fixture(
@@ -183,7 +191,7 @@ fn main() {
             s.set_cell("A3", "False");
             s.set_cell("B3", false);
         }),
-        "XLSX boolean cells map to TRUE/FALSE text with xlsx:cell-type=b",
+        "XLSX boolean cells map to value:type=boolean, value:data=true/false",
     );
 
     write_fixture(
@@ -219,7 +227,7 @@ fn main() {
             s.set_cell("B3", "data2");
             s.set_cell("C3", "data3");
         }),
-        "XLSX merged cells — fidelity warning emitted, cell content still parsed",
+        "XLSX merged cells — modeled via rowspan/colspan on the top-left sheet_cell, no fidelity warning needed",
     );
 
     write_fixture(
@@ -323,7 +331,7 @@ fn main() {
         make_xlsx(|wb| {
             let _ = wb.add_sheet("EmptySheet");
         }),
-        "XLSX sheet with no data rows produces empty document",
+        "XLSX sheet with no data rows produces an empty sheet node (no sheet_row children)",
         "adversarial",
     );
 

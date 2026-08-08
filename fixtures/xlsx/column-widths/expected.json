@@ -5,123 +5,66 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Widths"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Narrow",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Narrow"
+        "value:data": "Wide",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Normal",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Wide"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/2/0/0",
-      "props": {
-        "content": "Normal"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "short",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "short"
+        "value:data": "a longer piece of text",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/2",
       "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "a longer piece of text"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2/0/0",
-      "props": {
-        "content": "medium text"
+        "value:data": "medium text",
+        "value:type": "string"
       }
     }
   ],

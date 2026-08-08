@@ -5,375 +5,178 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "ManyColumns"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col1",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "Col1"
+        "value:data": "Col2",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col3",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/3",
       "props": {
-        "content": "Col2"
+        "value:data": "Col4",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/2/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/4",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col5",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/5",
       "props": {
-        "content": "Col3"
+        "value:data": "Col6",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/3"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/3/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/6",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col7",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/3/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/7",
       "props": {
-        "content": "Col4"
+        "value:data": "Col8",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/4"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/4/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/8",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col9",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/4/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/9",
       "props": {
-        "content": "Col5"
+        "value:data": "Col10",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/5"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/5/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/5/0/0",
-      "props": {
-        "content": "Col6"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/6"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/6/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/6/0/0",
-      "props": {
-        "content": "Col7"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/7"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/7/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/7/0/0",
-      "props": {
-        "content": "Col8"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/8"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/8/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/8/0/0",
-      "props": {
-        "content": "Col9"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/9"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/9/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/9/0/0",
-      "props": {
-        "content": "Col10"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "1",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "1"
+        "value:data": "2",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/2",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "3",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/3",
       "props": {
-        "content": "2"
+        "value:data": "4",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/4",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "5",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/5",
       "props": {
-        "content": "3"
+        "value:data": "6",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/3"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/3/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/6",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "7",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/3/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/7",
       "props": {
-        "content": "4"
+        "value:data": "8",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/4"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/4/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/8",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "9",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/4/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/9",
       "props": {
-        "content": "5"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/5"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/5/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/5/0/0",
-      "props": {
-        "content": "6"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/6"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/6/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/6/0/0",
-      "props": {
-        "content": "7"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/7"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/7/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/7/0/0",
-      "props": {
-        "content": "8"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/8"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/8/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/8/0/0",
-      "props": {
-        "content": "9"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/9"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/9/0",
-      "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/9/0/0",
-      "props": {
-        "content": "10"
+        "value:data": "10",
+        "value:type": "number"
       }
     }
   ],

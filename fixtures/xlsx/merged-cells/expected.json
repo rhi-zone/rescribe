@@ -5,178 +5,90 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "MergedCells"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "colspan": 3,
+        "value:data": "Section Header",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
-      "props": {
-        "content": "Section Header"
-      }
-    },
-    {
-      "kind": "table_header",
+      "kind": "sheet_cell",
       "path": "/0/0/1"
     },
     {
-      "kind": "paragraph",
-      "path": "/0/0/1/0"
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": ""
-      }
-    },
-    {
-      "kind": "table_header",
+      "kind": "sheet_cell",
       "path": "/0/0/2"
     },
     {
-      "kind": "paragraph",
-      "path": "/0/0/2/0"
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/2/0/0",
-      "props": {
-        "content": ""
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col1",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "Col1"
+        "value:data": "Col2",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Col3",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "Col2"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2/0/0",
-      "props": {
-        "content": "Col3"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/2"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "data1",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/2/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
       "props": {
-        "content": "data1"
+        "value:data": "data2",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/2/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/2/2",
       "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/1/0/0",
-      "props": {
-        "content": "data2"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/2/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/2/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/2/2/0/0",
-      "props": {
-        "content": "data3"
+        "value:data": "data3",
+        "value:type": "string"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX merged cells — fidelity warning emitted, cell content still parsed"
+  "description": "XLSX merged cells — modeled via rowspan/colspan on the top-left sheet_cell, no fidelity warning needed"
 }

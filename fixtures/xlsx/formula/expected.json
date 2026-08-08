@@ -5,126 +5,70 @@
       "path": "/"
     },
     {
-      "kind": "table",
-      "path": "/0"
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Calculations"
+      }
     },
     {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/0"
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "A",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
       "props": {
-        "content": "A"
+        "value:data": "B",
+        "value:type": "string"
       }
     },
     {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/0/2",
       "props": {
-        "xlsx:cell-type": "s"
+        "value:data": "Sum",
+        "value:type": "string"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "B"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/2/0/0",
-      "props": {
-        "content": "Sum"
-      }
-    },
-    {
-      "kind": "table_row",
+      "kind": "sheet_row",
       "path": "/0/1"
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "value:data": "10",
+        "value:type": "number"
       }
     },
     {
-      "kind": "text",
-      "path": "/0/1/0/0/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
       "props": {
-        "content": "10"
+        "value:data": "20",
+        "value:type": "number"
       }
     },
     {
-      "kind": "table_cell",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "kind": "sheet_cell",
+      "path": "/0/1/2",
       "props": {
-        "xlsx:cell-type": "n"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0/0",
-      "props": {
-        "content": "20"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/0",
-      "props": {
-        "xlsx:formula": "A2+B2"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2/0/0",
-      "props": {
-        "content": ""
+        "value:data": "",
+        "value:formula": "A2+B2",
+        "value:type": "formula-result"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX formula cells have xlsx:formula property preserved for round-trip"
+  "description": "XLSX formula cells have value:formula (source) and value:type=formula-result (computed value) preserved for round-trip"
 }

@@ -3,8 +3,15 @@
     {
       "kind": "document",
       "path": "/"
+    },
+    {
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "EmptySheet"
+      }
     }
   ],
   "category": "adversarial",
-  "description": "XLSX sheet with no data rows produces empty document"
+  "description": "XLSX sheet with no data rows produces an empty sheet node (no sheet_row children)"
 }

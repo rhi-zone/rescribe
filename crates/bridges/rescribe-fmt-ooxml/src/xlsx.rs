@@ -1,9 +1,19 @@
 //! XLSX (Excel) reader + writer for rescribe.
 //!
 //! Translates between Excel spreadsheets (.xlsx) and rescribe's document IR
-//! using the `ooxml-sml` crate. Each sheet becomes a section with a heading
-//! and table; tables in the document become sheets in the workbook on
-//! emit.
+//! using the `ooxml-sml` crate. Each worksheet becomes a `sheet` node (ADR
+//! 0015: `docs/adr/0015-spreadsheet-presentation-ir-shape.md`) with
+//! `sheet_row`/`sheet_cell` children; a cell's value is a typed scalar
+//! carried directly on the `sheet_cell` node (`value:type`/`value:data`,
+//! plus `value:formula` for formula source text) rather than nested inside a
+//! paragraph the way this crate used to do it. A multi-sheet workbook is
+//! represented as multiple sibling `sheet` nodes under `document` — ADR 0015
+//! leaves a dedicated `workbook` container for a future decision.
+//!
+//! The writer also accepts plain `table`/`heading` or `definition_list`
+//! content (not just native `sheet` nodes) as a generic document-to-
+//! spreadsheet export path, for documents produced by other format readers
+//! that have no notion of a spreadsheet at all.
 //!
 //! # Example
 //!
@@ -24,6 +34,7 @@ use rescribe_core::{
     Properties, Severity, SourceInfo, WarningKind,
 };
 use rescribe_std::{node, prop};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek};
 use std::path::Path;
@@ -113,34 +124,32 @@ impl Converter {
                 ParseError::Invalid(format!("Failed to load sheet '{}': {}", name, e))
             })?;
 
-            // Add heading for sheet name (if multiple sheets)
-            if sheet_names.len() > 1 {
-                let heading = Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 2i64)
-                    .child(Node::new(node::TEXT).prop(prop::CONTENT, sheet.name().to_string()));
-                children.push(heading);
-            }
-
-            // Convert sheet to table
-            if let Some(table) = self.convert_sheet(&sheet)? {
-                children.push(table);
-            }
+            children.push(self.convert_sheet(&sheet)?);
         }
 
         Ok(children)
     }
 
-    fn convert_sheet(&mut self, sheet: &ResolvedSheet) -> Result<Option<Node>, ParseError> {
+    /// Convert one worksheet into a `sheet` node. Always returns a node (even
+    /// for an empty sheet) so a sheet's existence in the workbook is never
+    /// silently dropped — the old `table`-based shape lost this for empty
+    /// sheets in a multi-sheet workbook (a dangling `heading` with nothing
+    /// after it, or a sheet dropped outright).
+    fn convert_sheet(&mut self, sheet: &ResolvedSheet) -> Result<Node, ParseError> {
+        let sheet_node = Node::new(node::SHEET).prop(prop::TITLE, sheet.name().to_string());
+
         if sheet.row_count() == 0 {
-            return Ok(None);
+            return Ok(sheet_node);
         }
 
-        // Emit fidelity warnings for features we detect but don't fully model.
-        if sheet.has_merged_cells() {
-            self.warn("Merged cells detected; merge ranges not represented in IR");
-        }
+        // Emit fidelity warnings for features we detect but don't (yet) fully
+        // model. Merged cells are handled below via `rowspan`/`colspan` on
+        // the top-left cell, so they no longer need a warning here.
         if sheet.has_conditional_formatting() {
-            self.warn("Conditional formatting detected; not represented in IR");
+            self.warn(format!(
+                "Conditional formatting detected in sheet \"{}\"; not represented in IR (modeling the full cfRule condition space — cellIs/expression/colorScale/dataBar/iconSet — is a larger undertaking left for a future pass)",
+                sheet.name()
+            ));
         }
         // Warn if any cell carries non-default style (fonts, colors, fills, borders, alignment).
         if sheet.rows().any(|row| {
@@ -155,7 +164,7 @@ impl Converter {
         // Warn if the sheet contains embedded charts.
         if !sheet.charts().is_empty() {
             self.warn(format!(
-                "Chart(s) detected in sheet \"{}\" ({} chart(s)); chart data not represented in IR",
+                "Chart(s) detected in sheet \"{}\" ({} chart(s)); chart data not represented in IR (no chart node kind exists yet)",
                 sheet.name(),
                 sheet.charts().len()
             ));
@@ -164,84 +173,94 @@ impl Converter {
         // Determine dimensions
         let (min_row, min_col, max_row, max_col) = match sheet.dimensions() {
             Some(dims) => dims,
-            None => return Ok(None),
+            None => return Ok(sheet_node),
         };
 
-        let mut table_rows = Vec::new();
-        let mut first_row = true;
+        let merge_map = merge_map(sheet);
+
+        let mut sheet_rows = Vec::new();
 
         for row_num in min_row..=max_row {
             let mut cells = Vec::new();
 
             for col_num in min_col..=max_col {
-                // Use table_header for first row, table_cell for others
-                let cell_kind = if first_row {
-                    node::TABLE_HEADER
-                } else {
-                    node::TABLE_CELL
-                };
+                let mut cell_node = Node::new(node::SHEET_CELL);
 
-                let mut cell_node = Node::new(cell_kind);
+                if let Some(row) = sheet.row(row_num)
+                    && let Some(cell) = row.cell_at_column(col_num)
+                {
+                    let val = sheet.cell_value(cell);
+                    let formula = cell.formula_text();
 
-                if let Some(row) = sheet.row(row_num) {
-                    if let Some(cell) = row.cell_at_column(col_num) {
-                        let val = sheet.cell_value(cell);
-                        let text_str = self.convert_cell_value(&val);
-                        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text_str);
-                        let mut para = Node::new(node::PARAGRAPH).child(text_node);
-                        // Tag the resolved cell type so the writer can round-trip faithfully
-                        // without guessing from string content (e.g. "007" must not become 7).
-                        let cell_type_tag = match &val {
-                            CellValue::Number(_) => Some("n"),
-                            CellValue::String(_) => Some("s"),
-                            CellValue::Boolean(_) => Some("b"),
-                            CellValue::Error(_) => Some("e"),
-                            CellValue::Empty => None,
+                    if formula.is_some() || !val.is_empty() {
+                        let (value_type, value_data) = self.convert_cell_value(&val);
+                        let value_type = if formula.is_some() {
+                            "formula-result"
+                        } else {
+                            value_type
                         };
-                        if let Some(ct) = cell_type_tag {
-                            para = para.prop("xlsx:cell-type", ct);
-                        }
-                        // Preserve raw formula for round-trip fidelity.
-                        if let Some(formula) = cell.formula_text() {
-                            para = para.prop("xlsx:formula", formula.to_string());
-                        }
-                        cell_node = cell_node.child(para);
-                    } else {
-                        // Empty cell — add empty paragraph for structural completeness.
-                        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, String::new());
-                        cell_node = cell_node.child(Node::new(node::PARAGRAPH).child(text_node));
+                        cell_node = cell_node
+                            .prop(prop::VALUE_TYPE, value_type)
+                            .prop(prop::VALUE, value_data);
                     }
-                } else {
-                    let text_node = Node::new(node::TEXT).prop(prop::CONTENT, String::new());
-                    cell_node = cell_node.child(Node::new(node::PARAGRAPH).child(text_node));
+                    if let Some(f) = formula {
+                        cell_node = cell_node.prop(prop::VALUE_FORMULA, f.to_string());
+                    }
+
+                    if let Some((rowspan, colspan)) = merge_map.get(&(row_num, col_num)) {
+                        if *rowspan > 1 {
+                            cell_node = cell_node.prop(prop::ROWSPAN, *rowspan as i64);
+                        }
+                        if *colspan > 1 {
+                            cell_node = cell_node.prop(prop::COLSPAN, *colspan as i64);
+                        }
+                    }
                 }
 
                 cells.push(cell_node);
             }
 
-            table_rows.push(Node::new(node::TABLE_ROW).children(cells));
-            first_row = false;
+            sheet_rows.push(Node::new(node::SHEET_ROW).children(cells));
         }
 
-        Ok(Some(Node::new(node::TABLE).children(table_rows)))
+        Ok(sheet_node.children(sheet_rows))
     }
 
-    fn convert_cell_value(&mut self, value: &CellValue) -> String {
+    /// Resolve a `CellValue` to its `(value:type, value:data)` pair.
+    ///
+    /// `Currency`/`Percentage`/`Date`/`Time` (part of ADR 0015's `value:type`
+    /// union, sourced from ODF's `office:value-type`) are not produced here:
+    /// `ooxml-sml`'s `CellValue` only distinguishes `Number`/`String`/
+    /// `Boolean`/`Error`/`Empty` — OOXML resolves those four indirectly via a
+    /// cell's number-format string (e.g. `"0.00%"` → percentage, `"$#,##0.00"`
+    /// → currency, `"m/d/yyyy"` → date), which `ooxml-sml` does not currently
+    /// expose as a classifier. Writing a general Excel number-format-code
+    /// classifier is a real undertaking on its own (format codes are an
+    /// under-specified mini-language) — left as a follow-up, not attempted in
+    /// this pass. All numeric cells map to `"number"` until that lands.
+    fn convert_cell_value(&mut self, value: &CellValue) -> (&'static str, String) {
         match value {
-            CellValue::Empty => String::new(),
-            CellValue::String(s) => s.clone(),
+            CellValue::Empty => ("string", String::new()),
+            CellValue::String(s) => ("string", s.clone()),
             CellValue::Number(n) => {
                 // Format numbers nicely (avoid trailing .0 for integers)
-                if n.fract() == 0.0 && n.abs() < 1e15 {
+                let s = if n.fract() == 0.0 && n.abs() < 1e15 {
                     (*n as i64).to_string()
                 } else {
                     n.to_string()
-                }
+                };
+                ("number", s)
             }
-            CellValue::Boolean(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+            CellValue::Boolean(b) => ("boolean", if *b { "true" } else { "false" }.to_string()),
             CellValue::Error(e) => {
                 self.warn(format!("Cell contains error: {}", e));
-                e.clone()
+                // No dedicated `value:type` for spreadsheet errors exists in
+                // the ADR 0015 union (neither OOXML nor ODF treat error as a
+                // first-class `office:value-type`/`CellValue` peer type) —
+                // "string" is the closest fit, matching what the writer can
+                // actually round-trip today (`WriteCellValue` has no error
+                // variant either).
+                ("string", e.clone())
             }
         }
     }
@@ -252,6 +271,55 @@ fn extract_metadata<R: Read + Seek>(_workbook: &Workbook<R>) -> Properties {
     // TODO: Extract properties from XLSX if ooxml-sml exposes them
     metadata.set("format", "xlsx");
     metadata
+}
+
+/// Map each merge range's top-left `(row, col)` to its `(rowspan, colspan)`.
+/// Only ranges spanning more than one row or column are included.
+fn merge_map(sheet: &ResolvedSheet) -> HashMap<(u32, u32), (u32, u32)> {
+    let mut map = HashMap::new();
+    if let Some(mc) = sheet.merged_cells() {
+        for merge in &mc.merge_cell {
+            if let Some((start, end)) = parse_range(&merge.reference) {
+                let rowspan = end.0 - start.0 + 1;
+                let colspan = end.1 - start.1 + 1;
+                if rowspan > 1 || colspan > 1 {
+                    map.insert(start, (rowspan, colspan));
+                }
+            }
+        }
+    }
+    map
+}
+
+/// Parse a `"A1"`-style cell reference into `(row, col)`, both 1-based.
+fn parse_cell_ref(s: &str) -> Option<(u32, u32)> {
+    let letters_end = s.find(|c: char| c.is_ascii_digit())?;
+    let (letters, digits) = s.split_at(letters_end);
+    if letters.is_empty() || digits.is_empty() {
+        return None;
+    }
+    Some((digits.parse().ok()?, letter_to_column(letters)))
+}
+
+/// Parse a `"A1:C3"`-style range reference into its `(start, end)` cell
+/// references. A single-cell reference (no `:`) yields `start == end`.
+fn parse_range(s: &str) -> Option<((u32, u32), (u32, u32))> {
+    let mut parts = s.split(':');
+    let start = parse_cell_ref(parts.next()?)?;
+    let end = match parts.next() {
+        Some(e) => parse_cell_ref(e)?,
+        None => start,
+    };
+    Some((start, end))
+}
+
+/// Convert Excel column letters (A, B, ..., Z, AA, AB, ...) to a 1-based column number.
+fn letter_to_column(letters: &str) -> u32 {
+    let mut col = 0u32;
+    for c in letters.chars() {
+        col = col * 26 + (c.to_ascii_uppercase() as u32 - 'A' as u32 + 1);
+    }
+    col
 }
 
 // ── Writer ───────────────────────────────────────────────────────────────────
@@ -293,6 +361,11 @@ impl EmitContext {
         self.convert_nodes(&doc.content.children)
     }
 
+    fn next_sheet_name(&mut self) -> String {
+        self.sheet_count += 1;
+        format!("Sheet{}", self.sheet_count)
+    }
+
     fn convert_nodes(&mut self, nodes: &[Node]) -> Result<(), EmitError> {
         let mut current_sheet_name: Option<String> = None;
         let mut pending_table: Option<&Node> = None;
@@ -302,13 +375,29 @@ impl EmitContext {
                 "document" => {
                     self.convert_nodes(&node.children)?;
                 }
+                // Native shape (ADR 0015): the sheet's name travels with the
+                // node itself, so it needs none of the heading-pairing logic
+                // the legacy `table` fallback below still uses.
+                "sheet" => {
+                    if let Some(table) = pending_table.take() {
+                        let name = current_sheet_name
+                            .take()
+                            .unwrap_or_else(|| self.next_sheet_name());
+                        self.convert_table(table, &name)?;
+                    }
+                    let name = node
+                        .props
+                        .get_str(prop::TITLE)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| self.next_sheet_name());
+                    self.convert_sheet(node, &name);
+                }
                 "heading" => {
                     // Flush any pending table first
                     if let Some(table) = pending_table.take() {
-                        let name = current_sheet_name.take().unwrap_or_else(|| {
-                            self.sheet_count += 1;
-                            format!("Sheet{}", self.sheet_count)
-                        });
+                        let name = current_sheet_name
+                            .take()
+                            .unwrap_or_else(|| self.next_sheet_name());
                         self.convert_table(table, &name)?;
                     }
                     // Extract heading text as next sheet name
@@ -316,16 +405,14 @@ impl EmitContext {
                 }
                 "table" => {
                     // If we have a pending sheet name, use it; otherwise generate one
-                    let name = current_sheet_name.take().unwrap_or_else(|| {
-                        self.sheet_count += 1;
-                        format!("Sheet{}", self.sheet_count)
-                    });
+                    let name = current_sheet_name
+                        .take()
+                        .unwrap_or_else(|| self.next_sheet_name());
                     self.convert_table(node, &name)?;
                 }
                 "definition_list" => {
                     // Definition lists from bibliography formats - convert to a sheet
-                    self.sheet_count += 1;
-                    let name = format!("Sheet{}", self.sheet_count);
+                    let name = self.next_sheet_name();
                     self.convert_definition_list(node, &name)?;
                 }
                 _ => {
@@ -339,10 +426,7 @@ impl EmitContext {
 
         // Flush any remaining pending table
         if let Some(table) = pending_table {
-            let name = current_sheet_name.unwrap_or_else(|| {
-                self.sheet_count += 1;
-                format!("Sheet{}", self.sheet_count)
-            });
+            let name = current_sheet_name.unwrap_or_else(|| self.next_sheet_name());
             self.convert_table(table, &name)?;
         }
 
@@ -354,6 +438,75 @@ impl EmitContext {
         Ok(())
     }
 
+    /// Convert a native `sheet` node (ADR 0015: `sheet_row`/`sheet_cell`
+    /// children, typed value directly on the cell) into a workbook sheet.
+    fn convert_sheet(&mut self, sheet_node: &Node, name: &str) {
+        let sheet = self.workbook.add_sheet(name);
+
+        for (row_idx, row_node) in sheet_node.children.iter().enumerate() {
+            if row_node.kind.as_str() != node::SHEET_ROW {
+                continue;
+            }
+            let row_num = row_idx as u32 + 1;
+
+            for (col_idx, cell_node) in row_node.children.iter().enumerate() {
+                if cell_node.kind.as_str() != node::SHEET_CELL {
+                    continue;
+                }
+                let col_num = col_idx as u32 + 1;
+                let cell_ref = format!("{}{}", column_to_letter(col_num), row_num);
+
+                let formula = cell_node.props.get_str(prop::VALUE_FORMULA);
+                let value_data = cell_node.props.get_str(prop::VALUE);
+
+                if let Some(f) = formula {
+                    sheet.set_formula(&cell_ref, f.to_string());
+                } else if let Some(data) = value_data {
+                    match cell_node.props.get_str(prop::VALUE_TYPE) {
+                        Some("number") => {
+                            if let Ok(num) = data.parse::<f64>() {
+                                sheet.set_cell(&cell_ref, num);
+                            } else {
+                                sheet.set_cell(&cell_ref, data.to_string());
+                            }
+                        }
+                        Some("boolean") => {
+                            sheet.set_cell(&cell_ref, data.eq_ignore_ascii_case("true"));
+                        }
+                        // "string", "formula-result" (a plain, non-formula
+                        // cell should never carry this, but it's handled the
+                        // same as "string" if it does), or any other/absent
+                        // type: write the value as a string, preserving it
+                        // exactly.
+                        _ => {
+                            sheet.set_cell(&cell_ref, data.to_string());
+                        }
+                    }
+                }
+
+                let rowspan = cell_node.props.get_int(prop::ROWSPAN).unwrap_or(1).max(1);
+                let colspan = cell_node.props.get_int(prop::COLSPAN).unwrap_or(1).max(1);
+                if rowspan > 1 || colspan > 1 {
+                    let end_row = row_num + rowspan as u32 - 1;
+                    let end_col = col_num + colspan as u32 - 1;
+                    let range = format!(
+                        "{}{}:{}{}",
+                        column_to_letter(col_num),
+                        row_num,
+                        column_to_letter(end_col),
+                        end_row
+                    );
+                    sheet.merge_cells(&range);
+                }
+            }
+        }
+    }
+
+    /// Generic `table`-node fallback: converts a plain prose `table` (as
+    /// produced by any non-spreadsheet format reader — commonmark, RST,
+    /// etc.) into a workbook sheet. Kept alongside the native `sheet` path
+    /// above so documents with no notion of a spreadsheet can still be
+    /// exported to XLSX.
     fn convert_table(&mut self, table: &Node, name: &str) -> Result<(), EmitError> {
         let sheet = self.workbook.add_sheet(name);
 
@@ -367,42 +520,7 @@ impl EmitContext {
                 if !cell_text.is_empty() {
                     let col_letter = column_to_letter(col_idx as u32 + 1);
                     let cell_ref = format!("{}{}", col_letter, row_idx + 1);
-
-                    // Find the paragraph node to read xlsx:* props.
-                    let para = cell_node
-                        .children
-                        .iter()
-                        .find(|n| n.kind.as_str() == node::PARAGRAPH);
-
-                    let cell_type = para
-                        .and_then(|p| p.props.get_str("xlsx:cell-type"))
-                        .unwrap_or("");
-
-                    let formula = para.and_then(|p| p.props.get_str("xlsx:formula"));
-
-                    if let Some(f) = formula {
-                        // Formula cells: re-emit the formula; cached value is not stored.
-                        sheet.set_formula(&cell_ref, f.to_string());
-                    } else {
-                        // Use the tagged cell type from the reader; fall back to string
-                        // when the type is absent (e.g. cells produced outside this reader).
-                        match cell_type {
-                            "n" => {
-                                if let Ok(num) = cell_text.parse::<f64>() {
-                                    sheet.set_cell(&cell_ref, num);
-                                } else {
-                                    sheet.set_cell(&cell_ref, cell_text);
-                                }
-                            }
-                            "b" => {
-                                sheet.set_cell(&cell_ref, cell_text.eq_ignore_ascii_case("true"));
-                            }
-                            _ => {
-                                // "s", "e", or absent: write as string, preserving value exactly.
-                                sheet.set_cell(&cell_ref, cell_text);
-                            }
-                        }
-                    }
+                    sheet.set_cell(&cell_ref, cell_text);
                 }
             }
         }
@@ -507,6 +625,27 @@ mod tests {
     }
 
     #[test]
+    fn test_letter_to_column() {
+        assert_eq!(letter_to_column("A"), 1);
+        assert_eq!(letter_to_column("B"), 2);
+        assert_eq!(letter_to_column("Z"), 26);
+        assert_eq!(letter_to_column("AA"), 27);
+        assert_eq!(letter_to_column("AB"), 28);
+        assert_eq!(letter_to_column("BA"), 53);
+    }
+
+    #[test]
+    fn test_parse_range_single_cell() {
+        assert_eq!(parse_range("A1"), Some(((1, 1), (1, 1))));
+    }
+
+    #[test]
+    fn test_parse_range_multi_cell() {
+        assert_eq!(parse_range("A1:C3"), Some(((1, 1), (3, 3))));
+        assert_eq!(parse_range("B2:D2"), Some(((2, 2), (2, 4))));
+    }
+
+    #[test]
     fn test_emit_empty_document() {
         let doc = Document::new();
         let result = emit(&doc).unwrap();
@@ -517,7 +656,39 @@ mod tests {
     }
 
     #[test]
-    fn test_emit_table() {
+    fn test_emit_sheet() {
+        let sheet = Node::new(NodeKind::from(node::SHEET))
+            .prop(prop::TITLE, "Sheet1")
+            .children(vec![
+                Node::new(NodeKind::from(node::SHEET_ROW)).children(vec![
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "Name"),
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "Age"),
+                ]),
+                Node::new(NodeKind::from(node::SHEET_ROW)).children(vec![
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "Alice"),
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "number")
+                        .prop(prop::VALUE, "30"),
+                ]),
+            ]);
+
+        let doc =
+            Document::new().with_content(Node::new(NodeKind::from(node::DOCUMENT)).child(sheet));
+
+        let result = emit(&doc).unwrap();
+        assert!(!result.value.is_empty());
+        // XLSX files start with ZIP magic
+        assert_eq!(&result.value[0..4], &[0x50, 0x4b, 0x03, 0x04]);
+    }
+
+    #[test]
+    fn test_emit_table_fallback() {
         let table = Node::new(NodeKind::from(node::TABLE)).children(vec![
             Node::new(NodeKind::from(node::TABLE_ROW)).children(vec![
                 Node::new(NodeKind::from(node::TABLE_HEADER)).child(
