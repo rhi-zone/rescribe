@@ -1168,7 +1168,7 @@ fn parse_frame_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> 
 }
 
 fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
-    let mut content = FrameContent::Empty;
+    let mut children = Vec::new();
     let mut buf = Vec::new();
 
     loop {
@@ -1182,21 +1182,15 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
                         let href = attr_from_list(&attrs, "xlink:href").unwrap_or_default();
                         let mime_type = attr_from_list(&attrs, "draw:mime-type");
                         skip_element(reader);
-                        // Image takes priority over any other content already found
-                        content = FrameContent::Image { href, mime_type };
+                        children.push(FrameChild::Image { href, mime_type });
                     }
                     "draw:text-box" => {
                         let text = parse_text_blocks(reader, "draw:text-box", &mut Vec::new());
-                        // Only use TextBox if we don't already have an Image
-                        if matches!(content, FrameContent::Empty | FrameContent::Other(_)) {
-                            content = FrameContent::TextBox(text);
-                        }
+                        children.push(FrameChild::TextBox(text));
                     }
                     _ => {
                         let raw = capture_raw_from_name_attrs(&tag, &attrs, reader);
-                        if matches!(content, FrameContent::Empty) {
-                            content = FrameContent::Other(raw);
-                        }
+                        children.push(FrameChild::Other(raw));
                     }
                 }
                 continue;
@@ -1207,8 +1201,7 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
                     let attrs = collect_attrs(e);
                     let href = attr_from_list(&attrs, "xlink:href").unwrap_or_default();
                     let mime_type = attr_from_list(&attrs, "draw:mime-type");
-                    // Image always takes priority
-                    content = FrameContent::Image { href, mime_type };
+                    children.push(FrameChild::Image { href, mime_type });
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -1223,7 +1216,7 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
         buf.clear();
     }
 
-    content
+    FrameContent { children }
 }
 
 // ── Inlines ───────────────────────────────────────────────────────────────────
@@ -1331,6 +1324,23 @@ fn parse_inlines(
                     }
                     "text:bookmark-end" => {
                         // Closing bookmark marker — no content, ignore
+                    }
+                    // Common field elements in their self-closing form
+                    // (e.g. `<text:date/>` with no cached display text).
+                    "text:page-number"
+                    | "text:date"
+                    | "text:time"
+                    | "text:author-name"
+                    | "text:author-initials"
+                    | "text:chapter"
+                    | "text:file-name"
+                    | "text:sequence"
+                    | "text:reference-ref"
+                    | "text:bookmark-ref" => {
+                        inlines.push(Inline::Field {
+                            name: name.clone(),
+                            value: String::new(),
+                        });
                     }
                     _ => {}
                 }

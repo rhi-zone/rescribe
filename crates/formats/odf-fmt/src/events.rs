@@ -591,6 +591,12 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                             events.push_back(OdfEvent::EndCell);
                         }
                         "table:table-column" => {}
+                        _ if FIELD_ELEMENTS.contains(&name.as_str()) => {
+                            events.push_back(OdfEvent::Field {
+                                name: Cow::Owned(name.clone()),
+                                value: Cow::Borrowed(""),
+                            });
+                        }
                         _ => {}
                     }
                 }

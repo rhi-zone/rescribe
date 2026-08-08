@@ -788,14 +788,11 @@ impl DocBuilder {
                         Some(BuildFrame::Shape { shape }) => {
                             shape.content = DrawShapeContent::TextBox(blocks);
                         }
-                        // A `<draw:text-box>` in a text-document `<draw:frame>`
-                        // only wins if the frame has no image: `parse()` gives
-                        // `<draw:image>` priority over any sibling content.
+                        // Every child a `<draw:frame>` saw is kept — see
+                        // `ast::FrameContent`'s doc comment. `parser::parse_frame_content`
+                        // has the same append-in-order behavior.
                         Some(BuildFrame::InlineFrame { frame }) => {
-                            if matches!(frame.content, FrameContent::Empty | FrameContent::Other(_))
-                            {
-                                frame.content = FrameContent::TextBox(blocks);
-                            }
+                            frame.content.children.push(FrameChild::TextBox(blocks));
                         }
                         _ => {}
                     }
@@ -929,10 +926,17 @@ impl DocBuilder {
             OdfEvent::Image { href, mime_type } => {
                 let href = href.into_owned();
                 let mime_type = mime_type.map(|s| s.into_owned());
-                if let Some(BuildFrame::InlineFrame { frame }) = self.stack.last_mut() {
-                    // Unconditional: `parse()` lets an image override content
-                    // already collected from sibling elements.
-                    frame.content = FrameContent::Image { href, mime_type };
+                match self.stack.last_mut() {
+                    Some(BuildFrame::InlineFrame { frame }) => {
+                        frame
+                            .content
+                            .children
+                            .push(FrameChild::Image { href, mime_type });
+                    }
+                    Some(BuildFrame::Shape { shape }) => {
+                        shape.content = DrawShapeContent::Image { href, mime_type };
+                    }
+                    _ => {}
                 }
             }
 
@@ -1011,9 +1015,7 @@ impl DocBuilder {
                         | BuildFrame::Hyperlink { .. },
                     ) => self.push_inline(Inline::Unknown { name, raw }),
                     Some(BuildFrame::InlineFrame { frame }) => {
-                        if matches!(frame.content, FrameContent::Empty) {
-                            frame.content = FrameContent::Other(raw);
-                        }
+                        frame.content.children.push(FrameChild::Other(raw));
                     }
                     Some(
                         BuildFrame::Text { .. }

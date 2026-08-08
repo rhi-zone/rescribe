@@ -470,10 +470,16 @@ fn generate_frame_textbox() {
                     anchor_type: Some("paragraph".to_string()),
                     width: Some("8cm".to_string()),
                     height: Some("3cm".to_string()),
-                    content: FrameContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
-                        content: vec![Inline::Text("Text inside the text box.".to_string())],
-                        ..Default::default()
-                    })]),
+                    content: FrameContent {
+                        children: vec![FrameChild::TextBox(vec![TextBlock::Paragraph(
+                            Paragraph {
+                                content: vec![Inline::Text(
+                                    "Text inside the text box.".to_string(),
+                                )],
+                                ..Default::default()
+                            },
+                        )])],
+                    },
                     ..Default::default()
                 }),
             ]),
@@ -499,9 +505,11 @@ fn generate_inline_image() {
                         anchor_type: Some("as-char".to_string()),
                         width: Some("3cm".to_string()),
                         height: Some("2cm".to_string()),
-                        content: FrameContent::Image {
-                            href: "Pictures/test.png".to_string(),
-                            mime_type: Some("image/png".to_string()),
+                        content: FrameContent {
+                            children: vec![FrameChild::Image {
+                                href: "Pictures/test.png".to_string(),
+                                mime_type: Some("image/png".to_string()),
+                            }],
                         },
                         ..Default::default()
                     }),

@@ -586,26 +586,27 @@ fn write_frame(s: &mut String, f: &Frame) {
         s.push_str(&format!(" svg:height=\"{}\"", xml_escape(h)));
     }
     s.push_str(">\n");
-    match &f.content {
-        FrameContent::Image { href, mime_type } => {
-            s.push_str(&format!("<draw:image xlink:href=\"{}\" xlink:type=\"simple\" xlink:show=\"embed\" xlink:actuate=\"onLoad\"",
-                xml_escape(href)));
-            if let Some(mt) = mime_type {
-                s.push_str(&format!(" draw:mime-type=\"{}\"", xml_escape(mt)));
+    for child in &f.content.children {
+        match child {
+            FrameChild::Image { href, mime_type } => {
+                s.push_str(&format!("<draw:image xlink:href=\"{}\" xlink:type=\"simple\" xlink:show=\"embed\" xlink:actuate=\"onLoad\"",
+                    xml_escape(href)));
+                if let Some(mt) = mime_type {
+                    s.push_str(&format!(" draw:mime-type=\"{}\"", xml_escape(mt)));
+                }
+                s.push_str("/>\n");
             }
-            s.push_str("/>\n");
-        }
-        FrameContent::TextBox(blocks) => {
-            s.push_str("<draw:text-box>\n");
-            for block in blocks {
-                write_block(s, block);
+            FrameChild::TextBox(blocks) => {
+                s.push_str("<draw:text-box>\n");
+                for block in blocks {
+                    write_block(s, block);
+                }
+                s.push_str("</draw:text-box>\n");
             }
-            s.push_str("</draw:text-box>\n");
+            FrameChild::Other(raw) => {
+                s.push_str(raw);
+            }
         }
-        FrameContent::Other(raw) => {
-            s.push_str(raw);
-        }
-        FrameContent::Empty => {}
     }
     s.push_str("</draw:frame>\n");
 }
@@ -681,7 +682,11 @@ fn write_inline(s: &mut String, inline: &Inline) {
         }
         Inline::Frame(f) => write_frame(s, f),
         Inline::Field { name, value } => {
-            s.push_str(&format!("<{name}>{}</{name}>", xml_escape(value)));
+            if value.is_empty() {
+                s.push_str(&format!("<{name}/>"));
+            } else {
+                s.push_str(&format!("<{name}>{}</{name}>", xml_escape(value)));
+            }
         }
         Inline::Bookmark { name } => {
             s.push_str(&format!(

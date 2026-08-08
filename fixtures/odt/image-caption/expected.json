@@ -1,7 +1,9 @@
 {
-  "description": "ODT draw:frame with image and caption text-box; image takes priority",
+  "description": "ODT draw:frame with image and caption text-box; both survive as a figure/caption pair",
   "category": "composition",
   "assertions": [
-    { "path": "/0", "kind": "image" }
+    { "path": "/0", "kind": "figure" },
+    { "path": "/0/0", "kind": "image" },
+    { "path": "/0/1", "kind": "caption" }
   ]
 }

@@ -166,8 +166,35 @@ pub struct Frame {
 }
 
 /// What lives inside a `<draw:frame>`.
+///
+/// ODF permits a `<draw:frame>` to carry several alternative representations
+/// of its content as siblings — most commonly an image plus a caption
+/// text-box (`fixtures/odt/image-caption`), but the schema does not cap the
+/// count. This holds every child the parser saw, in document order, so none
+/// of them are silently dropped.
 #[derive(Debug, Clone, Default)]
-pub enum FrameContent {
+pub struct FrameContent {
+    pub children: Vec<FrameChild>,
+}
+
+impl FrameContent {
+    pub fn is_empty(&self) -> bool {
+        self.children.is_empty()
+    }
+
+    /// The first `Image` child, if any — convenience for callers that only
+    /// care about the common single-image case.
+    pub fn image(&self) -> Option<(&str, Option<&str>)> {
+        self.children.iter().find_map(|c| match c {
+            FrameChild::Image { href, mime_type } => Some((href.as_str(), mime_type.as_deref())),
+            _ => None,
+        })
+    }
+}
+
+/// A single alternative inside a `<draw:frame>`.
+#[derive(Debug, Clone)]
+pub enum FrameChild {
     /// `<draw:image>` with `xlink:href` pointing to an image in the ZIP.
     Image {
         href: String,
@@ -177,8 +204,6 @@ pub enum FrameContent {
     TextBox(Vec<TextBlock>),
     /// Anything else (preserved as raw XML).
     Other(String),
-    #[default]
-    Empty,
 }
 
 // ── Inline elements ───────────────────────────────────────────────────────────

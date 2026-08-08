@@ -3,9 +3,7 @@
 //! Parses ODF/ODT documents into rescribe's document IR by delegating to
 //! the rest of this crate for all ZIP unpacking and XML parsing.
 
-use crate::ast::{
-    FrameContent, Inline, ListItem, NoteClass, OdfBody, OdfDocument, StyleEntry, TextBlock,
-};
+use crate::ast::{Inline, ListItem, NoteClass, OdfBody, OdfDocument, StyleEntry, TextBlock};
 use rescribe_core::{
     ConversionResult, Document, ParseError, ParseOptions, Properties, Resource, ResourceId,
     ResourceMap,
@@ -381,8 +379,26 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
             (all_nodes, all_footnotes)
         }
 
-        TextBlock::Frame(frame) => match &frame.content {
-            FrameContent::Image { href, .. } => {
+        TextBlock::Frame(frame) => convert_frame(frame, ctx),
+
+        TextBlock::Unknown { .. } => (Vec::new(), Vec::new()),
+    }
+}
+
+/// Convert a `<draw:frame>`'s children. A frame with a single `Image` or
+/// `TextBox` child converts to a bare `image`/`div` node as before; a frame
+/// with an image *and* a text-box (the common image+caption pattern) wraps
+/// both in a `figure`/`caption` pair so neither child is dropped.
+fn convert_frame(frame: &crate::ast::Frame, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>) {
+    use crate::ast::FrameChild;
+
+    let mut all_footnotes = Vec::new();
+    let mut image_nodes = Vec::new();
+    let mut other_nodes = Vec::new();
+
+    for child in &frame.content.children {
+        match child {
+            FrameChild::Image { href, .. } => {
                 let mut img = Node::new(node::IMAGE);
                 let src = ctx
                     .image_map
@@ -393,11 +409,10 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
                 if let Some(n) = &frame.name {
                     img = img.prop("odt:name", n.as_str());
                 }
-                (vec![img], Vec::new())
+                image_nodes.push(img);
             }
-            FrameContent::TextBox(blocks) => {
+            FrameChild::TextBox(blocks) => {
                 let mut div = Node::new(node::DIV);
-                let mut all_footnotes = Vec::new();
                 for block in blocks {
                     let (nodes, fn_defs) = convert_block(block, ctx);
                     for n in nodes {
@@ -405,12 +420,33 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
                     }
                     all_footnotes.extend(fn_defs);
                 }
-                (vec![div], all_footnotes)
+                other_nodes.push(div);
             }
-            _ => (Vec::new(), Vec::new()),
-        },
+            FrameChild::Other(_) => {
+                // No cross-format meaning; nothing else to build a node from.
+            }
+        }
+    }
 
-        TextBlock::Unknown { .. } => (Vec::new(), Vec::new()),
+    match (image_nodes.len(), other_nodes.len()) {
+        (0, 0) => (Vec::new(), all_footnotes),
+        (1, 0) => (image_nodes, all_footnotes),
+        (0, _) => (other_nodes, all_footnotes),
+        _ => {
+            // Image plus at least one text-box (caption): wrap in `figure` so
+            // both survive. The text-box's own div wrapper is kept as the
+            // caption body (ODF's text-box may itself contain several
+            // paragraphs, not just a single caption line).
+            let mut figure = Node::new(node::FIGURE);
+            for img in image_nodes {
+                figure = figure.child(img);
+            }
+            for div in other_nodes {
+                let caption = Node::new(node::CAPTION).children(div.children);
+                figure = figure.child(caption);
+            }
+            (vec![figure], all_footnotes)
+        }
     }
 }
 

@@ -640,3 +640,171 @@ fn events_presentation() {
         "missing Text 'My Title'"
     );
 }
+
+// ── Regression: frame image+caption collision (TODO.md, 2026-08-03 entry) ──────
+//
+// `ast::FrameContent` used to be an either/or enum, and `<draw:image>` always
+// won over a sibling `<draw:text-box>`, so a `<draw:frame>` holding both an
+// image and a caption text-box silently lost the caption. `FrameContent` is
+// now `{ children: Vec<FrameChild> }`, appended in document order by both
+// `parser::parse_frame_content` and the streaming `events`/`batch` path.
+
+#[test]
+fn frame_keeps_image_and_caption_via_parse() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.text".to_string(),
+        body: OdfBody::Text(vec![TextBlock::Frame(Frame {
+            name: Some("Figure1".to_string()),
+            content: FrameContent {
+                children: vec![
+                    FrameChild::Image {
+                        href: "Pictures/photo.png".to_string(),
+                        mime_type: Some("image/png".to_string()),
+                    },
+                    FrameChild::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("Figure 1: A photo.".to_string())],
+                        ..Default::default()
+                    })]),
+                ],
+            },
+            ..Default::default()
+        })]),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).expect("emit failed");
+    let parsed = parser::parse(&bytes).expect("parse failed");
+    let OdfBody::Text(blocks) = &parsed.value.body else {
+        panic!("expected Text body");
+    };
+    let TextBlock::Frame(frame) = &blocks[0] else {
+        panic!("expected Frame block, got {:?}", blocks[0]);
+    };
+
+    let has_image = frame
+        .content
+        .children
+        .iter()
+        .any(|c| matches!(c, FrameChild::Image { href, .. } if href == "Pictures/photo.png"));
+    assert!(has_image, "image child was dropped: {:?}", frame.content);
+
+    let has_caption = frame.content.children.iter().any(|c| {
+        matches!(c, FrameChild::TextBox(blocks)
+            if blocks.iter().any(|b| matches!(b, TextBlock::Paragraph(p)
+                if p.content.iter().any(|i| matches!(i, Inline::Text(t) if t.contains("Figure 1"))))))
+    });
+    assert!(
+        has_caption,
+        "caption text-box was dropped: {:?}",
+        frame.content
+    );
+}
+
+#[test]
+fn frame_keeps_image_and_caption_via_events_and_batch() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.text".to_string(),
+        body: OdfBody::Text(vec![TextBlock::Frame(Frame {
+            name: Some("Figure1".to_string()),
+            content: FrameContent {
+                children: vec![
+                    FrameChild::Image {
+                        href: "Pictures/photo.png".to_string(),
+                        mime_type: Some("image/png".to_string()),
+                    },
+                    FrameChild::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("Figure 1: A photo.".to_string())],
+                        ..Default::default()
+                    })]),
+                ],
+            },
+            ..Default::default()
+        })]),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).expect("emit failed");
+    let mut w = odf_fmt::batch::Writer::new(Vec::<u8>::new());
+    for e in odf_fmt::events(&bytes) {
+        w.write_event(e);
+    }
+    let streamed = w.finish().expect("streaming writer finish failed");
+
+    // The streaming Writer must reproduce the same fix, not the old loss.
+    let parsed = parser::parse(&streamed).expect("re-parse of streamed output failed");
+    let OdfBody::Text(blocks) = &parsed.value.body else {
+        panic!("expected Text body");
+    };
+    let TextBlock::Frame(frame) = &blocks[0] else {
+        panic!("expected Frame block, got {:?}", blocks[0]);
+    };
+    assert_eq!(
+        frame.content.children.len(),
+        2,
+        "expected both image and caption to survive the streaming path: {:?}",
+        frame.content
+    );
+}
+
+// ── Regression: self-closing field elements (TODO.md, 2026-08-03 entry) ────────
+//
+// `<text:date/>` (no cached display value) used to be silently dropped by
+// both `parser::parse_inlines`'s `Event::Empty` arm and the events.rs
+// equivalent; only the non-self-closing `<text:date>…</text:date>` form was
+// recognized. Both now emit `Inline::Field { value: "", .. }` /
+// `OdfEvent::Field`.
+
+#[test]
+fn self_closing_field_element_is_not_dropped() {
+    let input = br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Printed on <text:date/>.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#;
+
+    let (blocks, _diags) = crate::parser_test_helpers::parse_content_xml(input);
+    let TextBlock::Paragraph(p) = &blocks[0] else {
+        panic!("expected Paragraph block, got {:?}", blocks[0]);
+    };
+    let has_field = p
+        .content
+        .iter()
+        .any(|i| matches!(i, Inline::Field { name, .. } if name == "text:date"));
+    assert!(
+        has_field,
+        "self-closing <text:date/> was dropped: {:?}",
+        p.content
+    );
+}
+
+#[cfg(test)]
+mod parser_test_helpers {
+    //! `parser::parse_content_xml` is crate-private; drive the same code
+    //! path through a minimal one-file ODF ZIP + the public `parse()` entry
+    //! point instead.
+    use super::*;
+
+    pub(crate) fn parse_content_xml(content_xml: &[u8]) -> (Vec<TextBlock>, Vec<()>) {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut buf);
+            let opts = zip::write::SimpleFileOptions::default();
+            use std::io::Write as _;
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.text")
+                .unwrap();
+            zip.start_file("content.xml", opts).unwrap();
+            zip.write_all(content_xml).unwrap();
+            zip.finish().unwrap();
+        }
+        let result = parser::parse(buf.get_ref()).expect("parse failed");
+        let OdfBody::Text(blocks) = result.value.body else {
+            panic!("expected Text body, got {:?}", result.value.body);
+        };
+        (blocks, Vec::new())
+    }
+}
