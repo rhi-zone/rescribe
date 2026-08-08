@@ -67,6 +67,26 @@ pub mod node {
     /// inline nodes, so markup nested inside a field (e.g. an italicized
     /// journal title) is preserved rather than flattened to a string.
     pub const BIBLIOGRAPHY_FIELD: &str = "bibliography_field";
+    /// One worksheet in a spreadsheet document (ADR 0015). Children are
+    /// `sheet_row` nodes. A multi-sheet workbook is currently represented as
+    /// multiple sibling `sheet` nodes under `document` — a dedicated
+    /// `workbook` container is left for a future decision (see ADR 0015).
+    pub const SHEET: &str = "sheet";
+    /// One row within a `sheet`. Children are `sheet_cell` nodes.
+    pub const SHEET_ROW: &str = "sheet_row";
+    /// One cell within a `sheet_row`. The cell's value is a typed scalar or
+    /// formula carried directly as properties on this node (see
+    /// `prop::VALUE_TYPE`, `prop::VALUE`, `prop::VALUE_FORMULA`) — not
+    /// nested block/inline content like `table_cell`. See ADR 0015 for why
+    /// this is a distinct kind rather than a reuse of `table_cell`.
+    pub const SHEET_CELL: &str = "sheet_cell";
+    /// A container positioned by absolute coordinates rather than document
+    /// flow (ADR 0015) — presentation shapes/slides, DOCX/PPTX text-boxes,
+    /// RTF `\shp`/`\do` shape groups. Position/size/rotation/stacking order
+    /// are carried as `prop::POSITION_*` properties (EMU, see ADR 0015 for
+    /// the precision analysis). Children are the shape's actual content
+    /// (text, image, or nested blocks) — unconstrained by this decision.
+    pub const POSITIONED_CONTAINER: &str = "positioned_container";
 
     // Inline-level nodes
     /// Plain text content (use `content` property).
@@ -174,6 +194,40 @@ pub mod prop {
     /// writers reformat per regional convention without re-parsing an
     /// ambiguous flat string.
     pub const DATE: &str = "date";
+    /// Type of a `sheet_cell`'s value (ADR 0015): one of `string`, `number`,
+    /// `currency`, `percentage`, `date`, `time`, `boolean`, or
+    /// `formula-result` (the type of a formula's computed result, as
+    /// distinct from the formula source text itself — see
+    /// `VALUE_FORMULA`). Union of ODF's `office:value-type` (which
+    /// distinguishes all of these) and OOXML SpreadsheetML's narrower
+    /// `CellValue` (`Empty`/`String`/`Number`/`Boolean`/`Error`, with
+    /// `Date`/`Currency` resolved indirectly via number-format strings) —
+    /// see ADR 0015 Decision 2.
+    pub const VALUE_TYPE: &str = "value:type";
+    /// A `sheet_cell`'s value, as its string representation (ADR 0015).
+    /// Kept as a string rather than a typed `PropValue::Float`/`Int` so
+    /// arbitrary-precision source values (e.g. ODF's decimal attributes)
+    /// round-trip exactly; readers/writers that need a numeric value parse
+    /// this string using `VALUE_TYPE` to know how.
+    pub const VALUE: &str = "value:data";
+    /// A `sheet_cell`'s formula source text (e.g. an OpenFormula or A1-style
+    /// expression), kept separate from `VALUE`/`VALUE_TYPE` (the computed
+    /// result) so both survive round-trip (ADR 0015).
+    pub const VALUE_FORMULA: &str = "value:formula";
+
+    // Position properties (absolute positioning, ADR 0015)
+    /// `positioned_container` horizontal offset, in EMU (914,400 per inch).
+    pub const POSITION_X: &str = "position:x";
+    /// `positioned_container` vertical offset, in EMU.
+    pub const POSITION_Y: &str = "position:y";
+    /// `positioned_container` width, in EMU.
+    pub const POSITION_WIDTH: &str = "position:width";
+    /// `positioned_container` height, in EMU.
+    pub const POSITION_HEIGHT: &str = "position:height";
+    /// `positioned_container` rotation, in degrees.
+    pub const POSITION_ROTATION: &str = "position:rotation";
+    /// `positioned_container` stacking order (higher paints on top).
+    pub const POSITION_Z_ORDER: &str = "position:z_order";
 
     // Style properties (presentational)
     /// Font family.
