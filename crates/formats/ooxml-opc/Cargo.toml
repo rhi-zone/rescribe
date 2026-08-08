@@ -13,3 +13,5 @@ categories = ["encoding", "parser-implementations"]
 zip.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true
+zip-fmt.workspace = true
+rescribe-format-api.workspace = true

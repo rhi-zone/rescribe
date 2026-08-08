@@ -2446,8 +2446,10 @@ name = "ooxml-opc"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "rescribe-format-api",
  "thiserror",
  "zip",
+ "zip-fmt",
 ]
 
 [[package]]

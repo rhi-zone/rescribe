@@ -32,10 +32,12 @@
 //! # Ok::<(), ooxml_opc::Error>(())
 //! ```
 
+pub mod batch;
 pub mod error;
 pub mod packaging;
 pub mod relationships;
 
+pub use batch::{Event as StreamingEvent, StreamingParser};
 pub use error::{Error, Result};
 pub use packaging::{ContentTypes, Package, PackageWriter, content_type};
 pub use relationships::{Relationship, Relationships, TargetMode, rel_type, rels_path_for};
