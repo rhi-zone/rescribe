@@ -41,6 +41,11 @@ pub mod writer;
 // Batch reader
 #[cfg(feature = "reader-batch")]
 pub mod batch;
+/// Chunk-resumable worksheet-part XML tokenizer backing [`batch::StreamingParser`]'s
+/// true incremental worksheet parsing. Internal — see [`batch`]'s module docs
+/// for the public contract.
+#[cfg(feature = "reader-batch")]
+mod chunked_events;
 #[cfg(feature = "reader-batch")]
 pub use batch::BatchParser;
 #[cfg(feature = "reader-batch")]

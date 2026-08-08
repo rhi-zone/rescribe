@@ -14,52 +14,78 @@
 //!
 //! [`StreamingParser`] drives [`ooxml_opc::StreamingParser`] for OPC
 //! container-level entry delivery (`feed()` accepts archive bytes directly,
-//! no seeking, no full-archive buffering), and for each
-//! `xl/worksheets/sheetN.xml` part it runs [`crate::events::events`] — the
-//! same true-SAX iterator `events()` uses — over that part's bytes, calling
-//! `handler.handle(Event::Sheet { .. })` per SAX event as it goes. No
-//! `Workbook` or intermediate AST is materialized.
+//! no seeking, no full-archive buffering). For each `xl/worksheets/sheetN.xml`
+//! part it feeds `PartData` chunks straight into [`crate::chunked_events::ChunkedSmlEvents`]
+//! — a chunk-resumable tokenizer producing the same [`OwnedSmlEvent`]
+//! vocabulary as [`crate::events::events`] (see that module's own doc
+//! comment for the technique) — dispatching `handler.handle(Event::Sheet {
+//! .. })` per event as soon as it is provably complete, with no need to see
+//! the rest of the part first. `xl/sharedStrings.xml` is still buffered in
+//! full (see "Shared strings" below for why that is a deliberate, scoped
+//! exception, not an oversight). No `Workbook` or intermediate AST is
+//! materialized for either.
 //!
-//! ## Memory model: O(largest single part), not O(nesting depth)
+//! ## Memory model: O(nesting depth + largest token) for worksheet parts
 //!
-//! **Update (2026-08-08):** [`ooxml_opc::StreamingParser`] no longer
-//! buffers a generic part's decompressed bytes in full before delivering
-//! it — its `Event::Part` is now `PartStart`/`PartData`/`PartEnd`, with
-//! `PartData` chunks forwarded as they decompress once `[Content_Types].xml`
-//! has streamed past (see its own module docs for the exact contract and
-//! the two narrow exceptions that remain). That closes the OPC-container-layer
-//! part of this crate's memory bound. What remains open is this crate's
-//! own XML layer: [`crate::events::events`] takes `bytes: &[u8]` — a
-//! `quick_xml::Reader<&[u8]>` over the complete input, with no chunk-fed
-//! tokenizer in this crate today. This module therefore still accumulates
-//! a worksheet part's `PartData` chunks into one buffer before running
-//! `events()` over the complete result, so this crate's `StreamingParser`
-//! still inherits a memory bound of **O(largest single part)** — for
-//! XLSX, that means O(largest worksheet's XML) in the common case where
-//! one sheet dominates the file — but the bottleneck is now this crate's
-//! XML layer, not `ooxml-opc`'s container layer. Once a worksheet part's
-//! bytes are handed to this crate, they run straight through
-//! [`crate::events::events`] with no second AST materialization and no
-//! extra buffering beyond that one part's bytes.
+//! **Update (2026-08-08):** [`ooxml_opc::StreamingParser`] does not buffer a
+//! generic part's decompressed bytes in full before delivering it — its
+//! `Event::Part` is `PartStart`/`PartData`/`PartEnd`, with `PartData` chunks
+//! forwarded as they decompress once `[Content_Types].xml` has streamed past
+//! (see its own module docs for the exact contract and the two narrow
+//! exceptions that remain there). That closes the OPC-container-layer part
+//! of this crate's memory bound.
+//!
+//! **Update (2026-08-08, later same day):** this crate's own XML layer is
+//! now also chunk-fed for worksheet parts. [`crate::chunked_events::ChunkedSmlEvents`]
+//! tokenizes a worksheet's XML incrementally as `PartData` chunks arrive —
+//! it never holds more than the current in-progress token plus the
+//! container-nesting stack (bounded by document depth, which for a
+//! worksheet is a handful of levels: `worksheet`, `sheetData`, `row`, `c`,
+//! `is`, nested in that order). A worksheet with a million rows streams
+//! through in O(nesting depth + largest token) memory, not O(worksheet XML size) —
+//! see [`crate::chunked_events`]'s module docs for exactly how, and that
+//! module's `pending_buffer_stays_small_for_a_large_worksheet` test for the
+//! structural evidence (it asserts the tokenizer's own internal buffer stays
+//! bounded while tokenizing a multi-megabyte synthetic worksheet fed in
+//! small chunks). `streaming_large_workbook_matches_seekable_reader` (below,
+//! in this module) is this bound's end-to-end correctness counterpart: it
+//! drives the same large worksheet through the full `StreamingParser<H>`
+//! pipeline (OPC container layer included) and checks the resulting events
+//! against the seekable `Workbook` reader — `ooxml_opc::StreamingParser`
+//! does not expose its inner handler for introspection, so the internal
+//! buffer-size assertion itself is only made at the `chunked_events` layer,
+//! where the bound was actually implemented.
 //!
 //! A part's classification (worksheet / shared-strings / generic) is
 //! decidable from its `PartStart` (path and resolved content type) alone —
-//! never from its content — so every non-worksheet, non-`sharedStrings.xml`
-//! part still needs its bytes accumulated (this crate's [`Event::Part`]
-//! passes a part's complete content through to the caller, same as
-//! before), but a worksheet or `sharedStrings.xml` part's classification
-//! happens immediately at `PartStart`, before any of its `PartData` has
-//! arrived.
+//! never from its content — so classification always happens immediately at
+//! `PartStart`, before any of a part's `PartData` has arrived. Non-worksheet,
+//! non-`sharedStrings.xml` parts (`xl/workbook.xml`, `xl/styles.xml`,
+//! `docProps/*`, chart/drawing parts, ...) are not specially interpreted —
+//! this crate's [`Event::Part`] passes each one's complete content through
+//! to the caller, same as before, so those still need their bytes
+//! accumulated (they are typically small compared to worksheet data, and
+//! interpreting them is out of scope for this `StreamingParser` regardless
+//! — see [`Event::Part`]'s own doc comment).
 //!
-//! Reaching the full O(nesting depth) bound end-to-end — the target
-//! described in the top-level `docs/format-library-design.md` streaming
-//! architecture — would require feeding XML bytes into a `quick_xml::Reader`
-//! (or an equivalent incremental tokenizer) as `PartData` chunks arrive,
-//! before a worksheet part has fully streamed past. That is a real
-//! architectural addition to this crate's own XML layer (not `ooxml-opc`'s
-//! container layer, which now already supports sub-entry delivery) —
-//! out of scope for this task, flagged here as a follow-up rather than
-//! silently left undocumented.
+//! ## Shared strings: still fully buffered — a deliberate, scoped exception
+//!
+//! `xl/sharedStrings.xml` is parsed via [`crate::workbook::bootstrap`] into a
+//! typed `Vec<String>` table (a different code path from [`crate::events::events`]
+//! entirely — see "Shared strings" further below for why the *table itself*
+//! is never resolved into cell values here regardless of how it's parsed).
+//! That path needs the part's complete bytes: `bootstrap` deserializes the
+//! whole `<sst>` element via `serde`/`quick-xml`'s tree deserializer, not an
+//! incremental tokenizer, and there's no proportionate value in giving it
+//! one — `sharedStrings.xml` is bounded, small (repeated-string) metadata
+//! for a workbook, not the multi-hundred-MB-per-part case that motivated
+//! this task (a worksheet with millions of rows). This mirrors how
+//! `ooxml-opc`'s own module docs draw the same line for `[Content_Types].xml`
+//! and `.rels` parts — both are also always fully buffered there, for the
+//! same "bounded small-metadata part" reason. `xl/sharedStrings.xml` staying
+//! fully buffered here is that same call, made explicitly rather than left
+//! implicit; it is not a remaining gap in the worksheet-streaming work this
+//! module docs otherwise describe as closed.
 //!
 //! ## Shared strings: resolution is deliberately left to the caller
 //!
@@ -185,12 +211,16 @@ pub enum Event {
 
 /// What the part currently open (since the last `PartStart`) is being
 /// treated as — decided from `PartStart`'s path/content-type alone, never
-/// from content. All three kinds still accumulate their `PartData` chunks
-/// into one buffer today (see the module docs' "Memory model" section);
-/// classification itself, though, never waits for content.
+/// from content. `Worksheet` carries its own chunk-resumable tokenizer,
+/// fed directly from `PartData`, with no accumulation buffer of its own;
+/// `SharedStrings` and `Generic` still accumulate their `PartData` chunks
+/// into `InnerHandler::buf` (see the module docs' "Memory model" and
+/// "Shared strings" sections for why that remains correct/deliberate for
+/// each). Classification itself never waits for content either way.
 enum PartKind {
     Worksheet {
         path: String,
+        tokenizer: crate::chunked_events::ChunkedSmlEvents,
     },
     SharedStrings,
     Generic {
@@ -204,12 +234,10 @@ struct InnerHandler<H: Handler<Event>> {
     handler: H,
     diagnostics: Rc<RefCell<Vec<Diagnostic>>>,
     kind: PartKind,
-    /// Accumulator for the part currently open. Every kind (including
-    /// `Worksheet`) still needs this today — see the module docs' "Memory
-    /// model" section for why true sub-part XML streaming (feeding
-    /// `PartData` chunks straight into `events()`'s tokenizer as they
-    /// arrive, without buffering here first) is documented follow-up work,
-    /// not yet implemented.
+    /// Accumulator for the part currently open, used by `SharedStrings` and
+    /// `Generic` parts only — `Worksheet` parts are tokenized incrementally
+    /// via `PartKind::Worksheet`'s own `tokenizer` field instead (see the
+    /// module docs' "Memory model" section).
     buf: Vec<u8>,
 }
 
@@ -220,6 +248,7 @@ impl<H: Handler<Event>> InnerHandler<H> {
         if is_worksheet {
             return PartKind::Worksheet {
                 path: path.to_string(),
+                tokenizer: crate::chunked_events::ChunkedSmlEvents::new(),
             };
         }
         let is_shared_strings =
@@ -234,7 +263,6 @@ impl<H: Handler<Event>> InnerHandler<H> {
     }
 
     fn finish_part(&mut self) {
-        let content = std::mem::take(&mut self.buf);
         match std::mem::replace(
             &mut self.kind,
             PartKind::Generic {
@@ -242,15 +270,17 @@ impl<H: Handler<Event>> InnerHandler<H> {
                 content_type: None,
             },
         ) {
-            PartKind::Worksheet { path } => {
-                for event in crate::events::events(&content) {
-                    self.handler.handle(Event::Sheet {
+            PartKind::Worksheet { path, tokenizer } => {
+                let handler = &mut self.handler;
+                tokenizer.finish(&mut |event| {
+                    handler.handle(Event::Sheet {
                         path: path.clone(),
-                        event: event.into_owned(),
+                        event,
                     });
-                }
+                });
             }
             PartKind::SharedStrings => {
+                let content = std::mem::take(&mut self.buf);
                 match crate::workbook::bootstrap::<crate::types::SharedStrings>(&content) {
                     Ok(sst) => {
                         let strings = crate::workbook::extract_shared_strings(&sst);
@@ -265,6 +295,7 @@ impl<H: Handler<Event>> InnerHandler<H> {
                 }
             }
             PartKind::Generic { path, content_type } => {
+                let content = std::mem::take(&mut self.buf);
                 self.handler.handle(Event::Part {
                     path,
                     content_type,
@@ -294,9 +325,21 @@ impl<H: Handler<Event>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
                 self.buf.clear();
                 self.kind = self.classify(&path, content_type);
             }
-            ooxml_opc::StreamingEvent::PartData(chunk) => {
-                self.buf.extend_from_slice(&chunk);
-            }
+            ooxml_opc::StreamingEvent::PartData(chunk) => match &mut self.kind {
+                PartKind::Worksheet { path, tokenizer } => {
+                    let path = path.clone();
+                    let handler = &mut self.handler;
+                    tokenizer.feed(&chunk, &mut |event| {
+                        handler.handle(Event::Sheet {
+                            path: path.clone(),
+                            event,
+                        });
+                    });
+                }
+                PartKind::SharedStrings | PartKind::Generic { .. } => {
+                    self.buf.extend_from_slice(&chunk);
+                }
+            },
             ooxml_opc::StreamingEvent::PartEnd => self.finish_part(),
         }
     }
@@ -542,5 +585,121 @@ mod tests {
             }
             let _diags = p.finish();
         }
+    }
+
+    /// A large single-sheet workbook (tens of thousands of rows, string,
+    /// number, boolean, and formula cells, all shared-string-indexed
+    /// strings) run through the full `StreamingParser<H>` pipeline —
+    /// OPC/ZIP container layer plus the new chunk-resumable worksheet
+    /// tokenizer — at a small, adversarial `feed()` chunk size, and checked
+    /// against the seekable `Workbook` reader. This is the end-to-end
+    /// correctness counterpart to `chunked_events`'s
+    /// `pending_buffer_stays_small_for_a_large_worksheet` test, which
+    /// asserts the *memory bound* directly on the tokenizer itself (see
+    /// this module's doc comment for why the bound can't also be asserted
+    /// at this full-pipeline level: `ooxml_opc::StreamingParser` doesn't
+    /// expose its inner handler for introspection).
+    #[test]
+    fn streaming_large_workbook_matches_seekable_reader() {
+        let mut wb = WorkbookBuilder::new();
+        {
+            let sheet = wb.add_sheet("Big");
+            for r in 1..=20_000u32 {
+                sheet.set_cell(format!("A{r}").as_str(), format!("row-{r}"));
+                sheet.set_cell(format!("B{r}").as_str(), r as f64);
+                sheet.set_cell(format!("C{r}").as_str(), r % 2 == 0);
+                sheet.set_formula(format!("D{r}").as_str(), format!("SUM(B1:B{r})"));
+            }
+        }
+        let mut buf = IoCursor::new(Vec::new());
+        wb.write(&mut buf).unwrap();
+        let bytes = buf.into_inner();
+        assert!(
+            bytes.len() > 500_000,
+            "expected a sizeable archive, got {} bytes",
+            bytes.len()
+        );
+
+        // Seekable reference.
+        let mut seekable =
+            crate::workbook::Workbook::from_reader(IoCursor::new(bytes.clone())).unwrap();
+        let resolved = seekable.resolved_sheets().unwrap();
+        let expected_row_count = resolved[0].rows().count();
+
+        let (events, diags) = collect(&bytes, 97);
+        assert!(diags.is_empty(), "{diags:?}");
+
+        let sst = events
+            .iter()
+            .find_map(|e| match e {
+                Event::SharedStrings(v) => Some(v.clone()),
+                _ => None,
+            })
+            .expect("missing SharedStrings");
+
+        let sheet_path = events
+            .iter()
+            .find_map(|e| match e {
+                Event::Sheet { path, .. } => Some(path.clone()),
+                _ => None,
+            })
+            .expect("missing worksheet part");
+
+        let cells = sheet_cell_values(&events, &sheet_path);
+        // `WorkbookBuilder` writes no cached `<v>` for formula cells (see
+        // `build_cell`'s `WriteCellValue::Formula` arm) — only A/B/C
+        // (string/number/boolean) carry a `<v>`, so 3 per row, not 4;
+        // formula presence is checked separately below via `Formula` events.
+        assert_eq!(cells.len(), 20_000 * 3);
+
+        let row_count = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    Event::Sheet {
+                        event: OwnedSmlEvent::StartRow { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(row_count, expected_row_count);
+
+        let get = |cell_ref: &str| {
+            cells
+                .iter()
+                .find(|(r, _)| r == cell_ref)
+                .map(|(_, v)| v.clone())
+        };
+        // Spot-check a handful of rows across the range, resolving shared
+        // strings by hand (the streaming reader never resolves them itself
+        // — see the module docs' "Shared strings" section).
+        for r in [1u32, 2, 10_000, 20_000] {
+            let a = get(&format!("A{r}")).unwrap();
+            let idx: usize = a.parse().unwrap();
+            assert_eq!(sst[idx], format!("row-{r}"), "row {r}");
+            assert_eq!(get(&format!("B{r}")), Some(r.to_string()), "row {r}");
+            assert_eq!(
+                get(&format!("C{r}")),
+                Some(if r % 2 == 0 { "1" } else { "0" }.to_string()),
+                "row {r}"
+            );
+        }
+
+        // Formula text itself is preserved (not just the cached <v> value).
+        let formula_events: Vec<&str> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Sheet {
+                    event: OwnedSmlEvent::Formula(f),
+                    ..
+                } => Some(f.as_ref()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(formula_events.len(), 20_000);
+        assert_eq!(formula_events[0], "SUM(B1:B1)");
+        assert_eq!(formula_events[19_999], "SUM(B1:B20000)");
     }
 }
