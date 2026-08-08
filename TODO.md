@@ -8706,3 +8706,45 @@ No implementation was attempted as part of this entry — this documents the goa
 prior-art/gap findings so a future pass has an accurate starting point instead of
 re-discovering both the existing 9-crate precedent and the scale/adversarial gaps from
 scratch.
+
+## Spreadsheet/presentation IR shape decided (ADR 0015, 2026-08-08) — implementation not started
+
+**Scope note first: this entry records that a design decision was made, not that the
+feature exists.** The decision itself — how spreadsheet and presentation content should
+be modeled in rescribe's `Document` IR, the first time this repo has designed for that
+content category — is recorded in `docs/adr/0015-spreadsheet-presentation-ir-shape.md`.
+Nothing described there has been implemented yet. Do not read this entry (or the ADR) as
+"spreadsheet/presentation support shipped."
+
+Decided:
+
+- New `rescribe-std` node kinds (not yet added to
+  `crates/nodes/rescribe-std/src/lib.rs`): `sheet`/`sheet_row`/`sheet_cell` for
+  spreadsheet content, with cell value as a typed scalar (string/number/currency/
+  percentage/date/time/boolean/formula-result) directly on the cell node — not nested in
+  a child paragraph the way `rescribe-fmt-ooxml/src/xlsx.rs` currently does it.
+- New `positioned_container` node kind for absolute (x/y/width/height/rotation/z-order)
+  positioning, shared across presentation shapes, DOCX text-boxes, PPTX shapes, and RTF's
+  currently-dropped `\shp`/`\do` shape control words.
+- Canonical positioning unit is EMU (`i64`), paired with a raw format-namespaced fallback
+  property (e.g. `odf:x`) for formats (ODF) whose native coordinate type has no fixed
+  resolution guarantee against EMU.
+- Vocabulary placement follows the ADR 0005 (`bibliography`/`bibliography_entry`/
+  `bibliography_field`, commit `4e15c9966e`) precedent: shared `rescribe-std` kinds,
+  cross-format-schema-verified against both ODF and OOXML SpreadsheetML/PresentationML
+  before being added, not `odf:`-namespaced.
+
+Not decided, explicitly flagged open in the ADR: rotation and z-order semantics for ODF
+specifically (not verified this session).
+
+Still to implement, all separate follow-up work:
+
+1. Add the new node kinds and properties to `rescribe-std`.
+2. Build `odf-fmt`'s spreadsheet (`.ods`) and presentation (`.odp`) `rescribe` read/write
+   translation against this shape — currently `crates/formats/odf-fmt/src/rescribe/
+   {read,write}.rs` returns `ParseError::Invalid` for `Spreadsheet`/`Presentation` on
+   read, and the writer never produces them at all.
+3. Migrate `rescribe-fmt-ooxml/src/xlsx.rs` off its current `table`/`table_row`/
+   `table_header`/`table_cell` reuse onto the new `sheet`/`sheet_row`/`sheet_cell` shape.
+4. Verify ODF rotation/z-order semantics before trusting `positioned_container`'s
+   `position:rotation`/`position:z_order` properties for ODF round-tripping.
