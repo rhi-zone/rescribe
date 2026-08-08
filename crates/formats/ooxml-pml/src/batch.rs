@@ -54,35 +54,50 @@
 //!
 //! ## Memory model and buffering
 //!
-//! Two scoped buffering exceptions, on top of the one already documented in
-//! `ooxml-opc`'s own `batch.rs` (whose `Event::Part` already delivers a
-//! part's full decompressed bytes in one shot — not token-by-token — so
-//! per-slide parsing here is "genuinely incremental XML parsing of an
-//! already-fully-buffered part", the same tradeoff `ooxml-opc` documents for
-//! itself; individual slide XML parts are typically small, so this is judged
-//! acceptable for `pml` even though it would not be for `wml`/`sml`'s much
-//! larger single-part documents):
+//! **Update (2026-08-08):** `ooxml-opc`'s `Event::Part` no longer delivers
+//! a part's full decompressed bytes in one shot — it is now
+//! `PartStart`/`PartData`/`PartEnd`, with `PartData` chunks forwarded as
+//! they decompress once `[Content_Types].xml` has streamed past (see its
+//! own module docs). This module takes advantage of that directly for one
+//! case: once presentation/slide-path resolution has completed (see
+//! exception 1 below), a part that resolution says is neither the
+//! presentation part nor a slide part is now dropped **as its `PartData`
+//! chunks arrive**, never accumulated even transiently — a real
+//! improvement over the pre-2026-08-08 behavior, where `ooxml-opc` fully
+//! buffered every part (including ones this module immediately discarded)
+//! before this module ever saw it.
+//!
+//! Two scoped buffering exceptions remain, both orthogonal to the
+//! `ooxml-opc` container-layer change above (they exist because of what
+//! this module's own resolution/ordering logic needs, not because of how
+//! `ooxml-opc` delivers bytes) and both still needing a part's complete
+//! bytes at the point they're held — individual slide XML parts are
+//! typically small, so this is judged acceptable for `pml` even though it
+//! would not be for `wml`/`sml`'s much larger single-part documents:
 //!
 //! 1. **Pre-resolution part buffering.** Any part whose classification
 //!    (presentation part / slide part / irrelevant) isn't yet knowable —
 //!    because the root relationships, the presentation part's own
-//!    relationships, or `<p:sldIdLst>` haven't streamed past yet — is held
-//!    in `pending_parts` until classification becomes possible, then
-//!    reclassified (kept if it's the presentation part or a slide part,
-//!    dropped otherwise). Bounded by total bytes of parts preceding full
-//!    resolution, not the full archive; real PPTX packages conventionally
-//!    put `_rels/.rels`, `ppt/presentation.xml`, and its `.rels` early.
+//!    relationships, or `<p:sldIdLst>` haven't streamed past yet — has its
+//!    `PartData` chunks accumulated and held in `pending_parts` until
+//!    classification becomes possible, then reclassified (kept if it's the
+//!    presentation part or a slide part, dropped otherwise). Bounded by
+//!    total bytes of parts preceding full resolution, not the full
+//!    archive; real PPTX packages conventionally put `_rels/.rels`,
+//!    `ppt/presentation.xml`, and its `.rels` early.
 //! 2. **Out-of-slide-order buffering.** Once slide paths are known in
 //!    display order, a slide part that streams past before the slide(s)
-//!    ahead of it in display order is held in `slide_content` until its
-//!    turn. Bounded by total bytes of slides that arrive before the
-//!    currently-awaited one — worst case the whole deck, if ZIP entry order
-//!    happens to be the reverse of display order, but real PPTX packages
-//!    conventionally write slide parts in display order.
+//!    ahead of it in display order has its `PartData` chunks accumulated
+//!    and held in `slide_content` until its turn. Bounded by total bytes
+//!    of slides that arrive before the currently-awaited one — worst case
+//!    the whole deck, if ZIP entry order happens to be the reverse of
+//!    display order, but real PPTX packages conventionally write slide
+//!    parts in display order.
 //!
 //! Neither exception applies to non-presentation, non-slide parts (styles,
-//! media, masters, layouts, notes, etc.) — those are classified and dropped
-//! immediately once resolution is possible, never buffered further.
+//! media, masters, layouts, notes, etc.) once resolution has completed —
+//! those are classified from `PartStart` alone and their `PartData`
+//! dropped immediately, never buffered at all.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -286,20 +301,61 @@ impl<H: Handler<OwnedPmlEvent>> Shared<H> {
     }
 }
 
+/// Adapts `ooxml_opc::batch::Event`'s incremental part delivery to
+/// [`Shared::on_part`]'s whole-part contract. Accumulates `PartData`
+/// chunks into `buf` — *unless* `drop_immediately` says resolution has
+/// already determined this part is neither the presentation part nor a
+/// slide part, in which case chunks are discarded as they arrive without
+/// ever touching `buf`. See the module docs' "Memory model and buffering"
+/// section for why the other two buffering exceptions (pre-resolution,
+/// out-of-order slides) still need a part's complete bytes once accepted.
 struct InnerHandler<H: Handler<OwnedPmlEvent>> {
     shared: Rc<RefCell<Shared<H>>>,
+    current_path: String,
+    buf: Vec<u8>,
+    drop_immediately: bool,
 }
 
 impl<H: Handler<OwnedPmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
     fn handle(&mut self, event: ooxml_opc::StreamingEvent) {
-        let mut shared = self.shared.borrow_mut();
         match event {
             ooxml_opc::StreamingEvent::ContentTypes(_) => {}
             ooxml_opc::StreamingEvent::Relationships {
                 part_path,
                 relationships,
-            } => shared.on_relationships(part_path, relationships),
-            ooxml_opc::StreamingEvent::Part { path, content, .. } => shared.on_part(path, content),
+            } => self
+                .shared
+                .borrow_mut()
+                .on_relationships(part_path, relationships),
+            ooxml_opc::StreamingEvent::PartStart { path, .. } => {
+                self.buf.clear();
+                let shared = self.shared.borrow();
+                self.drop_immediately = match &shared.slide_paths {
+                    Some(slide_paths) => {
+                        !slide_paths.contains(&path)
+                            && shared.presentation_path.as_deref() != Some(path.as_str())
+                    }
+                    // Resolution not yet complete — classification isn't
+                    // knowable yet, so this part must still be accumulated
+                    // (module docs, exception 1).
+                    None => false,
+                };
+                self.current_path = path;
+            }
+            ooxml_opc::StreamingEvent::PartData(chunk) => {
+                if !self.drop_immediately {
+                    self.buf.extend_from_slice(&chunk);
+                }
+            }
+            ooxml_opc::StreamingEvent::PartEnd => {
+                if self.drop_immediately {
+                    self.buf.clear();
+                    return;
+                }
+                let path = std::mem::take(&mut self.current_path);
+                let content = std::mem::take(&mut self.buf);
+                self.shared.borrow_mut().on_part(path, content);
+            }
         }
     }
 }
@@ -328,6 +384,9 @@ impl<H: Handler<OwnedPmlEvent>> StreamingParser<H> {
         }));
         let inner_handler = InnerHandler {
             shared: shared.clone(),
+            current_path: String::new(),
+            buf: Vec::new(),
+            drop_immediately: false,
         };
         StreamingParser {
             inner: ooxml_opc::StreamingParser::new(inner_handler),

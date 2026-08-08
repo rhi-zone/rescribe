@@ -22,34 +22,44 @@
 //!
 //! ## Memory model: O(largest single part), not O(nesting depth)
 //!
-//! [`ooxml_opc::StreamingParser`] buffers each ZIP entry's decompressed
-//! bytes in full before delivering `Event::Part` — see its module docs,
-//! "buffer-per-ZIP-entry, plus a bounded pre-`[Content_Types].xml` buffer".
-//! That is a deliberate, documented, scoped exception shared by every
-//! OPC-based `-fmt` crate in this workspace (it is what lets `ooxml-opc`
-//! avoid knowing anything about WordprocessingML/SpreadsheetML/
-//! PresentationML content), not an sml-specific gap. This crate's
-//! `StreamingParser` therefore inherits a memory bound of **O(largest
-//! single part)** — for XLSX, that means O(largest worksheet's XML) in the
-//! common case where one sheet dominates the file. Once a worksheet part's
+//! **Update (2026-08-08):** [`ooxml_opc::StreamingParser`] no longer
+//! buffers a generic part's decompressed bytes in full before delivering
+//! it — its `Event::Part` is now `PartStart`/`PartData`/`PartEnd`, with
+//! `PartData` chunks forwarded as they decompress once `[Content_Types].xml`
+//! has streamed past (see its own module docs for the exact contract and
+//! the two narrow exceptions that remain). That closes the OPC-container-layer
+//! part of this crate's memory bound. What remains open is this crate's
+//! own XML layer: [`crate::events::events`] takes `bytes: &[u8]` — a
+//! `quick_xml::Reader<&[u8]>` over the complete input, with no chunk-fed
+//! tokenizer in this crate today. This module therefore still accumulates
+//! a worksheet part's `PartData` chunks into one buffer before running
+//! `events()` over the complete result, so this crate's `StreamingParser`
+//! still inherits a memory bound of **O(largest single part)** — for
+//! XLSX, that means O(largest worksheet's XML) in the common case where
+//! one sheet dominates the file — but the bottleneck is now this crate's
+//! XML layer, not `ooxml-opc`'s container layer. Once a worksheet part's
 //! bytes are handed to this crate, they run straight through
 //! [`crate::events::events`] with no second AST materialization and no
 //! extra buffering beyond that one part's bytes.
 //!
+//! A part's classification (worksheet / shared-strings / generic) is
+//! decidable from its `PartStart` (path and resolved content type) alone —
+//! never from its content — so every non-worksheet, non-`sharedStrings.xml`
+//! part still needs its bytes accumulated (this crate's [`Event::Part`]
+//! passes a part's complete content through to the caller, same as
+//! before), but a worksheet or `sharedStrings.xml` part's classification
+//! happens immediately at `PartStart`, before any of its `PartData` has
+//! arrived.
+//!
 //! Reaching the full O(nesting depth) bound end-to-end — the target
 //! described in the top-level `docs/format-library-design.md` streaming
-//! architecture — would require `ooxml_opc::StreamingParser` to deliver a
-//! worksheet part's bytes sub-entry (as they decompress), not only after
-//! the whole entry has decompressed. `ooxml-opc`'s own module docs say
-//! explicitly that sub-entry delivery is out of scope for that crate ("a
-//! fully sub-entry-incremental design would mean handing
-//! partially-decompressed bytes to wml/sml/pml's own future
-//! `StreamingParser`s mid-ZIP-entry, which is out of scope for this
-//! crate"). Closing that gap is a change to the shared `ooxml-opc`
-//! foundation crate — used identically by `ooxml-wml` and `ooxml-pml` — not
-//! something this crate can decide unilaterally; it is out of scope for
-//! this task and is flagged here for a follow-up architectural decision
-//! rather than worked around.
+//! architecture — would require feeding XML bytes into a `quick_xml::Reader`
+//! (or an equivalent incremental tokenizer) as `PartData` chunks arrive,
+//! before a worksheet part has fully streamed past. That is a real
+//! architectural addition to this crate's own XML layer (not `ooxml-opc`'s
+//! container layer, which now already supports sub-entry delivery) —
+//! out of scope for this task, flagged here as a follow-up rather than
+//! silently left undocumented.
 //!
 //! ## Shared strings: resolution is deliberately left to the caller
 //!
@@ -173,49 +183,95 @@ pub enum Event {
     },
 }
 
+/// What the part currently open (since the last `PartStart`) is being
+/// treated as — decided from `PartStart`'s path/content-type alone, never
+/// from content. All three kinds still accumulate their `PartData` chunks
+/// into one buffer today (see the module docs' "Memory model" section);
+/// classification itself, though, never waits for content.
+enum PartKind {
+    Worksheet {
+        path: String,
+    },
+    SharedStrings,
+    Generic {
+        path: String,
+        content_type: Option<String>,
+    },
+}
+
 /// Routes `ooxml_opc`'s per-part byte stream to [`Event`]s.
 struct InnerHandler<H: Handler<Event>> {
     handler: H,
     diagnostics: Rc<RefCell<Vec<Diagnostic>>>,
+    kind: PartKind,
+    /// Accumulator for the part currently open. Every kind (including
+    /// `Worksheet`) still needs this today — see the module docs' "Memory
+    /// model" section for why true sub-part XML streaming (feeding
+    /// `PartData` chunks straight into `events()`'s tokenizer as they
+    /// arrive, without buffering here first) is documented follow-up work,
+    /// not yet implemented.
+    buf: Vec<u8>,
 }
 
 impl<H: Handler<Event>> InnerHandler<H> {
-    fn dispatch_part(&mut self, path: String, content_type: Option<String>, content: Vec<u8>) {
+    fn classify(&self, path: &str, content_type: Option<String>) -> PartKind {
         let is_worksheet = content_type.as_deref() == Some(CT_WORKSHEET)
             || (path.starts_with("xl/worksheets/") && path.ends_with(".xml"));
         if is_worksheet {
-            for event in crate::events::events(&content) {
-                self.handler.handle(Event::Sheet {
-                    path: path.clone(),
-                    event: event.into_owned(),
-                });
-            }
-            return;
+            return PartKind::Worksheet {
+                path: path.to_string(),
+            };
         }
-
         let is_shared_strings =
             content_type.as_deref() == Some(CT_SHARED_STRINGS) || path == "xl/sharedStrings.xml";
         if is_shared_strings {
-            match crate::workbook::bootstrap::<crate::types::SharedStrings>(&content) {
-                Ok(sst) => {
-                    let strings = crate::workbook::extract_shared_strings(&sst);
-                    self.handler.handle(Event::SharedStrings(strings));
-                }
-                Err(e) => {
-                    self.diagnostics.borrow_mut().push(Diagnostic::new(
-                        Severity::Warning,
-                        format!("failed to parse xl/sharedStrings.xml: {e}"),
-                    ));
+            return PartKind::SharedStrings;
+        }
+        PartKind::Generic {
+            path: path.to_string(),
+            content_type,
+        }
+    }
+
+    fn finish_part(&mut self) {
+        let content = std::mem::take(&mut self.buf);
+        match std::mem::replace(
+            &mut self.kind,
+            PartKind::Generic {
+                path: String::new(),
+                content_type: None,
+            },
+        ) {
+            PartKind::Worksheet { path } => {
+                for event in crate::events::events(&content) {
+                    self.handler.handle(Event::Sheet {
+                        path: path.clone(),
+                        event: event.into_owned(),
+                    });
                 }
             }
-            return;
+            PartKind::SharedStrings => {
+                match crate::workbook::bootstrap::<crate::types::SharedStrings>(&content) {
+                    Ok(sst) => {
+                        let strings = crate::workbook::extract_shared_strings(&sst);
+                        self.handler.handle(Event::SharedStrings(strings));
+                    }
+                    Err(e) => {
+                        self.diagnostics.borrow_mut().push(Diagnostic::new(
+                            Severity::Warning,
+                            format!("failed to parse xl/sharedStrings.xml: {e}"),
+                        ));
+                    }
+                }
+            }
+            PartKind::Generic { path, content_type } => {
+                self.handler.handle(Event::Part {
+                    path,
+                    content_type,
+                    content,
+                });
+            }
         }
-
-        self.handler.handle(Event::Part {
-            path,
-            content_type,
-            content,
-        });
     }
 }
 
@@ -234,11 +290,14 @@ impl<H: Handler<Event>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
                     relationships,
                 });
             }
-            ooxml_opc::StreamingEvent::Part {
-                path,
-                content_type,
-                content,
-            } => self.dispatch_part(path, content_type, content),
+            ooxml_opc::StreamingEvent::PartStart { path, content_type } => {
+                self.buf.clear();
+                self.kind = self.classify(&path, content_type);
+            }
+            ooxml_opc::StreamingEvent::PartData(chunk) => {
+                self.buf.extend_from_slice(&chunk);
+            }
+            ooxml_opc::StreamingEvent::PartEnd => self.finish_part(),
         }
     }
 }
@@ -261,6 +320,11 @@ impl<H: Handler<Event>> StreamingParser<H> {
         let inner_handler = InnerHandler {
             handler,
             diagnostics: diagnostics.clone(),
+            kind: PartKind::Generic {
+                path: String::new(),
+                content_type: None,
+            },
+            buf: Vec::new(),
         };
         StreamingParser {
             inner: ooxml_opc::StreamingParser::new(inner_handler),

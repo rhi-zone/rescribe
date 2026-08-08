@@ -24,58 +24,62 @@
 //! [`StreamingParser`] is driven by [`ooxml_opc::StreamingParser`] for
 //! container-level (ZIP/OPC) entry delivery: `feed()` pushes raw `.docx`
 //! archive bytes into the OPC layer, which classifies each ZIP entry into
-//! `[Content_Types].xml`, `.rels`, or a generic part the moment that entry
-//! finishes decompressing — see `ooxml_opc::batch`'s module docs for its
-//! own buffering contract. This module only acts on one of those parts:
-//! `word/document.xml`, the conventional path Word (and every other real
-//! DOCX producer — LibreOffice, python-docx, the OpenXML SDK) writes the
-//! main document body to. Its bytes are handed to [`crate::events::events`]
-//! — the same hand-rolled `quick_xml::Reader`-based SAX iterator `events()`
+//! `[Content_Types].xml`, `.rels`, or a generic part — see `ooxml_opc::batch`'s
+//! module docs for its own buffering contract, updated 2026-08-08 so a
+//! generic part's content now arrives as `PartStart`/`PartData`/`PartEnd`
+//! (`PartData` chunks forwarded as they decompress, not buffered whole) once
+//! `[Content_Types].xml` has streamed past. This module only acts on one
+//! part: `word/document.xml`, the conventional path Word (and every other
+//! real DOCX producer — LibreOffice, python-docx, the OpenXML SDK) writes
+//! the main document body to. Every other part's `PartData` chunks are
+//! discarded the moment they arrive, without ever being accumulated.
+//!
+//! `word/document.xml`'s own `PartData` chunks *are* accumulated into one
+//! buffer (see "Memory model" below for why) until its `PartEnd`, at which
+//! point the complete bytes are handed to [`crate::events::events`] — the
+//! same hand-rolled `quick_xml::Reader`-based SAX iterator `events()`
 //! already uses — and each [`OwnedWmlEvent`] it yields is forwarded to the
 //! caller's [`Handler`] as it is produced, not collected into a `Vec`
 //! first.
 //!
-//! ## Memory model: O(part size), not O(full archive) — and not O(nesting
-//! ## depth) for `word/document.xml` specifically
+//! ## Memory model: O(main part size + nesting depth), not O(full archive)
 //!
 //! This is a real, documented improvement over [`BatchParser`] (was
 //! O(full DOCX), now O(largest single part + nesting depth)), but **not**
 //! the tightest possible bound, and that gap is deliberate, not
-//! accidental: `ooxml_opc::StreamingParser`'s current `Event::Part`
-//! delivers a part's **full decompressed content as one `Vec<u8>`**, not
-//! incremental XML tokens (its own module docs, "Design: buffer-per-ZIP-
-//! entry", document this as a scoped exception). That means this crate
-//! cannot see `word/document.xml`'s bytes before the whole part has
-//! streamed past and been reassembled by the OPC layer — the byte buffer
-//! for that one part is unavoidably O(part size) with the current
-//! `ooxml-opc` surface. What *is* genuinely incremental on top of that
-//! buffer: `events()`'s `quick_xml::Reader` state machine never builds a
-//! DOM or a full `WmlEvent` list — it holds only the open-container stack
-//! (O(nesting depth)) and, transiently, one props element (`pPr`/`rPr`/…)
-//! being parsed for the container that owns it. So peak *additional*
-//! memory beyond the one buffered part is O(nesting depth + largest props
-//! element), matching `events()`'s own bound exactly.
+//! accidental — now confined to a different layer than before. As of
+//! 2026-08-08, `ooxml_opc::StreamingParser` itself delivers a generic
+//! part's content sub-entry (`PartData` chunks as they decompress, not one
+//! final `Vec<u8>` — see its own module docs), so the OPC container layer
+//! is no longer the bottleneck. What *is* still O(part size) is this
+//! crate's own XML layer: [`crate::events::events`] takes `bytes: &[u8]`
+//! — a `quick_xml::Reader<&[u8]>` over the complete input — because this
+//! crate has no chunk-fed XML tokenizer today. This module therefore still
+//! accumulates `word/document.xml`'s `PartData` chunks into one buffer
+//! before calling `events()` on the complete result. Reaching true
+//! O(largest XML token) for `word/document.xml` would require feeding XML
+//! bytes into a `quick_xml::Reader` (or an equivalent incremental
+//! tokenizer) as `PartData` chunks arrive, before the whole part has
+//! streamed past — a real architectural addition to this crate's XML
+//! layer (not `ooxml-opc`'s container layer, which now already supports
+//! sub-entry delivery), out of scope for this task and left as a follow-up
+//! rather than silently left undocumented. What *is* genuinely incremental
+//! on top of the one buffered part: `events()`'s `quick_xml::Reader` state
+//! machine never builds a DOM or a full `WmlEvent` list — it holds only
+//! the open-container stack (O(nesting depth)) and, transiently, one props
+//! element (`pPr`/`rPr`/…) being parsed for the container that owns it. So
+//! peak *additional* memory beyond the one buffered part is O(nesting
+//! depth + largest props element), matching `events()`'s own bound
+//! exactly.
 //!
-//! Every other part (media, styles, numbering, etc.) is also fully
-//! buffered momentarily by `ooxml_opc::StreamingParser` before its
-//! `Event::Part` fires, per that crate's own contract — but this module
-//! drops that content immediately without forwarding or retaining it, so
-//! it costs only a transient O(that part's size), never accumulated
-//! across parts.
-//!
-//! Tightening this further to true O(largest XML token) for
-//! `word/document.xml` itself — feeding XML bytes into `quick_xml::Reader`
-//! as they arrive mid-ZIP-entry, before decompression of the whole entry
-//! completes — would require `ooxml_opc::StreamingParser` to expose
-//! sub-entry chunks for a part instead of one final `Vec<u8>`. That is a
-//! real architectural fork in `ooxml-opc`, out of scope for this crate:
-//! `ooxml-opc` is a shared foundation crate also relied on by
-//! `ooxml-sml`/`ooxml-pml`, so changing its `Event::Part` shape here is
-//! not this module's call to make unilaterally. Document parts
-//! (`word/document.xml` included) are typically well under the size where
-//! this matters in practice — unlike embedded media, which this module
-//! never even attempts to hold onto — so O(part size) is treated as an
-//! acceptable interim bound, not a permanent one.
+//! Every other part (media, styles, numbering, etc.) is never buffered at
+//! all by this module — its `PartData` chunks are dropped as they arrive,
+//! each chunk transient and bounded by `ooxml-opc`'s own O(largest
+//! decompressor output chunk) delivery, never accumulated across a part or
+//! across parts. This is a genuine improvement over the pre-2026-08-08
+//! behavior, where `ooxml_opc::StreamingParser` fully buffered every part
+//! (including ones this module immediately discarded) before this module
+//! ever saw it.
 //!
 //! ## Locating `word/document.xml`: convention, not relationship resolution
 //!
@@ -154,26 +158,41 @@ use crate::generated_events::OwnedWmlEvent;
 /// rather than resolving it via `_rels/.rels`.
 const MAIN_PART_PATH: &str = "word/document.xml";
 
-/// Adapts `ooxml_opc::batch::Event` to `OwnedWmlEvent`, forwarding only
-/// `word/document.xml`'s content to `events()` and dropping every other
-/// part's buffered bytes immediately.
+/// Adapts `ooxml_opc::batch::Event` to `OwnedWmlEvent`. Accumulates
+/// `word/document.xml`'s `PartData` chunks (see the module docs for why
+/// this crate's own XML layer still needs the complete part) and forwards
+/// the result to `events()` on that part's `PartEnd`; every other part's
+/// `PartData` chunks are dropped as they arrive, never accumulated.
 struct InnerHandler<H: Handler<OwnedWmlEvent>> {
     handler: H,
+    /// Whether the part currently open (since the last `PartStart`) is
+    /// `word/document.xml`.
+    in_target: bool,
+    buf: Vec<u8>,
 }
 
 impl<H: Handler<OwnedWmlEvent>> Handler<ooxml_opc::StreamingEvent> for InnerHandler<H> {
     fn handle(&mut self, event: ooxml_opc::StreamingEvent) {
-        if let ooxml_opc::StreamingEvent::Part { path, content, .. } = event
-            && path == MAIN_PART_PATH
-        {
-            for wml_event in crate::events::events(&content) {
-                self.handler.handle(wml_event.into_owned());
+        match event {
+            ooxml_opc::StreamingEvent::PartStart { path, .. } => {
+                self.in_target = path == MAIN_PART_PATH;
+                self.buf.clear();
             }
+            ooxml_opc::StreamingEvent::PartData(chunk) if self.in_target => {
+                self.buf.extend_from_slice(&chunk);
+            }
+            ooxml_opc::StreamingEvent::PartEnd if self.in_target => {
+                for wml_event in crate::events::events(&self.buf) {
+                    self.handler.handle(wml_event.into_owned());
+                }
+                self.buf.clear();
+                self.in_target = false;
+            }
+            // `ContentTypes`, `Relationships`, and every other part's
+            // `PartData`/`PartEnd` are intentionally dropped here — see
+            // the module docs' "Locating word/document.xml" section.
+            _ => {}
         }
-        // `ContentTypes`, `Relationships`, and every other `Part` are
-        // intentionally dropped here — see the module docs' "Locating
-        // word/document.xml" section. `content` (if any) is freed when
-        // this match arm's binding goes out of scope.
     }
 }
 
@@ -191,7 +210,11 @@ impl<H: Handler<OwnedWmlEvent>> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
-            inner: ooxml_opc::StreamingParser::new(InnerHandler { handler }),
+            inner: ooxml_opc::StreamingParser::new(InnerHandler {
+                handler,
+                in_target: false,
+                buf: Vec::new(),
+            }),
         }
     }
 
