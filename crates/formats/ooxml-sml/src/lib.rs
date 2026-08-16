@@ -124,8 +124,9 @@ pub use error::{Error, Result};
 #[cfg(feature = "reader-ast")]
 pub use workbook::{
     ConditionalRuleType, DataValidationErrorStyle, DataValidationOperator, DataValidationType,
-    DefinedNameExt, DefinedNameScope, StylesheetExt, Workbook, builtin_format_code,
-    excel_date_to_ymd, excel_datetime_to_ymdhms, format_excel_date, format_excel_datetime,
+    DefinedNameExt, DefinedNameScope, NumberFormatKind, StylesheetExt, Workbook,
+    builtin_format_code, classify_format_code, excel_date_to_ymd, excel_datetime_to_ymdhms,
+    format_excel_date, format_excel_datetime,
 };
 #[cfg(feature = "writer-builder")]
 pub use writer::{

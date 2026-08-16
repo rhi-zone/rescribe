@@ -842,6 +842,22 @@ pub trait StylesheetExt {
 
     /// Check if a format ID represents a date/time format.
     fn is_date_format(&self, id: u32) -> bool;
+
+    /// Resolve a cell's `style_index` (into `cellXfs`) to the semantic kind
+    /// of value its number format represents (plain number, percentage,
+    /// currency, date, time, or datetime). Returns
+    /// [`NumberFormatKind::Number`] when `style_index` is `None`, the index
+    /// is out of range, the `xf` entry carries no `numFmtId`, or the format
+    /// code can't be resolved at all — the same "don't force a
+    /// classification" fallback [`classify_format_code`] itself uses for
+    /// unrecognized codes.
+    fn number_format_kind(&self, style_index: Option<u32>) -> NumberFormatKind;
+
+    /// Resolve a cell's `style_index` to its raw number-format code string,
+    /// for verbatim round-trip preservation — `None` for the default
+    /// ("General", numFmtId 0) format or when unresolvable, matching
+    /// [`number_format_kind`](Self::number_format_kind)'s fallback cases.
+    fn cell_number_format(&self, style_index: Option<u32>) -> Option<String>;
 }
 
 impl StylesheetExt for crate::types::Stylesheet {
@@ -863,6 +879,171 @@ impl StylesheetExt for crate::types::Stylesheet {
             matches!(id, 14..=22 | 45..=47)
         }
     }
+
+    fn number_format_kind(&self, style_index: Option<u32>) -> NumberFormatKind {
+        match self
+            .cell_number_format_id(style_index)
+            .and_then(|id| self.format_code(id))
+        {
+            Some(code) => classify_format_code(&code),
+            None => NumberFormatKind::Number,
+        }
+    }
+
+    fn cell_number_format(&self, style_index: Option<u32>) -> Option<String> {
+        let id = self.cell_number_format_id(style_index)?;
+        if id == 0 {
+            return None;
+        }
+        self.format_code(id)
+    }
+}
+
+impl crate::types::Stylesheet {
+    /// Look up the `numFmtId` an `xf` (cell format) entry references, given
+    /// a cell's `style_index` into `cellXfs`.
+    fn cell_number_format_id(&self, style_index: Option<u32>) -> Option<u32> {
+        #[cfg(feature = "sml-styling")]
+        {
+            let idx = style_index?;
+            self.cell_xfs
+                .as_ref()?
+                .xf
+                .get(idx as usize)?
+                .number_format_id
+        }
+        #[cfg(not(feature = "sml-styling"))]
+        {
+            let _ = style_index;
+            None
+        }
+    }
+}
+
+/// The semantic kind of value an Excel number-format code represents.
+///
+/// OOXML resolves currency/percentage/date/time indirectly via a cell's
+/// number-format code (e.g. `"0.00%"`, `"$#,##0.00"`, `"m/d/yyyy"`) rather
+/// than an explicit type enum, unlike ODF's `office:value-type` — see
+/// [`classify_format_code`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumberFormatKind {
+    /// A plain number, or a format the classifier couldn't confidently
+    /// place in a more specific category (e.g. scientific notation,
+    /// fractions, or an exotic custom format with no recognizable tokens).
+    Number,
+    /// A `%`-suffixed format (e.g. `"0.00%"`, builtin ID 9/10).
+    Percentage,
+    /// A format containing a currency symbol (e.g. `"$#,##0.00"`) or a
+    /// `[$...]` locale-currency bracket.
+    Currency,
+    /// A format containing date tokens (`y`, `d`) but no time tokens.
+    Date,
+    /// A format containing time tokens (`h`, `s`, or an elapsed-time
+    /// bracket like `[h]`/`[mm]`/`[ss]`) but no date tokens.
+    Time,
+    /// A format containing both date and time tokens (e.g. `"m/d/yy h:mm"`,
+    /// builtin ID 22).
+    DateTime,
+}
+
+/// Classify an Excel number-format code string into a semantic kind.
+///
+/// Covers the well-defined, common cases: built-in percentage/date/time
+/// format codes (see [`builtin_format_code`] — ECMA-376 Part 1, §18.8.30),
+/// and custom format codes using recognizable tokens from the format-code
+/// mini-language (ECMA-376 Part 1, §18.8.31, `ST_Numfmt`): `%` for
+/// percentage; a currency symbol (`$`, `¥`, `£`, `€`, and a few others) or a
+/// `[$...]` locale-currency bracket for currency; `y`/`d` for date; `h`/`s`
+/// or an elapsed-time bracket (`[h]`/`[hh]`/`[m]`/`[mm]`/`[s]`/`[ss]`) for
+/// time.
+///
+/// This is not a complete implementation of the format-code language: a
+/// bare `m`/`mm` token is genuinely ambiguous between "month" and "minute"
+/// with no surrounding `y`/`d`/`h`/`s` context (Excel itself resolves this
+/// positionally relative to other date/time tokens in the same section),
+/// and a `m`-only custom format with zero other context is vanishingly rare
+/// in practice — so it is deliberately not used as a date signal here.
+/// Genuinely ambiguous or exotic custom formats fall back to
+/// [`NumberFormatKind::Number`] rather than guessing, per this repo's
+/// convention of not forcing a classification the format doesn't clearly
+/// signal (see CLAUDE.md's losslessness section).
+///
+/// Only the *first* format section (up to the first top-level `;`) is
+/// examined — Excel's positive-number section, which conventionally
+/// carries the same semantic type as the other sections in real-world
+/// formats (e.g. `"0.00%;[Red]-0.00%"`).
+pub fn classify_format_code(code: &str) -> NumberFormatKind {
+    let mut has_currency = false;
+    let mut has_percent = false;
+    let mut has_time_token = false; // h, s, or an elapsed-time bracket
+    let mut has_date_token = false; // y, d
+
+    let mut chars = code.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            ';' => break, // first (positive-number) section only
+            '\\' => {
+                chars.next(); // escaped literal char: not a token
+            }
+            '"' => {
+                // Quoted literal run: not scanned for date/time tokens (a
+                // literal word like "Days" would false-positive on 'd'),
+                // but a currency symbol inside a quoted literal (e.g.
+                // `"$"#,##0.00`, common in some locale-generated formats)
+                // still counts.
+                for c2 in chars.by_ref() {
+                    if c2 == '"' {
+                        break;
+                    }
+                    if is_currency_symbol(c2) {
+                        has_currency = true;
+                    }
+                }
+            }
+            '[' => {
+                // Bracket content: `[$...]` is a locale-currency marker,
+                // `[h]`/`[hh]`/`[m]`/`[mm]`/`[s]`/`[ss]` is an elapsed-time
+                // field. Anything else (colors like `[Red]`, conditions
+                // like `[>100]`) carries no type signal and is dropped —
+                // deliberately never merged into date/time token scanning,
+                // since e.g. `[Red]` contains a `d` that would otherwise
+                // false-positive as a date token.
+                let mut bracket = String::new();
+                for c2 in chars.by_ref() {
+                    if c2 == ']' {
+                        break;
+                    }
+                    bracket.push(c2);
+                }
+                let lower = bracket.to_ascii_lowercase();
+                if lower.starts_with('$') {
+                    has_currency = true;
+                } else if matches!(lower.as_str(), "h" | "hh" | "m" | "mm" | "s" | "ss") {
+                    has_time_token = true;
+                }
+            }
+            '%' => has_percent = true,
+            c if is_currency_symbol(c) => has_currency = true,
+            'y' | 'Y' | 'd' | 'D' => has_date_token = true,
+            'h' | 'H' | 's' | 'S' => has_time_token = true,
+            _ => {}
+        }
+    }
+
+    match (has_date_token, has_time_token) {
+        (true, true) => NumberFormatKind::DateTime,
+        (true, false) => NumberFormatKind::Date,
+        (false, true) => NumberFormatKind::Time,
+        (false, false) if has_currency => NumberFormatKind::Currency,
+        (false, false) if has_percent => NumberFormatKind::Percentage,
+        (false, false) => NumberFormatKind::Number,
+    }
+}
+
+/// Common currency symbols recognized by [`classify_format_code`].
+fn is_currency_symbol(c: char) -> bool {
+    matches!(c, '$' | '¥' | '£' | '€' | '₹' | '₩' | '₽' | '₺' | '₴')
 }
 
 /// Extension methods for the generated [`types::DefinedName`](crate::types::DefinedName).
@@ -1589,5 +1770,145 @@ mod tests {
         assert!(!is_date_format_code("#,##0"));
         assert!(!is_date_format_code("General"));
         assert!(!is_date_format_code("@")); // Text format
+    }
+
+    #[test]
+    fn test_classify_format_code_number() {
+        assert_eq!(classify_format_code("General"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("0.00"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("#,##0"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("0.00E+00"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("# ?/?"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("@"), NumberFormatKind::Number);
+    }
+
+    #[test]
+    fn test_classify_format_code_percentage() {
+        assert_eq!(classify_format_code("0%"), NumberFormatKind::Percentage);
+        assert_eq!(classify_format_code("0.00%"), NumberFormatKind::Percentage);
+        assert_eq!(
+            classify_format_code("0.00%;[Red]-0.00%"),
+            NumberFormatKind::Percentage
+        );
+    }
+
+    #[test]
+    fn test_classify_format_code_currency() {
+        assert_eq!(
+            classify_format_code("$#,##0.00"),
+            NumberFormatKind::Currency
+        );
+        assert_eq!(classify_format_code("¥#,##0"), NumberFormatKind::Currency);
+        assert_eq!(
+            classify_format_code("€#,##0.00"),
+            NumberFormatKind::Currency
+        );
+        assert_eq!(
+            classify_format_code("[$$-409]#,##0.00"),
+            NumberFormatKind::Currency
+        );
+        assert_eq!(
+            classify_format_code("[$EUR-407] #,##0.00"),
+            NumberFormatKind::Currency
+        );
+        assert_eq!(
+            classify_format_code("\"$\"#,##0.00"),
+            NumberFormatKind::Currency
+        );
+    }
+
+    #[test]
+    fn test_classify_format_code_date() {
+        assert_eq!(classify_format_code("mm-dd-yy"), NumberFormatKind::Date);
+        assert_eq!(classify_format_code("yyyy-mm-dd"), NumberFormatKind::Date);
+        assert_eq!(classify_format_code("d-mmm-yy"), NumberFormatKind::Date);
+        assert_eq!(classify_format_code("d-mmm"), NumberFormatKind::Date);
+        assert_eq!(classify_format_code("mmm-yy"), NumberFormatKind::Date);
+    }
+
+    #[test]
+    fn test_classify_format_code_time() {
+        assert_eq!(classify_format_code("h:mm AM/PM"), NumberFormatKind::Time);
+        assert_eq!(
+            classify_format_code("h:mm:ss AM/PM"),
+            NumberFormatKind::Time
+        );
+        assert_eq!(classify_format_code("h:mm"), NumberFormatKind::Time);
+        assert_eq!(classify_format_code("h:mm:ss"), NumberFormatKind::Time);
+        assert_eq!(classify_format_code("mm:ss"), NumberFormatKind::Time);
+        assert_eq!(classify_format_code("[h]:mm:ss"), NumberFormatKind::Time);
+        assert_eq!(classify_format_code("mmss.0"), NumberFormatKind::Time);
+    }
+
+    #[test]
+    fn test_classify_format_code_datetime() {
+        assert_eq!(
+            classify_format_code("m/d/yy h:mm"),
+            NumberFormatKind::DateTime
+        );
+        assert_eq!(
+            classify_format_code("yyyy-mm-dd hh:mm:ss"),
+            NumberFormatKind::DateTime
+        );
+    }
+
+    #[test]
+    fn test_classify_format_code_ambiguous_falls_back_to_number() {
+        // Bare "m" with no y/d/h/s context is genuinely ambiguous
+        // (month vs. minute) — falls back to Number rather than guessing.
+        assert_eq!(classify_format_code("m"), NumberFormatKind::Number);
+        assert_eq!(classify_format_code("mm"), NumberFormatKind::Number);
+        // A color name inside a bracket must not leak a false date token
+        // ("[Red]" contains a 'd').
+        assert_eq!(classify_format_code("[Red]0.00"), NumberFormatKind::Number);
+        // A quoted literal word must not leak a false date token either.
+        assert_eq!(
+            classify_format_code("0.00 \"Days\""),
+            NumberFormatKind::Number
+        );
+    }
+
+    #[test]
+    fn test_classify_format_code_all_builtins() {
+        // Cross-check every defined built-in format ID against its expected
+        // classification, end to end through `builtin_format_code`.
+        let expected = [
+            (0, NumberFormatKind::Number), // General
+            (1, NumberFormatKind::Number), // 0
+            (2, NumberFormatKind::Number), // 0.00
+            (3, NumberFormatKind::Number), // #,##0
+            (4, NumberFormatKind::Number), // #,##0.00
+            (9, NumberFormatKind::Percentage),
+            (10, NumberFormatKind::Percentage),
+            (11, NumberFormatKind::Number), // 0.00E+00
+            (12, NumberFormatKind::Number), // # ?/?
+            (13, NumberFormatKind::Number), // # ??/??
+            (14, NumberFormatKind::Date),
+            (15, NumberFormatKind::Date),
+            (16, NumberFormatKind::Date),
+            (17, NumberFormatKind::Date),
+            (18, NumberFormatKind::Time),
+            (19, NumberFormatKind::Time),
+            (20, NumberFormatKind::Time),
+            (21, NumberFormatKind::Time),
+            (22, NumberFormatKind::DateTime),
+            (37, NumberFormatKind::Number),
+            (38, NumberFormatKind::Number),
+            (39, NumberFormatKind::Number),
+            (40, NumberFormatKind::Number),
+            (45, NumberFormatKind::Time),
+            (46, NumberFormatKind::Time),
+            (47, NumberFormatKind::Time),
+            (48, NumberFormatKind::Number), // ##0.0E+0
+            (49, NumberFormatKind::Number), // @ (text)
+        ];
+        for (id, kind) in expected {
+            let code = builtin_format_code(id).unwrap();
+            assert_eq!(
+                classify_format_code(code),
+                kind,
+                "id {id} (\"{code}\") expected {kind:?}"
+            );
+        }
     }
 }
