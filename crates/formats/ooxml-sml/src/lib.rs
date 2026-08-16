@@ -34,6 +34,7 @@
 //! # Ok::<(), ooxml_sml::Error>(())
 //! ```
 
+pub mod anchor;
 pub mod error;
 pub mod workbook;
 pub mod writer;
