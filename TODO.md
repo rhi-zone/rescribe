@@ -8885,3 +8885,120 @@ or fixture-asserted yet):
    anchor rather than the original location; this is a real position-fidelity gap, not
    covered by the raw-XML fallback (the fallback covers the chart's own content, not
    its host-document anchor).
+   **Update (2026-08-16): closed for ODF and PPTX, still open for XLSX — see below.**
+
+## Chart anchor/placement position (ADR 0015 `positioned_container` applied to ADR 0016 charts) — ODF/PPTX closed, XLSX blocked (2026-08-16)
+
+Follow-up to item 5 above. `chart` nodes are now wrapped in a `positioned_container`
+(ADR 0015) carrying the chart's real host-document placement, for ODF (both `.ods`/
+`.odp`) and PPTX. XLSX is **not** closed — see "Blocked" below.
+
+**ODF**: already fully closed as a side effect of the original ADR 0016 ODF
+implementation (`c3afb752fb`) — ODF charts are embedded objects inside a `draw:frame`,
+and `convert_draw_shape`/`convert_positioned_container` in
+`crates/formats/odf-fmt/src/rescribe/{read,write}.rs` already wrap *all* shape content
+(including charts) in `positioned_container` using the same `svg:x/y/width/height`/
+`draw:transform`/`draw:z-index` logic as any other ODF shape — no new code needed. This
+session only added `position:x/y/width/height/z_order` assertions to
+`fixtures/odf/chart-bar/expected.json` (real values read from `input.ods`'s
+`draw:frame`: `svg:x="0cm" svg:y="6cm" svg:width="10cm" svg:height="6cm"
+draw:z-index="0"`, no `draw:transform` → EMU `x=0, y=2160000, width=3600000,
+height=2160000, z_order=0`, no rotation).
+
+**PPTX**: closed this session.
+- `ooxml-pml/src/presentation.rs`: added `ChartAnchor` (x/y/width/height EMU,
+  `rotation: Option<i32>` in OOXML's native 60,000ths-of-a-degree units, `z_order: usize`
+  = 0-based document-order index among the slide's `p:graphicFrame` elements) and
+  `Slide::chart_anchors()`, computed by `extract_charts_and_smartart_from_slide` reading
+  each chart-bearing `p:graphicFrame`'s already-parsed `xfrm.offset`/`xfrm.extents`/
+  `xfrm.rot` (generated `Transform2D`/`Point2D`/`PositiveSize2D` types — no new XML
+  parsing, this data was already in the generated AST, just not surfaced).
+- `ooxml-pml/src/writer.rs`: added `ChartElement.rot`, `SlideBuilder::embed_chart_rotated`
+  (new; `embed_chart` now delegates to it with `rot: None`, so no existing caller's
+  signature broke), and `build_chart_frame` now sets `xfrm.rot` from it.
+- `rescribe-fmt-ooxml/src/pptx/read.rs`: wraps each chart in a `positioned_container`
+  populated from its `ChartAnchor`.
+- `rescribe-fmt-ooxml/src/pptx/write.rs`: `chart`/`positioned_container`-wrapping-`chart`
+  nodes are now buffered as `PendingChart` (carrying the real or IR-supplied
+  `position:*` values) and flushed after each slide's children are walked, **sorted by
+  `z_order`** — since OOXML has no explicit z-index and stacking is `p:graphicFrame`
+  document order (ADR 0015 Decision 6), sorting on write is what makes an explicit
+  `position:z_order` (which may not match IR sibling order) round-trip correctly. A bare
+  `chart` node with no wrapper (synthetic/non-OOXML-sourced) still falls back to the old
+  fixed default anchor (457200, 1600200, 8229600, 4000000).
+- Fixture: `fixtures/pptx/chart-bar/expected.json` updated — `chart` (was `/0/0`) is now
+  wrapped in `positioned_container` at `/0/0` with
+  `{position:x: 457200, position:y: 1600200, position:width: 8229600,
+  position:height: 4000000, position:z_order: 0}` (real values from `input.pptx`'s
+  `p:graphicFrame/p:xfrm`, no `rot` attribute present); `chart` moves to `/0/0/0`,
+  `chart_series` to `/0/0/0/0`.
+- New unit test: `rescribe-fmt-ooxml::pptx::tests::
+  test_chart_position_round_trips_through_write_and_read` — round-trips
+  x/y/width/height/**rotation**/z_order (using a non-trivial rotation, 90°, to exercise
+  the new `rot` wiring specifically) through write → read.
+
+**Confirmed**: DrawingML's `a:off`/`a:ext`/`p:xfrm` coordinates are EMU-native with no
+conversion — `ooxml-dml`'s `Point2D.x/y: STCoordinate` (`= String`, the `ST_Coordinate`
+union type; in practice a plain EMU integer string, confirmed against the real fixture
+XML which has `x="457200"` etc., never the union's percentage-pattern form) and
+`PositiveSize2D.cx/cy: STPositiveCoordinate` (`= i64` directly). `Transform2D.rot:
+Option<STAngle>` (`= i32`) is already OOXML's native 60,000ths-of-a-degree format,
+matching `position:rotation` exactly — no conversion needed either way.
+
+**Blocked: XLSX.** Not implemented — this is a genuine data-availability gap, not a
+corner cut silently. Both anchor types in `xdr:twoCellAnchor`/`xdr:oneCellAnchor`
+identify position via a **cell index + an EMU offset within that cell**
+(`xdr:from/xdr:col`+`xdr:colOff`, `xdr:row`+`xdr:rowOff`), not an absolute EMU
+coordinate — resolving a cell index to an absolute position requires the cumulative
+width of every preceding column (and height of every preceding row), which comes from
+`xl/worksheets/sheetN.xml`'s `<cols>` overrides / `<sheetFormatPr defaultColWidth=...
+defaultRowHeight=.../>` (already a typed field in `ooxml-sml`'s generated model,
+confirmed: `CTSheetFormatPr.default_col_width: Option<f64>`,
+`.default_row_height: f64`, `.base_col_width: Option<u32>`) — **when present**. The
+real `fixtures/xlsx/chart-bar/input.xlsx` fixture, inspected directly (unzipped the
+real file, not assumed), has:
+- Anchor type found: `xdr:twoCellAnchor` (no `editAs` attribute, so the OOXML-default
+  `editAs="twoCell"` — move-and-size-with-cells), `from` = col 3/colOff 0/row 0/rowOff
+  0, `to` = col 11/colOff 0/row 15/rowOff 0. The anchor's own `xdr:xfrm/a:off`/`a:ext`
+  are placeholder `0`/`0` — not authoritative for absolute position in a
+  `twoCellAnchor` (this is normal; many writers, including this repo's own
+  `ooxml-sml::build_drawing_xml`, do the same).
+- `xl/worksheets/sheet1.xml` has **no `<sheetFormatPr>` element at all** — no
+  `defaultColWidth`, no `baseColWidth`, no `<cols>` overrides. There is no column-width
+  data anywhere in this file to resolve `from.col=3`/`to.col=11` to an absolute EMU
+  box.
+
+This is exactly the fork flagged before starting: **when sheet dimension data isn't
+present, resolving a `twoCellAnchor`/`oneCellAnchor` (for `col`/`row` > 0) to an exact
+absolute box requires a guess, and guessing was ruled out.** The concrete options, not
+decided here:
+- **(a) Approximate with Excel's documented default column width (8.43 characters ≈
+  64px ≈ 609,600 EMU) and default row height (15pt ≈ 190,500 EMU)** when
+  `defaultColWidth`/`baseColWidth`/`defaultRowHeight` are absent from
+  `sheetFormatPr`. Matches what other spreadsheet libraries (e.g. openpyxl, Apache POI)
+  do in practice, but is an approximation baked into the IR as if it were exact —
+  Excel's actual rendered default column width also depends on the workbook's default
+  font, which isn't always recoverable either.
+- **(b) Only populate `position:x/y/width/height` when the anchor is fully resolvable**
+  (a `oneCellAnchor`/`twoCellAnchor` anchored at `col=0`/`row=0`, or when
+  `sheetFormatPr`/`<cols>` data is present) — leave them unset otherwise, with a
+  fidelity warning, and keep the chart wrapped in `positioned_container` with only
+  `position:z_order` set (always resolvable) plus a raw fallback property carrying the
+  verbatim cell+offset anchor (e.g. `ooxml:anchor-from-col`, `.../anchor-to-col`, etc.)
+  so the *original* anchor still round-trips byte-exact even though the IR's semantic
+  x/y/width/height are absent.
+- **(c) On write, always anchor via `xdr:oneCellAnchor` at `col=0`/`row=0` with
+  `colOff`/`rowOff` = `position:x`/`position:y` directly** (unambiguous — column A's
+  left edge is always absolute 0, so no column-width data is needed for the write
+  direction specifically) even though the **read** direction for arbitrary real-world
+  files anchored at `col>0` with no dimension data remains unresolvable per (a)/(b).
+  This closes write-side placement fidelity for rescribe's own round-trips while
+  leaving read-side fidelity for third-party files exactly as blocked as today.
+
+None of (a)/(b)/(c) were implemented — this needs a decision on which
+fidelity/precision tradeoff to take before touching `ooxml-sml`'s `parse_chart`/
+`build_drawing_xml` or `rescribe-fmt-ooxml/src/xlsx.rs`'s `convert_chart_node`. XLSX's
+`chart` node still writes at the old fixed default anchor
+(`sheet.embed_chart(&chart_xml, 0, 0, 8, 15)`, cell-unit based, unchanged this
+session), and `fixtures/xlsx/chart-bar/expected.json` is unchanged (no
+`positioned_container` wrapper).
