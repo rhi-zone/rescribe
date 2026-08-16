@@ -520,28 +520,15 @@ fn main() {
 
     // ── Charts (ADR 0016) ─────────────────────────────────────────────────
 
-    write_fixture(
-        "chart-bar",
-        make_xlsx(|wb| {
-            let s = wb.add_sheet("Sheet1");
-            s.set_cell("A1", "Quarter");
-            s.set_cell("B1", "Revenue");
-            s.set_cell("A2", "Q1");
-            s.set_cell("B2", 10i64);
-            s.set_cell("A3", "Q2");
-            s.set_cell("B3", 20i64);
-            s.set_cell("A4", "Q3");
-            s.set_cell("B4", 15i64);
-            s.set_cell("A5", "Q4");
-            s.set_cell("B5", 25i64);
-            // A minimal but complete `<c:chartSpace>` (ECMA-376 §21.2): one
-            // bar-chart series whose categories/values are cell-range
-            // references (`Sheet1!$A$2:$A$5` / `Sheet1!$B$2:$B$5`) paired
-            // with a cached snapshot (`strCache`/`numCache`) of the
-            // referenced cells' contents — exercising ADR 0016 Decisions
-            // 1-2 (both `-ref` and cached `chart:values`/`chart:categories`
-            // populated together), plus a title, legend, and both axes.
-            let chart_xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    // The `<c:chartSpace>` body (ECMA-376 §21.2) is shared between the two
+    // chart-anchor fixtures below: one bar-chart series whose categories/
+    // values are cell-range references (`Sheet1!$A$2:$A$5` /
+    // `Sheet1!$B$2:$B$5`) paired with a cached snapshot (`strCache`/
+    // `numCache`) of the referenced cells' contents — exercising ADR 0016
+    // Decisions 1-2 (both `-ref` and cached `chart:values`/
+    // `chart:categories` populated together), plus a title, legend, and
+    // both axes.
+    let chart_bar_xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <c:chart>
     <c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title>
@@ -599,9 +586,59 @@ fn main() {
     <c:plotVisOnly val="1"/>
   </c:chart>
 </c:chartSpace>"#;
-            s.embed_chart(chart_xml, 3, 0, 8, 15);
+
+    write_fixture(
+        "chart-bar",
+        make_xlsx(|wb| {
+            let s = wb.add_sheet("Sheet1");
+            s.set_cell("A1", "Quarter");
+            s.set_cell("B1", "Revenue");
+            s.set_cell("A2", "Q1");
+            s.set_cell("B2", 10i64);
+            s.set_cell("A3", "Q2");
+            s.set_cell("B3", 20i64);
+            s.set_cell("A4", "Q3");
+            s.set_cell("B4", 15i64);
+            s.set_cell("A5", "Q4");
+            s.set_cell("B5", 25i64);
+            // Columns D-L (0-based 3-11, the chart's anchor span) are
+            // given an explicit 10-character width (ADR 0015 chart
+            // anchor/placement position — this is the exact data XLSX's
+            // resolver needs and the original fixture lacked; see
+            // TODO.md's "Chart anchor/placement position" entry). Columns
+            // A-C fall back to the schema default (`baseColWidth`=8, no
+            // `<sheetFormatPr>` set by this builder at all).
+            s.set_column_width_range("D", "L", 10.0);
+            s.embed_chart(chart_bar_xml, 3, 0, 8, 15);
         }),
-        "XLSX worksheet with a bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot)",
+        "XLSX worksheet with a bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot); columns D-L have an explicit width so the chart anchor resolves to a real position",
+    );
+
+    write_fixture(
+        "chart-bar-default-width",
+        make_xlsx(|wb| {
+            let s = wb.add_sheet("Sheet1");
+            s.set_cell("A1", "Quarter");
+            s.set_cell("B1", "Revenue");
+            s.set_cell("A2", "Q1");
+            s.set_cell("B2", 10i64);
+            s.set_cell("A3", "Q2");
+            s.set_cell("B3", 20i64);
+            s.set_cell("A4", "Q3");
+            s.set_cell("B4", 15i64);
+            s.set_cell("A5", "Q4");
+            s.set_cell("B5", 25i64);
+            // Deliberately no `set_column_width`/`set_column_width_range`
+            // call at all: no `<cols>` overrides and no `<sheetFormatPr>`
+            // (this builder never emits one unless asked), exercising the
+            // exact "no column-width data anywhere in the file" fallback
+            // path that was the original blocker (TODO.md, "Chart anchor/
+            // placement position... Blocked: XLSX") — the resolver falls
+            // all the way back to the schema's literal `baseColWidth`
+            // default (8 characters) for every column.
+            s.embed_chart(chart_bar_xml, 3, 0, 8, 15);
+        }),
+        "XLSX worksheet with a bar chart anchored with no column-width data anywhere in the file (no <cols>, no <sheetFormatPr>) — exercises the baseColWidth=8 schema-default fallback path for anchor resolution",
     );
 
     println!("Done.");

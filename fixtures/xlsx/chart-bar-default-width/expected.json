@@ -116,7 +116,7 @@
       "path": "/1",
       "props": {
         "position:height": 2857500,
-        "position:width": 5334000,
+        "position:width": 4267200,
         "position:x": 1600200,
         "position:y": 0,
         "position:z_order": 0
@@ -158,5 +158,5 @@
     }
   ],
   "category": "happy",
-  "description": "XLSX worksheet with a bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot); columns D-L have an explicit width so the chart anchor resolves to a real position"
+  "description": "XLSX worksheet with a bar chart anchored with no column-width data anywhere in the file (no <cols>, no <sheetFormatPr>) — exercises the baseColWidth=8 schema-default fallback path for anchor resolution"
 }
