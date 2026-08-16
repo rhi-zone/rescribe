@@ -87,6 +87,20 @@ pub mod node {
     /// the precision analysis). Children are the shape's actual content
     /// (text, image, or nested blocks) — unconstrained by this decision.
     pub const POSITIONED_CONTAINER: &str = "positioned_container";
+    /// A chart (ADR 0016). Block-level, siblings with other block content.
+    /// Carries `TITLE`, `prop::CHART_TYPE`, and legend/axis presence
+    /// properties (`prop::CHART_LEGEND`, `prop::CHART_LEGEND_POSITION`,
+    /// `prop::CHART_HAS_CATEGORY_AXIS`, `prop::CHART_HAS_VALUE_AXIS`).
+    /// Children are `chart_series` nodes, one per data series. Also carries
+    /// an unconditional format-namespaced raw-XML fallback (`ooxml:chart-xml`
+    /// / `odf:chart-xml`) so v1's semantic subset stays lossless — see ADR
+    /// 0016 Decision 4.
+    pub const CHART: &str = "chart";
+    /// One data series within a `chart` (ADR 0016). Carries `TITLE` and the
+    /// values/categories properties (`prop::CHART_VALUES`,
+    /// `prop::CHART_VALUES_REF`, `prop::CHART_CATEGORIES`,
+    /// `prop::CHART_CATEGORIES_REF`).
+    pub const CHART_SERIES: &str = "chart_series";
 
     // Inline-level nodes
     /// Plain text content (use `content` property).
@@ -228,6 +242,50 @@ pub mod prop {
     pub const POSITION_ROTATION: &str = "position:rotation";
     /// `positioned_container` stacking order (higher paints on top).
     pub const POSITION_Z_ORDER: &str = "position:z_order";
+
+    // Chart properties (ADR 0016)
+    /// A `chart`'s type, as an open string (e.g. `bar`, `line`, `pie`,
+    /// `scatter`, `radar`, `stock`, `bubble`, `surface`, `doughnut`,
+    /// `of-pie`, plus format-specific 3D/combo variants) — the union of
+    /// OOXML's and ODF's chart-type vocabularies, per ADR 0016 Decision 3.
+    /// No closed enum, matching `NodeKind`'s existing open-string convention.
+    pub const CHART_TYPE: &str = "chart:type";
+    /// Whether a `chart` shows a legend (ADR 0016).
+    pub const CHART_LEGEND: &str = "chart:legend";
+    /// A `chart`'s legend position, as an open string (e.g. `right`,
+    /// `bottom`, `top`, `left`), present only when `CHART_LEGEND` is true
+    /// (ADR 0016).
+    pub const CHART_LEGEND_POSITION: &str = "chart:legend-position";
+    /// Whether a `chart` has a category axis (ADR 0016).
+    pub const CHART_HAS_CATEGORY_AXIS: &str = "chart:has-category-axis";
+    /// Whether a `chart` has a value axis (ADR 0016).
+    pub const CHART_HAS_VALUE_AXIS: &str = "chart:has-value-axis";
+    /// A `chart_series`'s literal values, or the cached snapshot of a
+    /// reference-backed series (`PropValue::List`), per ADR 0016 Decisions 1-2.
+    /// Paired with `CHART_VALUES_REF` when reference-backed; present alone
+    /// when the series carries literal (non-referenced) data.
+    pub const CHART_VALUES: &str = "chart:values";
+    /// A `chart_series`'s cell-range reference for its values
+    /// (`PropValue::String`, the verbatim range-reference formula string —
+    /// OOXML's `Sheet1!$B$2:$B$5` syntax or ODF's `table:cell-range-address`
+    /// syntax, stored as-is), per ADR 0016 Decision 1. Absent for
+    /// literal-data series.
+    pub const CHART_VALUES_REF: &str = "chart:values-ref";
+    /// A `chart_series`'s literal category labels, or the cached snapshot of
+    /// a reference-backed series (`PropValue::List`), analogous to
+    /// `CHART_VALUES` (ADR 0016).
+    pub const CHART_CATEGORIES: &str = "chart:categories";
+    /// A `chart_series`'s cell-range reference for its category labels,
+    /// analogous to `CHART_VALUES_REF` (ADR 0016).
+    pub const CHART_CATEGORIES_REF: &str = "chart:categories-ref";
+    /// Verbatim OOXML chart-part XML (e.g. `chart1.xml`), captured
+    /// unconditionally on every `chart` node sourced from OOXML so v1's
+    /// semantic-subset model stays lossless (ADR 0016 Decision 4).
+    pub const OOXML_CHART_XML: &str = "ooxml:chart-xml";
+    /// Verbatim ODF `office:chart` subtree XML, captured unconditionally on
+    /// every `chart` node sourced from ODF so v1's semantic-subset model
+    /// stays lossless (ADR 0016 Decision 4).
+    pub const ODF_CHART_XML: &str = "odf:chart-xml";
 
     // Style properties (presentational)
     /// Font family.
