@@ -331,8 +331,9 @@ impl<R: Read + Seek> Presentation<R> {
         // Extract tables from graphic frames
         let tables = extract_tables_from_slide(&inner);
 
-        // Extract chart and SmartArt relationship IDs from graphic frames
-        let (chart_rel_ids, smartart_rel_ids) = extract_charts_and_smartart_from_slide(&inner);
+        // Extract chart and SmartArt relationship IDs (and chart anchors) from graphic frames
+        let (chart_rel_ids, chart_anchors, smartart_rel_ids) =
+            extract_charts_and_smartart_from_slide(&inner);
 
         // Build the slide wrapper
         let mut slide = Slide {
@@ -343,6 +344,7 @@ impl<R: Read + Seek> Presentation<R> {
             layout_rel_id: info.layout_rel_id.clone(),
             tables,
             chart_rel_ids,
+            chart_anchors,
             smartart_rel_ids,
         };
 
@@ -592,8 +594,42 @@ pub struct Slide {
     tables: Vec<Table>,
     /// Relationship IDs for charts embedded in this slide (via `c:chart r:id`).
     chart_rel_ids: Vec<String>,
+    /// Position/size/rotation/z-order for each chart embedded in this slide
+    /// (ADR 0015/0016), one entry per `chart_rel_ids` chart, in the same
+    /// relative order.
+    chart_anchors: Vec<ChartAnchor>,
     /// Relationship ID sets for SmartArt diagrams embedded in this slide (via `dgm:relIds`).
     smartart_rel_ids: Vec<DiagramRelIds>,
+}
+
+/// Position, size, rotation, and stacking order of a chart's `p:graphicFrame`
+/// anchor on a slide (ADR 0015 `positioned_container` shape, ADR 0016 chart
+/// IR shape).
+///
+/// Coordinates are EMU (914,400 per inch), read directly from
+/// `p:graphicFrame/p:xfrm/a:off` and `a:ext` — DrawingML's `ST_Coordinate`/
+/// `ST_PositiveCoordinate` are EMU-native, so no unit conversion is needed.
+/// `rotation` is OOXML's native 60,000ths-of-a-degree integer (`a:xfrm`'s
+/// `rot` attribute) when present. `z_order` is the chart's 0-based index
+/// among this slide's `p:graphicFrame` elements in document order — OOXML
+/// has no explicit z-index field, so document order is the stacking order
+/// (ADR 0015 Decision 6).
+#[derive(Debug, Clone)]
+pub struct ChartAnchor {
+    /// Relationship ID of the chart part this anchor belongs to.
+    pub rel_id: String,
+    /// Horizontal offset, in EMU.
+    pub x: i64,
+    /// Vertical offset, in EMU.
+    pub y: i64,
+    /// Width, in EMU.
+    pub width: i64,
+    /// Height, in EMU.
+    pub height: i64,
+    /// Rotation, in 60,000ths of a degree (OOXML `ST_Angle`), when present.
+    pub rotation: Option<i32>,
+    /// 0-based document-order index among this slide's graphic frames.
+    pub z_order: usize,
 }
 
 /// Slide transition effect.
@@ -846,6 +882,13 @@ impl Slide {
     /// the corresponding `ChartSpace`.
     pub fn chart_rel_ids(&self) -> &[String] {
         &self.chart_rel_ids
+    }
+
+    /// Get position/size/rotation/z-order data for all charts embedded in
+    /// this slide (ADR 0015/0016), in the same relative order as
+    /// [`Slide::chart_rel_ids`].
+    pub fn chart_anchors(&self) -> &[ChartAnchor] {
+        &self.chart_anchors
     }
 
     /// Get the relationship ID sets for all SmartArt diagrams on this slide.
@@ -1385,25 +1428,64 @@ fn wrap_ct_table(ct_table: ooxml_dml::types::CTTable, name: Option<String>) -> T
 #[cfg(feature = "extra-children")]
 fn extract_charts_and_smartart_from_slide(
     slide: &types::Slide,
-) -> (Vec<String>, Vec<DiagramRelIds>) {
+) -> (Vec<String>, Vec<ChartAnchor>, Vec<DiagramRelIds>) {
     let mut chart_ids = Vec::new();
+    let mut chart_anchors = Vec::new();
     let mut smartart_ids = Vec::new();
 
-    for frame in &slide.common_slide_data.shape_tree.graphic_frame {
+    for (frame_index, frame) in slide
+        .common_slide_data
+        .shape_tree
+        .graphic_frame
+        .iter()
+        .enumerate()
+    {
+        let mut ids_in_frame = Vec::new();
         for node in &frame.extra_children {
-            collect_chart_and_smartart_ids(&node.node, &mut chart_ids, &mut smartart_ids);
+            collect_chart_and_smartart_ids(&node.node, &mut ids_in_frame, &mut smartart_ids);
+        }
+        // DrawingML's `ST_Coordinate`/`ST_PositiveCoordinate` are EMU-native
+        // (see `ChartAnchor` doc comment); `off`/`ext` are optional per
+        // schema but always present on a real chart graphicFrame, so a
+        // missing value falls back to 0 rather than dropping the anchor.
+        let x = frame
+            .xfrm
+            .offset
+            .as_ref()
+            .and_then(|o| o.x.parse::<i64>().ok())
+            .unwrap_or(0);
+        let y = frame
+            .xfrm
+            .offset
+            .as_ref()
+            .and_then(|o| o.y.parse::<i64>().ok())
+            .unwrap_or(0);
+        let width = frame.xfrm.extents.as_ref().map(|e| e.cx).unwrap_or(0);
+        let height = frame.xfrm.extents.as_ref().map(|e| e.cy).unwrap_or(0);
+        let rotation = frame.xfrm.rot;
+        for rel_id in ids_in_frame {
+            chart_ids.push(rel_id.clone());
+            chart_anchors.push(ChartAnchor {
+                rel_id,
+                x,
+                y,
+                width,
+                height,
+                rotation,
+                z_order: frame_index,
+            });
         }
     }
 
-    (chart_ids, smartart_ids)
+    (chart_ids, chart_anchors, smartart_ids)
 }
 
 /// Stub when extra-children feature is disabled.
 #[cfg(not(feature = "extra-children"))]
 fn extract_charts_and_smartart_from_slide(
     _slide: &types::Slide,
-) -> (Vec<String>, Vec<DiagramRelIds>) {
-    (Vec::new(), Vec::new())
+) -> (Vec<String>, Vec<ChartAnchor>, Vec<DiagramRelIds>) {
+    (Vec::new(), Vec::new(), Vec::new())
 }
 
 /// Recursively walk a raw XML node tree collecting chart `r:id` values and

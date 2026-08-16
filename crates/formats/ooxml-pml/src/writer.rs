@@ -425,6 +425,9 @@ struct ChartElement {
     y: i64,
     cx: i64,
     cy: i64,
+    /// Rotation in 60,000ths of a degree (OOXML `ST_Angle`), matching
+    /// `a:xfrm`'s `rot` attribute (ADR 0015 Decision 5).
+    rot: Option<i32>,
 }
 
 /// Internal storage for a SmartArt diagram to embed on a slide.
@@ -2059,7 +2062,8 @@ fn build_chart_frame(
         extra_children: Default::default(),
     });
 
-    let xfrm = make_xfrm(chart.x, chart.y, chart.cx, chart.cy);
+    let mut xfrm = make_xfrm(chart.x, chart.y, chart.cx, chart.cy);
+    xfrm.rot = chart.rot;
 
     let graphic_xml = format!(
         r#"<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId{}"/></a:graphicData></a:graphic>"#,
@@ -2840,12 +2844,34 @@ impl SlideBuilder {
         cx: i64,
         cy: i64,
     ) -> &mut Self {
+        self.embed_chart_rotated(chart_xml, x, y, cx, cy, None)
+    }
+
+    /// Embed a chart in this slide with an explicit rotation.
+    ///
+    /// Same as [`SlideBuilder::embed_chart`], but also sets the
+    /// graphicFrame's `a:xfrm` `rot` attribute (OOXML `ST_Angle`,
+    /// 60,000ths of a degree) when `rot` is `Some` (ADR 0015 Decision 5).
+    ///
+    /// Requires the `pml-charts` feature.
+    /// ECMA-376 Part 1, §14.2.1.
+    #[cfg(feature = "pml-charts")]
+    pub fn embed_chart_rotated(
+        &mut self,
+        chart_xml: impl Into<Vec<u8>>,
+        x: i64,
+        y: i64,
+        cx: i64,
+        cy: i64,
+        rot: Option<i32>,
+    ) -> &mut Self {
         self.charts.push(ChartElement {
             data: chart_xml.into(),
             x,
             y,
             cx,
             cy,
+            rot,
         });
         self
     }
