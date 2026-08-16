@@ -113,6 +113,9 @@ fn emit_slide_children(
                     slide.add_text(content.to_string());
                 }
             }
+            k if k == node::CHART => {
+                emit_chart(slide, child);
+            }
             _ => {
                 // Fallback: extract any text.
                 let text = get_text_content(child);
@@ -237,6 +240,27 @@ fn emit_table(slide: &mut ooxml_pml::SlideBuilder, table_node: &Node) {
         // Default position: title area + some margin, full width
         slide.add_table(table, 457200, 1600200, 8229600, 4000000);
     }
+}
+
+/// Write a `chart` node (ADR 0016) to the slide. Per ADR 0016 Decision 4, an
+/// OOXML-sourced `chart` node always carries its original chart-part XML
+/// verbatim (`prop::OOXML_CHART_XML`), so the common case is a byte-exact
+/// re-emit; only a chart node with no raw XML at all (constructed
+/// programmatically, or from a non-OOXML source) falls back to
+/// [`crate::chart::build_minimal_chart_xml`]'s best-effort generator — see
+/// that function's doc comment for its (documented) v1 semantic-core scope.
+///
+/// Like the xlsx writer, the chart's original anchor position isn't
+/// captured anywhere in the `chart`/`chart_series` IR shape, so this uses a
+/// fixed default anchor (same values `emit_table` above uses for its own
+/// default placement) rather than the original location — a known,
+/// documented v1 gap, not a silent drop of the chart itself.
+fn emit_chart(slide: &mut ooxml_pml::SlideBuilder, chart_node: &Node) {
+    let chart_xml: Vec<u8> = match chart_node.props.get_str(prop::OOXML_CHART_XML) {
+        Some(xml) => xml.as_bytes().to_vec(),
+        None => crate::chart::build_minimal_chart_xml(chart_node).into_bytes(),
+    };
+    slide.embed_chart(chart_xml, 457200, 1600200, 8229600, 4000000);
 }
 
 fn emit_list(slide: &mut ooxml_pml::SlideBuilder, list_node: &Node) {

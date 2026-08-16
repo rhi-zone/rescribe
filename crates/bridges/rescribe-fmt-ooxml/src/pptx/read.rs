@@ -58,16 +58,39 @@ pub fn parse_with_options(
         let slide_num = slide.index() + 1;
         let mut slide_node = Node::new(node::DIV).prop("slide", slide_num as i64);
 
-        // Charts embedded in this slide.
-        if !slide.chart_rel_ids().is_empty() {
-            warn(
-                &mut warnings,
-                format!(
-                    "Slide {}: {} embedded chart(s) detected; chart data not represented in IR",
-                    slide_num,
-                    slide.chart_rel_ids().len()
+        // Charts embedded in this slide (ADR 0016). PPTX chart parts
+        // (`ppt/charts/chartN.xml`) share the exact same DrawingML
+        // `<c:chartSpace>` schema as XLSX chart parts, so this reuses
+        // `ooxml_sml::parse_chart_xml` (the same hand-rolled walker
+        // `xlsx.rs` uses) rather than a second, duplicated parser built on
+        // `ooxml-pml`'s generated `dml-charts` model (out of scope for this
+        // pass — see ADR 0016 Consequences). The `chart` node is appended
+        // as a child of this slide's `div` node: a chart is block-level
+        // (ADR 0016) slide content, unlike xlsx's chart-to-sheet sibling
+        // placement, which exists there only because a `sheet` node's
+        // children are constrained to `sheet_row`s.
+        for rel_id in slide.chart_rel_ids() {
+            match pres.get_chart_xml(slide, rel_id) {
+                Ok(xml) => match ooxml_sml::parse_chart_xml(&xml) {
+                    Ok(chart) => {
+                        slide_node = slide_node.child(crate::chart::convert_chart(&chart));
+                    }
+                    Err(e) => warn(
+                        &mut warnings,
+                        format!(
+                            "Slide {}: failed to parse embedded chart (rel {}): {}",
+                            slide_num, rel_id, e
+                        ),
+                    ),
+                },
+                Err(e) => warn(
+                    &mut warnings,
+                    format!(
+                        "Slide {}: failed to read embedded chart part (rel {}): {}",
+                        slide_num, rel_id, e
+                    ),
                 ),
-            );
+            }
         }
 
         // SmartArt diagrams embedded in this slide.

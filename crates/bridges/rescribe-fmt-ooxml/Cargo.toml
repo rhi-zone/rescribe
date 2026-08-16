@@ -24,7 +24,12 @@ default = ["docx", "pptx", "xlsx"]
 # tests/benches can), so they're modelled as optional regular deps gated by
 # the feature whose bin actually uses them, matching real usage below.
 docx = ["dep:ooxml-wml"]
-pptx = ["dep:ooxml-pml", "dep:ooxml-dml", "dep:serde_json", "dep:zip"]
+# ooxml-sml is pulled in by pptx too (not just xlsx): PPTX chart parts share
+# the same DrawingML `<c:chartSpace>` schema as XLSX chart parts (ADR 0016),
+# so the pptx reader reuses `ooxml_sml::parse_chart_xml` rather than
+# duplicating a second chart-XML walker against the generated `ooxml-dml`
+# `dml-charts` model (out of scope — see ADR 0016 Consequences).
+pptx = ["dep:ooxml-pml", "dep:ooxml-dml", "dep:ooxml-sml", "dep:serde_json", "dep:zip"]
 xlsx = ["dep:ooxml-sml", "dep:serde_json"]
 
 [dependencies]

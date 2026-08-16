@@ -16,6 +16,11 @@
 //! tokenizing/parsing/emitting of OOXML bytes (see CLAUDE.md's "adapter
 //! layer must never contain parsing or writing logic").
 
+// Shared `chart`/`chart_series` IR translation (ADR 0016), used by both
+// xlsx and pptx — see `chart.rs`'s module doc comment for why.
+#[cfg(any(feature = "xlsx", feature = "pptx"))]
+mod chart;
+
 #[cfg(feature = "docx")]
 pub mod docx;
 #[cfg(feature = "pptx")]

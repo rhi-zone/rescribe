@@ -25,6 +25,7 @@
 //! // Process the document...
 //! ```
 
+use crate::chart::{build_minimal_chart_xml, convert_chart};
 use ooxml_sml::{
     CellValue, ConditionalRuleType, NumberFormatKind, RowExt, StylesheetExt, Workbook,
     ext::{CellExt, ResolvedSheet},
@@ -198,6 +199,14 @@ impl Converter {
             })?;
 
             children.push(self.convert_sheet(&sheet)?);
+            // `chart` nodes are block-level (ADR 0016) and are not nested
+            // inside the `sheet` node they're attached to — they're appended
+            // as document-level siblings immediately after their sheet,
+            // mirroring how `sheet` nodes themselves are flat siblings under
+            // `document` rather than living inside a `workbook` container
+            // (ADR 0015 leaves that container undecided). This keeps a
+            // `sheet` node's children strictly `sheet_row`s.
+            children.extend(sheet.charts().iter().map(convert_chart));
         }
 
         Ok(children)
@@ -232,15 +241,6 @@ impl Converter {
                 sheet.name()
             ));
         }
-        // Warn if the sheet contains embedded charts.
-        if !sheet.charts().is_empty() {
-            self.warn(format!(
-                "Chart(s) detected in sheet \"{}\" ({} chart(s)); chart data not represented in IR (no chart node kind exists yet)",
-                sheet.name(),
-                sheet.charts().len()
-            ));
-        }
-
         // Determine dimensions
         let (min_row, min_col, max_row, max_col) = match sheet.dimensions() {
             Some(dims) => dims,
@@ -787,6 +787,11 @@ struct EmitContext {
     workbook: ooxml_sml::WorkbookBuilder,
     warnings: Vec<FidelityWarning>,
     sheet_count: usize,
+    /// Index (into `workbook`'s sheets) of the most recently written sheet, so
+    /// a `chart` node encountered as a document-level sibling right after a
+    /// `sheet` node (the shape the reader produces, see `convert_workbook`
+    /// above) can be attached to the sheet it followed.
+    current_sheet_index: Option<usize>,
 }
 
 impl EmitContext {
@@ -795,7 +800,16 @@ impl EmitContext {
             workbook: ooxml_sml::WorkbookBuilder::new(),
             warnings: Vec::new(),
             sheet_count: 0,
+            current_sheet_index: None,
         }
+    }
+
+    fn warn(&mut self, message: impl Into<String>) {
+        self.warnings.push(FidelityWarning::new(
+            Severity::Minor,
+            WarningKind::FeatureLost("xlsx".to_string()),
+            message,
+        ));
     }
 
     fn convert_document(&mut self, doc: &Document) -> Result<(), EmitError> {
@@ -832,6 +846,10 @@ impl EmitContext {
                         .map(str::to_string)
                         .unwrap_or_else(|| self.next_sheet_name());
                     self.convert_sheet(node, &name);
+                    self.current_sheet_index = Some(self.workbook.sheet_count() - 1);
+                }
+                node::CHART => {
+                    self.convert_chart_node(node);
                 }
                 "heading" => {
                     // Flush any pending table first
@@ -976,6 +994,41 @@ impl EmitContext {
                 }
             }
             sheet.add_conditional_format(cf);
+        }
+    }
+
+    /// Write a `chart` node (ADR 0016) to the most recently written sheet.
+    ///
+    /// Per ADR 0016 Decision 4, an OOXML-sourced `chart` node always carries
+    /// its original chart-part XML verbatim in `prop::OOXML_CHART_XML`; the
+    /// writer's job for that (overwhelmingly common) case is just to re-emit
+    /// those bytes unchanged, not to re-derive XML from the semantic fields.
+    /// Only a chart node with no raw XML at all (e.g. constructed
+    /// programmatically, or sourced from a non-OOXML format) falls back to
+    /// [`build_minimal_chart_xml`], a best-effort generator covering the
+    /// same v1 semantic-core fields the reader populates.
+    ///
+    /// The chart's original anchor position isn't captured anywhere in the
+    /// `chart`/`chart_series` IR shape (out of ADR 0016's scope — position
+    /// belongs to `positioned_container`, ADR 0015, which `chart` nodes
+    /// don't currently use), so the written chart is placed at a fixed
+    /// default anchor rather than its original location. This is a known,
+    /// documented v1 gap, not a silent drop of the chart itself.
+    fn convert_chart_node(&mut self, node: &Node) {
+        let Some(idx) = self.current_sheet_index else {
+            self.warn(
+                "Chart node with no preceding sheet to attach to; dropped on write".to_string(),
+            );
+            return;
+        };
+        let chart_xml: Vec<u8> = match node.props.get_str(prop::OOXML_CHART_XML) {
+            Some(xml) => xml.as_bytes().to_vec(),
+            None => build_minimal_chart_xml(node).into_bytes(),
+        };
+        if let Some(sheet) = self.workbook.sheet_mut(idx) {
+            sheet.embed_chart(&chart_xml, 0, 0, 8, 15);
+        } else {
+            self.warn("Chart node's target sheet no longer exists; dropped on write".to_string());
         }
     }
 
@@ -1480,6 +1533,37 @@ mod tests {
         assert_eq!(
             cell.props.get_str(NUMBER_FORMAT_PROP),
             Some("#,##0.00 \u{20ac}")
+        );
+    }
+
+    /// ADR 0016 Decision 4: the raw `ooxml:chart-xml` fallback must round-trip
+    /// byte-exact through write→re-read, since the writer re-emits it
+    /// verbatim rather than re-deriving XML from the semantic fields
+    /// whenever it's present — confirmed here rather than assumed.
+    #[test]
+    fn test_chart_raw_xml_round_trips_verbatim_through_write() {
+        let raw_chart_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:layout/><c:barChart><c:ser><c:idx val="0"/><c:order val="0"/><c:cat><c:strRef><c:f>Sheet1!$A$2:$A$3</c:f><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#;
+
+        let sheet = Node::new(NodeKind::from(node::SHEET)).prop(prop::TITLE, "Sheet1");
+        let chart = Node::new(NodeKind::from(node::CHART))
+            .prop(prop::CHART_TYPE, "bar")
+            .prop(prop::CHART_LEGEND, false)
+            .prop(prop::CHART_HAS_CATEGORY_AXIS, false)
+            .prop(prop::CHART_HAS_VALUE_AXIS, false)
+            .prop(prop::OOXML_CHART_XML, raw_chart_xml.to_string());
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from(node::DOCUMENT)).children([sheet, chart]));
+
+        let bytes = emit(&doc).unwrap().value;
+        let reread = parse_bytes(&bytes).unwrap().value;
+
+        // `chart` is a document-level sibling right after its `sheet`
+        // (see `convert_workbook`'s comment on chart placement).
+        let chart_node = &reread.content.children[1];
+        assert_eq!(chart_node.kind.as_str(), node::CHART);
+        assert_eq!(
+            chart_node.props.get_str(prop::OOXML_CHART_XML),
+            Some(raw_chart_xml)
         );
     }
 }
