@@ -315,7 +315,85 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
             }
             ctx.push("}");
         }
+
+        Inline::Shape {
+            x,
+            y,
+            width,
+            height,
+            z_order,
+            shape_props,
+            named_props,
+            text,
+            fallback_raw,
+            ..
+        } => {
+            emit_shape(
+                *x,
+                *y,
+                *width,
+                *height,
+                *z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                ctx,
+            );
+        }
     }
+}
+
+/// Emit an `Inline::Shape` back to RTF `\shp` destination-group syntax.
+///
+/// Reconstructs `\shpleft`/`\shptop`/`\shpright`/`\shpbottom` from
+/// `x`/`y`/`width`/`height` (`shpright = x + width`, `shpbottom = y +
+/// height` — the exact inverse of how [`crate::parse`] derived them), so a
+/// document produced by the parser round-trips byte-for-byte through
+/// `emit(parse(input))` for the numeric fields, even though `shape_props`/
+/// `named_props`/`fallback_raw` are re-serialized from parsed pieces rather
+/// than replayed as raw bytes.
+#[allow(clippy::too_many_arguments)]
+fn emit_shape(
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    z_order: i64,
+    shape_props: &str,
+    named_props: &[(String, String)],
+    text: &[Block],
+    fallback_raw: &str,
+    ctx: &mut Ctx,
+) {
+    ctx.push("{\\shp{\\*\\shpinst");
+    ctx.push(&format!(
+        "\\shpleft{x}\\shptop{y}\\shpright{}\\shpbottom{}\\shpz{z_order}",
+        x + width,
+        y + height,
+    ));
+    ctx.push(shape_props);
+    for (name, value) in named_props {
+        ctx.push("{\\sp{\\sn ");
+        ctx.push(name);
+        ctx.push("}{\\sv ");
+        ctx.push(value);
+        ctx.push("}}");
+    }
+    ctx.push("}");
+    if !text.is_empty() {
+        ctx.push("{\\shptxt ");
+        for block in text {
+            emit_block(block, ctx);
+        }
+        ctx.push("}");
+    }
+    if !fallback_raw.is_empty() {
+        ctx.push("{\\shprslt");
+        ctx.push(fallback_raw);
+        ctx.push("}");
+    }
+    ctx.push("}");
 }
 
 #[cfg(test)]

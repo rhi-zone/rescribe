@@ -167,6 +167,22 @@ pub enum Event<'a> {
     EndLang,
     StartFootnote,
     EndFootnote,
+
+    /// A floating/anchored drawing shape (`Inline::Shape` — RTF `\shp`
+    /// group). `text`'s events (`StartParagraph`/etc.) follow between this
+    /// and the matching [`Event::EndShape`], same nesting pattern as
+    /// [`Event::StartFootnote`].
+    StartShape {
+        x: i64,
+        y: i64,
+        width: i64,
+        height: i64,
+        z_order: i64,
+        shape_props: String,
+        named_props: Vec<(String, String)>,
+        fallback_raw: String,
+    },
+    EndShape,
 }
 
 /// Fully-owned variant of [`Event`] (no borrowed lifetimes).
@@ -189,6 +205,8 @@ enum Frame {
     TableCells(std::vec::IntoIter<Vec<Inline>>),
     /// A sequence of footnote content blocks.
     FootnoteBlocks(std::vec::IntoIter<Block>),
+    /// A sequence of shape text-content blocks.
+    ShapeBlocks(std::vec::IntoIter<Block>),
 }
 
 // ── SemanticEventIter ─────────────────────────────────────────────────────────
@@ -394,6 +412,31 @@ impl SemanticEventIter {
                 frame_stack.push(Frame::FootnoteBlocks(content.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartFootnote));
             }
+            Inline::Shape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                ..
+            } => {
+                frame_stack.push(Frame::Emit(Event::EndShape));
+                frame_stack.push(Frame::ShapeBlocks(text.into_iter()));
+                frame_stack.push(Frame::Emit(Event::StartShape {
+                    x,
+                    y,
+                    width,
+                    height,
+                    z_order,
+                    shape_props,
+                    named_props,
+                    fallback_raw,
+                }));
+            }
         }
     }
 }
@@ -428,6 +471,13 @@ impl Iterator for SemanticEventIter {
                     }
                 }
                 Frame::FootnoteBlocks(iter) => {
+                    if let Some(block) = iter.next() {
+                        Self::expand_block(&mut self.frame_stack, block);
+                    } else {
+                        self.frame_stack.pop();
+                    }
+                }
+                Frame::ShapeBlocks(iter) => {
                     if let Some(block) = iter.next() {
                         Self::expand_block(&mut self.frame_stack, block);
                     } else {

@@ -108,6 +108,11 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
                 collect_colors_in_block(block, out);
             }
         }
+        Inline::Shape { text, .. } => {
+            for block in text {
+                collect_colors_in_block(block, out);
+            }
+        }
         Inline::Text { .. }
         | Inline::Code { .. }
         | Inline::Image { .. }
@@ -191,6 +196,11 @@ fn collect_fonts_in_inline(inline: &Inline, out: &mut Vec<String>) {
         }
         Inline::Footnote { content, .. } => {
             for block in content {
+                collect_fonts_in_block(block, out);
+            }
+        }
+        Inline::Shape { text, .. } => {
+            for block in text {
                 collect_fonts_in_block(block, out);
             }
         }

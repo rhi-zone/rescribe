@@ -291,6 +291,33 @@ fn rtf_inline_events(inlines: &[rtf_fmt::Inline], out: &mut Vec<rtf_fmt::OwnedEv
                 }
                 out.push(Event::EndFootnote);
             }
+            Inline::Shape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                ..
+            } => {
+                out.push(Event::StartShape {
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                    z_order: *z_order,
+                    shape_props: shape_props.clone(),
+                    named_props: named_props.clone(),
+                    fallback_raw: fallback_raw.clone(),
+                });
+                for c in text {
+                    rtf_block_events(c, out);
+                }
+                out.push(Event::EndShape);
+            }
         }
     }
 }

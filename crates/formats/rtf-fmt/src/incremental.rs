@@ -22,7 +22,7 @@
 //! is unambiguously resolved returns `Err(resume_pos)` — "buffer more and
 //! retry from `resume_pos`" — rather than silently guessing.
 
-use crate::parse::{is_footnote_group_prefix, is_skip_group_prefix};
+use crate::parse::{is_footnote_group_prefix, is_shape_group_prefix, is_skip_group_prefix};
 
 /// One RTF token, as far as boundary-scanning cares.
 enum Token {
@@ -128,8 +128,13 @@ fn next_token(buf: &[u8], pos: usize) -> Option<(usize, Token)> {
 
 /// How a `{` (already consumed) classifies, for boundary-scanning purposes.
 enum GroupKind {
-    /// `is_skip_group_prefix`/`is_footnote_group_prefix` matched: skip the
-    /// whole group atomically (its contents never affect the outer scan).
+    /// `is_skip_group_prefix`/`is_footnote_group_prefix`/`is_shape_group_prefix`
+    /// matched: treat the whole group as an atomic unit that must never be
+    /// split across a batch boundary. This is a cut-point-safety property,
+    /// not a claim about what [`crate::parse::Parser`] does with the
+    /// content afterward — footnote and shape groups are fully descended
+    /// into and parsed, not skipped, but still must arrive as one
+    /// uninterrupted buffer for that parsing to be correct.
     Opaque,
     /// Neither matched: a real, transparent group.
     Transparent,
@@ -144,7 +149,8 @@ enum GroupKind {
 /// permanently ambiguous), this reads exactly one bounded token — via
 /// [`next_token`], which is itself chunk-boundary-tolerant — to learn the
 /// group's opening control word (or lack of one), then checks that word
-/// against [`is_skip_group_prefix`]/[`is_footnote_group_prefix`] using a
+/// against [`is_skip_group_prefix`]/[`is_footnote_group_prefix`]/
+/// [`is_shape_group_prefix`] using a
 /// synthetic `\<word>` probe with nothing following it. This gives the
 /// *identical* answer those two functions would give on the real
 /// unbounded remainder: neither pattern set depends on what comes after the
@@ -162,6 +168,7 @@ fn classify_group(buf: &[u8], pos: usize) -> Option<GroupKind> {
                 let probe = format!("\\{word}");
                 if is_footnote_group_prefix(probe.as_bytes())
                     || is_skip_group_prefix(probe.as_bytes())
+                    || is_shape_group_prefix(probe.as_bytes())
                 {
                     Some(GroupKind::Opaque)
                 } else {

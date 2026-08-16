@@ -138,6 +138,12 @@ pub struct Writer<W: Write> {
     color_map: Vec<(u8, u8, u8)>,
     font_map: Vec<String>,
     ctx: Vec<Ctx>,
+    /// Stack of pending `\shprslt` fallback payloads, one per currently-open
+    /// `StartShape`/`EndShape` pair (shapes are not expected to nest in
+    /// practice, but a stack keeps this correct if they ever do). Deferred
+    /// to `EndShape` because `\shprslt` is written *after* `\shptxt`'s
+    /// content, which arrives as events between `StartShape` and `EndShape`.
+    shape_fallback: Vec<String>,
 }
 
 impl<W: Write> Writer<W> {
@@ -148,6 +154,7 @@ impl<W: Write> Writer<W> {
             color_map: Vec::new(),
             font_map: Vec::new(),
             ctx: Vec::new(),
+            shape_fallback: Vec::new(),
         }
     }
 
@@ -439,6 +446,56 @@ impl<W: Write> Writer<W> {
             Event::EndFootnote => {
                 self.ctx.pop();
                 self.out.push('}');
+            }
+
+            Event::StartShape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                fallback_raw,
+            } => {
+                // Same reconstruction as emit.rs's emit_shape: shpright/
+                // shpbottom are the exact inverse of how parse.rs derived
+                // x/y/width/height, so the numeric fields round-trip
+                // byte-for-byte through parse → events → this writer.
+                self.out.push_str("{\\shp{\\*\\shpinst");
+                self.out.push_str(&format!(
+                    "\\shpleft{x}\\shptop{y}\\shpright{}\\shpbottom{}\\shpz{z_order}",
+                    x + width,
+                    y + height,
+                ));
+                self.out.push_str(&shape_props);
+                for (name, value) in &named_props {
+                    self.out.push_str("{\\sp{\\sn ");
+                    self.out.push_str(name);
+                    self.out.push_str("}{\\sv ");
+                    self.out.push_str(value);
+                    self.out.push_str("}}");
+                }
+                self.out.push('}');
+                self.shape_fallback.push(fallback_raw);
+                // `\shptxt`'s content, if any, is written by the following
+                // block events (same nested-Paragraph mechanism as
+                // `StartFootnote`); open its wrapper group now and let
+                // `EndShape` close it before appending `\shprslt`/closing `}`.
+                self.out.push_str("{\\shptxt ");
+                self.ctx.push(Ctx::Normal);
+            }
+            Event::EndShape => {
+                self.ctx.pop();
+                self.out.push('}'); // close {\shptxt ...
+                if let Some(fallback_raw) = self.shape_fallback.pop()
+                    && !fallback_raw.is_empty()
+                {
+                    self.out.push_str("{\\shprslt");
+                    self.out.push_str(&fallback_raw);
+                    self.out.push('}');
+                }
+                self.out.push('}'); // close {\shp ...
             }
         }
     }

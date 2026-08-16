@@ -327,7 +327,49 @@ impl<'a> Parser<'a> {
 
                 b'{' => {
                     self.advance();
-                    if self.is_footnote_group() {
+                    if self.is_shape_group() {
+                        // Flush pending text first (same as the footnote branch below).
+                        if !carry.current_text.is_empty() {
+                            let span = Span::new(carry.text_start, self.pos);
+                            carry.current_para.push(make_inline(
+                                &carry.current_text,
+                                &carry.state,
+                                span,
+                                &self.color_table,
+                                &self.font_table,
+                            ));
+                            carry.current_text.clear();
+                        }
+                        let shape_start = self.pos;
+                        let shape = self.parse_shape_group();
+                        carry.current_para.push(match shape {
+                            Inline::Shape {
+                                x,
+                                y,
+                                width,
+                                height,
+                                z_order,
+                                shape_props,
+                                named_props,
+                                text,
+                                fallback_raw,
+                                ..
+                            } => Inline::Shape {
+                                x,
+                                y,
+                                width,
+                                height,
+                                z_order,
+                                shape_props,
+                                named_props,
+                                text,
+                                fallback_raw,
+                                span: Span::new(shape_start, self.pos),
+                            },
+                            other => other,
+                        });
+                        carry.text_start = self.pos;
+                    } else if self.is_footnote_group() {
                         // Parse footnote / endnote content into an Inline::Footnote
                         // at the current position, flushing any pending text first.
                         if !carry.current_text.is_empty() {
@@ -506,6 +548,130 @@ impl<'a> Parser<'a> {
     /// `\footnote` or `\endnote` group that we should parse rather than skip.
     fn is_footnote_group(&self) -> bool {
         is_footnote_group_prefix(&self.input[self.pos..])
+    }
+
+    /// Return `true` if the current position (already past `{`) begins a
+    /// `\shp` (drawing shape) destination group that we should parse rather
+    /// than skip.
+    fn is_shape_group(&self) -> bool {
+        is_shape_group_prefix(&self.input[self.pos..])
+    }
+
+    /// Parse a `{\shp ...}` group (caller has already consumed `{`).
+    ///
+    /// Real-world grammar (confirmed by directly reading two independently
+    /// Word-generated RTF files — pandoc's test corpus `10145.md` and the
+    /// `bitfocus/rtf2text` `sample.rtf` fixture — not inferred from the
+    /// spec, which this session could not obtain verbatim text from for
+    /// this construct despite an extensive search):
+    /// ```text
+    /// {\shp
+    ///   {\*\shpinst\shpleft0\shptop0\shpright9638\shpbottom7745\shpz0 ...
+    ///     {\sp{\sn shapeType}{\sv 75}}
+    ///     {\sp{\sn wzDescription}{\sv }}
+    ///     ...
+    ///   }
+    ///   {\shptxt <ordinary RTF paragraph content — the shape's text>}
+    ///   {\shprslt <old-reader fallback, typically a legacy \do drawing
+    ///              object or \pict — captured verbatim, not modeled>}
+    /// }
+    /// ```
+    /// `\shpinst` is marked ignorable (`\*`) per RTF convention (so old
+    /// readers fall back to `\shprslt`) but is *not* actually optional
+    /// content for a reader that understands shapes — it carries the real
+    /// position/size/z-order/named-property data, so unlike
+    /// [`Parser::is_skip_group`]'s generic `\*` handling, this function
+    /// descends into it rather than skipping it.
+    fn parse_shape_group(&mut self) -> Inline {
+        let group_bytes = self.extract_balanced_group();
+        // group_bytes starts with the "\shp" word itself; skip it.
+        let mut i = 0usize;
+        if group_bytes.first() == Some(&b'\\') {
+            i = 1;
+            while i < group_bytes.len() && group_bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+        }
+
+        let mut x = 0i64;
+        let mut y = 0i64;
+        let mut width = 0i64;
+        let mut height = 0i64;
+        let mut z_order = 0i64;
+        let mut shape_props = String::new();
+        let mut named_props: Vec<(String, String)> = Vec::new();
+        let mut text: Vec<Block> = Vec::new();
+        let mut fallback_raw = String::new();
+
+        while i < group_bytes.len() {
+            match group_bytes[i] {
+                b'{' => {
+                    let (content, next) = extract_balanced_group_bytes(group_bytes, i + 1);
+                    if is_word_prefix(content, b"shpinst") {
+                        let inst = parse_shpinst_bytes(content);
+                        x = inst.x;
+                        y = inst.y;
+                        width = inst.width;
+                        height = inst.height;
+                        z_order = inst.z_order;
+                        shape_props = inst.shape_props;
+                        named_props = inst.named_props;
+                    } else if is_word_prefix(content, b"shptxt") {
+                        let mut sub = Parser::with_tables(
+                            content,
+                            self.color_table.clone(),
+                            self.font_table.clone(),
+                            self.codepage,
+                        );
+                        // Skip the leading "\shptxt" word (and optional space).
+                        if sub.current_byte() == Some(b'\\') {
+                            sub.advance();
+                            while sub
+                                .current_byte()
+                                .map(|b| b.is_ascii_alphabetic())
+                                .unwrap_or(false)
+                            {
+                                sub.advance();
+                            }
+                            if sub.current_byte() == Some(b' ') {
+                                sub.advance();
+                            }
+                        }
+                        text = sub.run();
+                    } else if is_word_prefix(content, b"shprslt") {
+                        // Old-reader fallback (typically a legacy \do drawing
+                        // object). Captured whole (minus the leading
+                        // "\shprslt" word itself, which emit.rs re-adds), not
+                        // modeled — see the Inline::Shape::fallback_raw doc
+                        // comment.
+                        let rest = content.strip_prefix(b"\\shprslt").unwrap_or(content);
+                        let rest = rest.strip_prefix(b" ").unwrap_or(rest);
+                        fallback_raw = String::from_utf8_lossy(rest).into_owned();
+                    } else {
+                        // Unrecognized nested group: preserve it raw rather than
+                        // silently dropping it (CLAUDE.md losslessness).
+                        shape_props.push('{');
+                        shape_props.push_str(&String::from_utf8_lossy(content));
+                        shape_props.push('}');
+                    }
+                    i = next;
+                }
+                _ => i += 1,
+            }
+        }
+
+        Inline::Shape {
+            x,
+            y,
+            width,
+            height,
+            z_order,
+            shape_props,
+            named_props,
+            text,
+            fallback_raw,
+            span: Span::NONE, // overwritten by the caller with the real span
+        }
     }
 
     /// Extract the current balanced group (caller has already consumed `{`)
@@ -1545,6 +1711,232 @@ pub(crate) fn is_footnote_group_prefix(rest: &[u8]) -> bool {
     false
 }
 
+/// Return `true` if `rest` (bytes immediately following a just-consumed `{`)
+/// begins a `\shp` (drawing shape) destination group that should be parsed
+/// rather than skipped. Free function for the same reason as
+/// [`is_skip_group_prefix`]/[`is_footnote_group_prefix`] — also used by
+/// [`crate::incremental`]'s cut-point scanner so batch/incremental parsing
+/// never splits a buffer in the middle of a `\shp` group.
+///
+/// Word-boundary checked the same way as [`is_footnote_group_prefix`], and
+/// deliberately does *not* match `\shpinst`/`\shptxt`/`\shprslt`/`\shpleft`
+/// etc. (all of which share the `\shp` prefix but continue with more
+/// alphabetic characters, failing the boundary check) — only the bare outer
+/// `\shp` group itself.
+pub(crate) fn is_shape_group_prefix(rest: &[u8]) -> bool {
+    let prefix = b"\\shp";
+    if !rest.starts_with(prefix) {
+        return false;
+    }
+    let after = rest.get(prefix.len()).copied();
+    matches!(
+        after,
+        None | Some(b' ') | Some(b'\\') | Some(b'{') | Some(b'}')
+    ) || after.map(|b| b.is_ascii_digit()).unwrap_or(false)
+}
+
+/// Return `true` if `content` (a group's content, braces already stripped)
+/// begins with `\<word>` at a word boundary, optionally preceded by the `\*`
+/// ignorable-destination marker (i.e. matches either `\word...` or
+/// `\*\word...`).
+fn is_word_prefix(content: &[u8], word: &[u8]) -> bool {
+    let content = content.strip_prefix(b"\\*").unwrap_or(content);
+    let mut prefix = Vec::with_capacity(word.len() + 1);
+    prefix.push(b'\\');
+    prefix.extend_from_slice(word);
+    if !content.starts_with(prefix.as_slice()) {
+        return false;
+    }
+    let after = content.get(prefix.len()).copied();
+    !after.map(|b| b.is_ascii_alphabetic()).unwrap_or(false)
+}
+
+/// Extract a balanced `{...}` group from `bytes`, where `start` is the index
+/// just past the opening `{`. Returns `(content, next_index)` where `content`
+/// excludes both braces and `next_index` is the index just past the closing
+/// `}` (or `bytes.len()` if unterminated). Free-function counterpart of
+/// [`Parser::extract_balanced_group`], for use outside a `Parser` (shape
+/// sub-group scanning doesn't need font/color-table context).
+fn extract_balanced_group_bytes(bytes: &[u8], start: usize) -> (&[u8], usize) {
+    let mut i = start;
+    let mut depth = 1usize;
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let content_end = i;
+                    return (&bytes[start..content_end], i + 1);
+                }
+                i += 1;
+            }
+            b'\\' => {
+                i += 1;
+                if i < bytes.len() {
+                    i += 1;
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    (&bytes[start..i], i)
+}
+
+/// Parsed content of a `\shpinst` destination group.
+struct ShapeInst {
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    z_order: i64,
+    shape_props: String,
+    named_props: Vec<(String, String)>,
+}
+
+/// Parse the content of a `{\*\shpinst ...}` group (braces already stripped;
+/// `content` starts with the optional `\*` marker followed by `\shpinst`).
+///
+/// `\shpleft`/`\shptop`/`\shpright`/`\shpbottom`/`\shpz` are extracted as the
+/// semantic position/z-order fields; every other control word is
+/// accumulated verbatim into `shape_props` (same raw-preservation convention
+/// as `para_props`/`char_props`); `{\sp{\sn name}{\sv value}}` groups are
+/// parsed into `named_props`.
+fn parse_shpinst_bytes(content: &[u8]) -> ShapeInst {
+    let content = content.strip_prefix(b"\\*").unwrap_or(content);
+    let mut i = 0usize;
+    if content.starts_with(b"\\shpinst") {
+        i = b"\\shpinst".len();
+    }
+
+    let mut left = 0i64;
+    let mut top = 0i64;
+    let mut right = 0i64;
+    let mut bottom = 0i64;
+    let mut z_order = 0i64;
+    let mut shape_props = String::new();
+    let mut named_props: Vec<(String, String)> = Vec::new();
+
+    while i < content.len() {
+        match content[i] {
+            b' ' => i += 1,
+            b'\\' => {
+                i += 1;
+                if content.get(i) == Some(&b'*') {
+                    // Stray ignorable marker inside the group — skip.
+                    i += 1;
+                    continue;
+                }
+                let word_start = i;
+                while i < content.len() && content[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+                let word = String::from_utf8_lossy(&content[word_start..i]).into_owned();
+                let mut negative = false;
+                if content.get(i) == Some(&b'-') {
+                    negative = true;
+                    i += 1;
+                }
+                let num_start = i;
+                while i < content.len() && content[i].is_ascii_digit() {
+                    i += 1;
+                }
+                let param: Option<i64> = if i > num_start {
+                    std::str::from_utf8(&content[num_start..i])
+                        .ok()
+                        .and_then(|s| s.parse::<i64>().ok())
+                } else {
+                    None
+                };
+                let param = param.map(|n| if negative { -n } else { n });
+                if content.get(i) == Some(&b' ') {
+                    i += 1;
+                }
+                match word.as_str() {
+                    "shpleft" => left = param.unwrap_or(0),
+                    "shptop" => top = param.unwrap_or(0),
+                    "shpright" => right = param.unwrap_or(0),
+                    "shpbottom" => bottom = param.unwrap_or(0),
+                    "shpz" => z_order = param.unwrap_or(0),
+                    _ => {
+                        shape_props.push('\\');
+                        shape_props.push_str(&word);
+                        if let Some(p) = param {
+                            shape_props.push_str(&p.to_string());
+                        }
+                    }
+                }
+            }
+            b'{' => {
+                let (group, next) = extract_balanced_group_bytes(content, i + 1);
+                if is_word_prefix(group, b"sp") {
+                    named_props.push(parse_sp_group_bytes(group));
+                } else {
+                    shape_props.push('{');
+                    shape_props.push_str(&String::from_utf8_lossy(group));
+                    shape_props.push('}');
+                }
+                i = next;
+            }
+            _ => i += 1,
+        }
+    }
+
+    ShapeInst {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+        z_order,
+        shape_props,
+        named_props,
+    }
+}
+
+/// Parse the content of a `{\sp{\sn name}{\sv value}}` group (braces already
+/// stripped; `content` starts with `\sp`). Returns `(name, value)`, empty
+/// string for whichever sub-group is absent.
+fn parse_sp_group_bytes(content: &[u8]) -> (String, String) {
+    let mut i = 0usize;
+    if content.starts_with(b"\\sp") {
+        i = 3;
+    }
+    let mut name = String::new();
+    let mut value = String::new();
+    while i < content.len() {
+        match content[i] {
+            b'{' => {
+                let (group, next) = extract_balanced_group_bytes(content, i + 1);
+                if is_word_prefix(group, b"sn") {
+                    name = extract_after_control_word(group, "sn");
+                } else if is_word_prefix(group, b"sv") {
+                    value = extract_after_control_word(group, "sv");
+                }
+                i = next;
+            }
+            _ => i += 1,
+        }
+    }
+    (name, value)
+}
+
+/// Strip a leading `\<word>` (and one optional space delimiter) from `bytes`
+/// and return the rest, lossy-UTF8-decoded and trimmed. Used to pull the
+/// plain-text payload out of `{\sn name}`/`{\sv value}` groups.
+fn extract_after_control_word(bytes: &[u8], word: &str) -> String {
+    let prefix_len = 1 + word.len();
+    let rest = if bytes.len() >= prefix_len {
+        &bytes[prefix_len..]
+    } else {
+        &[]
+    };
+    let rest = rest.strip_prefix(b" ").unwrap_or(rest);
+    String::from_utf8_lossy(rest).trim().to_string()
+}
+
 /// Format a paragraph-layout control word for raw accumulation in `para_props`.
 ///
 /// Produces `\word` (no param) or `\wordN` (with integer param).
@@ -2315,6 +2707,7 @@ mod tests {
                 Inline::Image { alt, .. } => out.push_str(alt),
                 Inline::LineBreak { .. } | Inline::SoftBreak { .. } => out.push(' '),
                 Inline::Footnote { .. } => {} // footnote body is separate
+                Inline::Shape { .. } => {}    // shape text is separate (not inline flow)
             }
         }
         out

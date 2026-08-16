@@ -5,12 +5,77 @@
 //! "The `rescribe` feature module must never contain parsing or writing
 //! logic".
 
+//! ## RTF `\shp` shape sourcing (ADR 0015's `positioned_container`)
+//!
+//! The `Inline::Shape` ↔ `positioned_container` translation below rests on
+//! evidence gathered by directly reading two independent, real-world
+//! Word-generated RTF files rather than the RTF spec text (an extensive web
+//! search for the spec's own "Word 97-2000 RTF for Drawing Objects (Shapes)"
+//! section came up empty — the section is referenced by every index/TOC
+//! mirror found, but no fetch surfaced its actual body text):
+//!
+//! - `~/git/pandoc/test/command/10145.md` (Pandoc's own test corpus).
+//! - `bitfocus/rtf2text`'s `sample.rtf` (a public GitHub fixture),
+//!   specifically `{\shp{\*\shpinst\shpleft0\shptop0\shpright3150\shpbottom1575
+//!   ...\shpz0\shplid1026{\sp{\sn shapeType}{\sv 75}}...}{\shptxt ...}}`
+//!   plus a nested `{\shprslt{\*\do\dobxcolumn\dobypara\dodhgt8192\dptxbx
+//!   {\dptxbxtext ...}\dpx0\dpy0\dpxsize3150\dpysize1575...}}`.
+//!
+//! **Confirmed by direct reading of those files** (not inferred): `\shpleft`/
+//! `\shptop`/`\shpright`/`\shpbottom` are absolute corner coordinates
+//! (`width = shpright - shpleft`, `height = shpbottom - shptop`); `\shptxt`
+//! is a sibling destination group holding the shape's real text; `\shprslt`
+//! is a sibling destination group holding old-reader fallback content
+//! (typically a legacy `\do` object); `\shpz` is an explicit stacking index
+//! (matches ADR 0015 Decision 6 exactly); legacy `\do`'s `\dpx`/`\dpy` are an
+//! offset pair and `\dpxsize`/`\dpysize` a size pair (not corner-based like
+//! `\shp`), and `\do` *can* wrap real text content via `\dptxbxtext`.
+//!
+//! **Corroborated but not spec-confirmed**: the twips unit. ADR 0015 already
+//! flagged `\shpleft` et al. as "inferred by RTF's uniform-twips convention,
+//! not independently spec-quoted." This session added two more data points,
+//! neither a primary-source quote naming twips for `\shpleft` specifically:
+//! (1) both real files' numeric values are only plausible as twips (e.g. a
+//! shape `9638` twips wide ≈ 6.7in, sane for a Letter-page text width; `3150`
+//! twips ≈ 2.19in, sane for an embedded-object thumbnail); (2) ReactOS's
+//! `riched20` RTF reader (`rtf.h`) defines the sibling legacy words —
+//! `rtfDrawOffsetX`/`rtfDrawSizeX`/`rtfDrawOffsetY`/`rtfDrawSizeY` for `\dpx`/
+//! `\dpxsize`/`\dpy`/`\dpysize` — as "Drawing Attributes" under that same
+//! header's general `rtfTpi = 1440` (twips-per-inch) convention. Treat
+//! "twips" as strongly corroborated, not textually spec-confirmed, for
+//! `\shpleft`/`\shptop`/`\shpright`/`\shpbottom` specifically.
+//!
+//! **No rotation property found.** Per ADR 0015 Decision 5, RTF's legacy
+//! `\shp` format predates rotation support and no dedicated control word
+//! exists. This session searched for a genuine real-world `{\sp{\sn ...}}`
+//! rotation convention and found none: the real corpus's own named
+//! properties are `shapeType`/`wzDescription`/`wzName`/`fFlipH`/`fFlipV`/
+//! `pib` — no rotation-shaped key anywhere. `position:rotation` is therefore
+//! never set on the RTF side, in either direction — there is nothing to
+//! project, not a dropped value.
+//!
+//! **`\do` is not modeled as its own `positioned_container` producer.** Both
+//! real files show `\do` only nested inside a `\shp` group's `\shprslt`
+//! fallback, never standalone at the top level — no real-world evidence of
+//! a standalone legacy `\do` was found to design against. The legacy
+//! `\dodhgt` word (present in both samples) is speculated in some secondary
+//! sources to be a z-order-like "depth", but no primary source confirms
+//! this, so it is not projected to `position:z_order` — the entire
+//! `\shprslt{...}` group (whatever it contains) is instead captured
+//! verbatim as a raw `rtf:shprslt` property (see [`crate::ast::Inline::Shape`]),
+//! preserving it losslessly without asserting an unconfirmed semantic.
+
 #[cfg(all(feature = "reader-ast", feature = "rescribe"))]
 pub mod read {
     use crate::{Align, Block, Inline, RtfDoc};
-    use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+    use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions, PropValue};
     use rescribe_format_api::Parse as _;
     use rescribe_std::{node, prop};
+    use std::collections::HashMap;
+
+    /// EMU per twip, exact (914,400 EMU/inch ÷ 1,440 twips/inch = 635).
+    /// See ADR 0015 Decision 4.
+    const EMU_PER_TWIP: i64 = 635;
 
     /// Parse an RTF document.
     pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -200,6 +265,53 @@ pub mod read {
             Inline::Footnote { content, .. } => {
                 Node::new(node::FOOTNOTE_REF).children(content.iter().map(block_to_node))
             }
+
+            Inline::Shape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                ..
+            } => {
+                let mut n = Node::new(node::POSITIONED_CONTAINER)
+                    .prop(prop::POSITION_X, x * EMU_PER_TWIP)
+                    .prop(prop::POSITION_Y, y * EMU_PER_TWIP)
+                    .prop(prop::POSITION_WIDTH, width * EMU_PER_TWIP)
+                    .prop(prop::POSITION_HEIGHT, height * EMU_PER_TWIP)
+                    // ADR 0015 Decision 6: RTF's \shpz is explicit, so
+                    // position:z_order is always set directly from it (no
+                    // document-order fallback needed, unlike OOXML).
+                    .prop(prop::POSITION_Z_ORDER, *z_order);
+                // No position:rotation: see this module's top-level doc
+                // comment ("No rotation property found") — RTF's \shp
+                // format has no rotation concept to project, confirmed by
+                // searching real-world \sp named properties, not omitted
+                // for lack of trying.
+                if !shape_props.is_empty() {
+                    n = n.prop("rtf:shpinst-props", shape_props.clone());
+                }
+                if !fallback_raw.is_empty() {
+                    n = n.prop("rtf:shprslt", fallback_raw.clone());
+                }
+                if !named_props.is_empty() {
+                    let list = named_props
+                        .iter()
+                        .map(|(name, value)| {
+                            let mut map = HashMap::new();
+                            map.insert("name".to_string(), PropValue::String(name.clone()));
+                            map.insert("value".to_string(), PropValue::String(value.clone()));
+                            PropValue::Map(map)
+                        })
+                        .collect();
+                    n = n.prop("rtf:sp", PropValue::List(list));
+                }
+                n.children(text.iter().map(block_to_node))
+            }
         }
     }
 
@@ -384,9 +496,13 @@ pub mod read {
 #[cfg(all(feature = "writer-builder", feature = "rescribe"))]
 pub mod write {
     use crate::{Align, Block, Inline, RtfDoc, Span, TableRow};
-    use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+    use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node, PropValue};
     use rescribe_format_api::Emit as _;
     use rescribe_std::{node, prop};
+
+    /// EMU per twip, exact (914,400 EMU/inch ÷ 1,440 twips/inch = 635).
+    /// See ADR 0015 Decision 4.
+    const EMU_PER_TWIP: i64 = 635;
 
     /// Emit a document as RTF.
     pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -520,6 +636,19 @@ pub mod write {
                 }]
             }
 
+            // positioned_container at block level: RTF only ever anchors a
+            // shape inline within a paragraph's content stream (see
+            // rescribe.rs's module doc comment — confirmed from real
+            // Word-generated files), so wrap it in one, same as SPAN above.
+            node::POSITIONED_CONTAINER => {
+                vec![Block::Paragraph {
+                    inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                    align: Align::Default,
+                    para_props: String::new(),
+                    span: Span::NONE,
+                }]
+            }
+
             _ => nodes_to_blocks(&node.children),
         }
     }
@@ -634,6 +763,58 @@ pub mod write {
                 Inline::CharSpan {
                     char_props,
                     children: nodes_to_inlines(&node.children),
+                    span: Span::NONE,
+                }
+            }
+
+            node::POSITIONED_CONTAINER => {
+                let x = node.props.get_int(prop::POSITION_X).unwrap_or(0) / EMU_PER_TWIP;
+                let y = node.props.get_int(prop::POSITION_Y).unwrap_or(0) / EMU_PER_TWIP;
+                let width = node.props.get_int(prop::POSITION_WIDTH).unwrap_or(0) / EMU_PER_TWIP;
+                let height = node.props.get_int(prop::POSITION_HEIGHT).unwrap_or(0) / EMU_PER_TWIP;
+                let z_order = node.props.get_int(prop::POSITION_Z_ORDER).unwrap_or(0);
+                // position:rotation is intentionally never read back: RTF's
+                // \shp format has no rotation control word to emit it as
+                // (see this module's top-level doc comment). A document
+                // carrying rotation on a shape bound for RTF loses it
+                // silently here — RTF simply cannot represent it, so there
+                // is no raw fallback to fall back to either.
+                let shape_props = node
+                    .props
+                    .get_str("rtf:shpinst-props")
+                    .unwrap_or("")
+                    .to_string();
+                let fallback_raw = node.props.get_str("rtf:shprslt").unwrap_or("").to_string();
+                let named_props = match node.props.get("rtf:sp") {
+                    Some(PropValue::List(items)) => items
+                        .iter()
+                        .filter_map(|item| {
+                            let PropValue::Map(map) = item else {
+                                return None;
+                            };
+                            let name = match map.get("name") {
+                                Some(PropValue::String(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            let value = match map.get("value") {
+                                Some(PropValue::String(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            Some((name, value))
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                Inline::Shape {
+                    x,
+                    y,
+                    width,
+                    height,
+                    z_order,
+                    shape_props,
+                    named_props,
+                    text: nodes_to_blocks(&node.children),
+                    fallback_raw,
                     span: Span::NONE,
                 }
             }

@@ -386,6 +386,71 @@ pub enum Inline {
         content: Vec<Block>,
         span: Span,
     },
+
+    /// A floating/anchored drawing shape (RTF `\shp` destination group —
+    /// the Word 97+ "Office Art" shape format).
+    ///
+    /// Modeled as `Inline` (not `Block`) because real-world RTF anchors the
+    /// `{\shp ...}` group at a point inside a paragraph's inline content
+    /// stream (confirmed from real Word-generated files: pandoc's test
+    /// corpus and the `bitfocus/rtf2text` sample fixture both place `\shp`
+    /// between `\pard` and `\par`), the same position `Inline::Footnote`
+    /// occupies for its own out-of-flow block content — this variant
+    /// follows that existing precedent rather than introducing a new
+    /// block-level anchor mechanism.
+    ///
+    /// Coordinate semantics (`x`/`y`/`width`/`height` as twips) were
+    /// determined by directly reading two independent real-world RTF files
+    /// (not simulated/guessed): `shpleft`/`shptop`/`shpright`/`shpbottom`
+    /// are absolute corner coordinates (`width = shpright - shpleft`,
+    /// `height = shpbottom - shptop`), consistent with their names. The
+    /// *unit* (twips) is RTF's universal measurement unit elsewhere in the
+    /// spec and is corroborated by real corpus values that are only
+    /// plausible as twips (e.g. a ~6.7in-wide shape on a Letter page), plus
+    /// an independent implementation (ReactOS's `riched20` RTF reader,
+    /// `rtf.h`) defining the sibling legacy `\dpx`/`\dpy`/`\dpxsize`/
+    /// `\dpysize` words under its general `rtfTpi = 1440` twips-per-inch
+    /// convention — but no primary-source spec text naming twips for
+    /// `\shpleft` *specifically* was found (see rescribe.rs / TODO.md for
+    /// the full sourcing trail). Treat "twips" here as strongly
+    /// corroborated, not spec-confirmed.
+    Shape {
+        /// Left edge (`\shpleft`), in twips.
+        x: i64,
+        /// Top edge (`\shptop`), in twips.
+        y: i64,
+        /// `\shpright - \shpleft`, in twips.
+        width: i64,
+        /// `\shpbottom - \shptop`, in twips.
+        height: i64,
+        /// Explicit stacking order (`\shpz`).
+        z_order: i64,
+        /// Raw `\shpinst` control words not otherwise modeled above (wrap
+        /// type, anchor-relative-to flags, `\shplid`, etc.), captured
+        /// verbatim for lossless re-emission — same convention as
+        /// `Block::Paragraph::para_props`/`Inline::CharSpan::char_props`.
+        shape_props: String,
+        /// Named shape properties (`{\sp{\sn name}{\sv value}}` groups),
+        /// captured in document order. Values are raw RTF source text
+        /// (never interpreted — a `pib` property's value, for example, is
+        /// itself a nested `{\pict ...}` group) captured losslessly as text
+        /// via the same "RTF source is pure ASCII, lossy UTF-8 conversion
+        /// is safe" assumption already used for `\colortbl` parsing.
+        named_props: Vec<(String, String)>,
+        /// Parsed content of the shape's `\shptxt` group (the shape's
+        /// actual text), if present. Empty if the shape has no `\shptxt`.
+        text: Vec<Block>,
+        /// Verbatim raw source text of the `\shprslt{...}` old-reader
+        /// fallback group, if present (empty string otherwise). This is
+        /// typically a legacy `\do` drawing object duplicating the same
+        /// shape for readers that don't understand `\shp`; captured whole
+        /// rather than modeled into its own IR shape (see TODO.md /
+        /// rescribe.rs for why: no real-world evidence of a standalone
+        /// top-level `\do`, and the legacy `\dodhgt` word's exact semantics
+        /// — is it truly a z-order equivalent? — could not be confirmed).
+        fallback_raw: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -502,6 +567,29 @@ impl Inline {
                 content: content.iter().map(Block::normalize).collect(),
                 span: *span,
             },
+            Inline::Shape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                span,
+            } => Inline::Shape {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                z_order: *z_order,
+                shape_props: shape_props.clone(),
+                named_props: named_props.clone(),
+                text: text.iter().map(Block::normalize).collect(),
+                fallback_raw: fallback_raw.clone(),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -529,7 +617,8 @@ impl Inline {
             | Inline::Font { span, .. }
             | Inline::BgColor { span, .. }
             | Inline::Lang { span, .. }
-            | Inline::Footnote { span, .. } => *span,
+            | Inline::Footnote { span, .. }
+            | Inline::Shape { span, .. } => *span,
         }
     }
 
@@ -635,6 +724,29 @@ impl Inline {
             },
             Inline::Footnote { content, .. } => Inline::Footnote {
                 content: content.iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Shape {
+                x,
+                y,
+                width,
+                height,
+                z_order,
+                shape_props,
+                named_props,
+                text,
+                fallback_raw,
+                ..
+            } => Inline::Shape {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                z_order: *z_order,
+                shape_props: shape_props.clone(),
+                named_props: named_props.clone(),
+                text: text.iter().map(Block::strip_spans).collect(),
+                fallback_raw: fallback_raw.clone(),
                 span: Span::NONE,
             },
         }
