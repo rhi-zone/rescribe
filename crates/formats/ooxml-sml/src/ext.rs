@@ -587,6 +587,28 @@ pub struct Chart {
     /// Verbatim chart-part XML (UTF-8, lossy), populated unconditionally
     /// for raw-fallback preservation (ADR 0016 Decision 4).
     pub raw_xml: String,
+    /// Horizontal offset of the chart's anchor, in EMU, resolved from the
+    /// drawing part's `xdr:twoCellAnchor`/`xdr:oneCellAnchor` (ADR 0015
+    /// `positioned_container` shape applied to ADR 0016 chart placement —
+    /// see the `anchor` module for the column-width/row-height resolution
+    /// this is derived from). `None` only when the chart's anchor couldn't
+    /// be correlated with a drawing relationship at all (a malformed
+    /// source file) — the resolution itself always succeeds via documented
+    /// fallback defaults, so this is a correlation gap, not a precision one.
+    pub x: Option<i64>,
+    /// Vertical offset of the chart's anchor, in EMU. See [`Chart::x`].
+    pub y: Option<i64>,
+    /// Width of the chart's anchor, in EMU. See [`Chart::x`].
+    pub width: Option<i64>,
+    /// Height of the chart's anchor, in EMU. See [`Chart::x`].
+    pub height: Option<i64>,
+    /// Rotation, in OOXML's native 60,000ths-of-a-degree (`ST_Angle`),
+    /// from `xdr:graphicFrame/xdr:xfrm/@rot`, when present.
+    pub rotation: Option<i32>,
+    /// 0-based document-order index among the drawing part's anchor
+    /// elements (ADR 0015 Decision 6 z-order convention). Defaults to 0
+    /// when the anchor couldn't be correlated (see [`Chart::x`]).
+    pub z_order: usize,
 }
 
 /// The type of an embedded chart as exposed by [`ResolvedSheet`].

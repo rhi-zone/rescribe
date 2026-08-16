@@ -394,17 +394,61 @@ impl<R: Read + Seek> Workbook<R> {
                 }
             }
 
-            // Load charts via drawing relationships
+            // Load charts via drawing relationships, correlating each chart
+            // part to its `xdr:twoCellAnchor`/`xdr:oneCellAnchor` position
+            // (ADR 0015 `positioned_container` applied to ADR 0016 chart
+            // placement) by `r:id`.
             if let Some(drawing_rel) = sheet_rels.get_by_type(REL_DRAWING) {
                 let drawing_path = resolve_path(&path, &drawing_rel.target);
                 if let Ok(drawing_rels) = self.package.read_part_relationships(&drawing_path) {
-                    for rel in drawing_rels.iter() {
-                        let chart_path = resolve_path(&drawing_path, &rel.target);
-                        if rel.relationship_type == REL_CHART
-                            && let Ok(chart_data) = self.package.read_part(&chart_path)
-                            && let Ok(chart) = parse_chart_ext(&chart_data)
+                    let anchors: Vec<DrawingAnchor> = self
+                        .package
+                        .read_part(&drawing_path)
+                        .map(|data| parse_drawing_anchors(&data, &worksheet))
+                        .unwrap_or_default();
+
+                    // Push charts in the drawing's real document (z-)order,
+                    // not the `.rels` file's (unordered) relationship list
+                    // order, and attach each chart's resolved position.
+                    for anchor in &anchors {
+                        if let Some(rel) = drawing_rels
+                            .iter()
+                            .find(|r| r.id == anchor.rel_id && r.relationship_type == REL_CHART)
                         {
-                            charts.push(chart);
+                            let chart_path = resolve_path(&drawing_path, &rel.target);
+                            if let Ok(chart_data) = self.package.read_part(&chart_path)
+                                && let Ok(mut chart) = parse_chart_ext(&chart_data)
+                            {
+                                chart.x = Some(anchor.x);
+                                chart.y = Some(anchor.y);
+                                chart.width = Some(anchor.width);
+                                chart.height = Some(anchor.height);
+                                chart.rotation = anchor.rotation;
+                                chart.z_order = anchor.z_order;
+                                charts.push(chart);
+                            }
+                        }
+                    }
+
+                    // A `REL_CHART` relationship not correlated to any
+                    // anchor (a malformed drawing part missing its anchor,
+                    // or anchor parsing failing outright) is still not
+                    // silently dropped — it's pushed with no position,
+                    // matching the pre-anchor-support behavior; `xlsx.rs`
+                    // leaves such a chart unwrapped by `positioned_container`
+                    // and emits a fidelity warning.
+                    let correlated: std::collections::HashSet<&str> =
+                        anchors.iter().map(|a| a.rel_id.as_str()).collect();
+                    for rel in drawing_rels.iter() {
+                        if rel.relationship_type == REL_CHART
+                            && !correlated.contains(rel.id.as_str())
+                        {
+                            let chart_path = resolve_path(&drawing_path, &rel.target);
+                            if let Ok(chart_data) = self.package.read_part(&chart_path)
+                                && let Ok(chart) = parse_chart_ext(&chart_data)
+                            {
+                                charts.push(chart);
+                            }
                         }
                     }
                 }
@@ -497,7 +541,192 @@ fn parse_chart_ext(xml: &[u8]) -> Result<ExtChart> {
         has_category_axis: old_chart.has_category_axis,
         has_value_axis: old_chart.has_value_axis,
         raw_xml: old_chart.raw_xml,
+        x: old_chart.x,
+        y: old_chart.y,
+        width: old_chart.width,
+        height: old_chart.height,
+        rotation: old_chart.rotation,
+        z_order: old_chart.z_order,
     })
+}
+
+/// One drawing-part anchor resolved to an absolute EMU box and correlated
+/// to the chart part it points at via its `r:id` (ADR 0015
+/// `positioned_container` applied to ADR 0016 chart placement, XLSX side).
+struct DrawingAnchor {
+    rel_id: String,
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    rotation: Option<i32>,
+    z_order: usize,
+}
+
+/// Parse a drawing part's `xdr:wsDr` XML (ECMA-376 Part 1 §20.5),
+/// resolving each chart-bearing `xdr:twoCellAnchor`/`xdr:oneCellAnchor` to
+/// an absolute EMU box via the `anchor` module's column-width/row-height
+/// resolver.
+///
+/// `z_order` is the 0-based document-order index among *all* anchor
+/// elements in the drawing (chart-bearing or not) — matching the PPTX
+/// `p:graphicFrame` document-order z-order convention (ADR 0015 Decision
+/// 6). Only chart-bearing anchors are returned, but a non-chart anchor
+/// still consumes a z-order slot so relative stacking order among charts
+/// is preserved even when other drawing objects (images, shapes) are
+/// interleaved with them.
+///
+/// This is a hand-rolled walk (no generated model exists for
+/// `dml-spreadsheetDrawing` in this crate, unlike `<c:chartSpace>` which
+/// `parse_chart` above already hand-rolls for the same reason), consistent
+/// with the rest of this module's chart-XML handling.
+fn parse_drawing_anchors(xml: &[u8], worksheet: &crate::types::Worksheet) -> Vec<DrawingAnchor> {
+    #[cfg(feature = "sml-styling")]
+    let cols: &[crate::types::Columns] = &worksheet.cols;
+    #[cfg(not(feature = "sml-styling"))]
+    let cols: &[crate::types::Columns] = &[];
+    #[cfg(feature = "sml-styling")]
+    let sheet_format = worksheet.sheet_format.as_deref();
+    #[cfg(not(feature = "sml-styling"))]
+    let sheet_format: Option<&crate::types::SheetFormat> = None;
+    let rows: &[crate::types::Row] = &worksheet.sheet_data.row;
+
+    let mut reader = Reader::from_reader(Cursor::new(xml));
+    let mut buf = Vec::new();
+    let mut results = Vec::new();
+
+    let mut anchor_counter: usize = 0;
+    let mut in_anchor = false;
+    let mut is_two_cell = false;
+    let mut in_from = false;
+    let mut in_to = false;
+    let mut in_graphic_frame = false;
+
+    let zero_marker = crate::anchor::CellMarker {
+        col: 0,
+        col_off: 0,
+        row: 0,
+        row_off: 0,
+    };
+    let mut from = zero_marker;
+    let mut to = zero_marker;
+    let mut ext_cx: i64 = 0;
+    let mut ext_cy: i64 = 0;
+    let mut rel_id: Option<String> = None;
+    let mut rotation: Option<i32> = None;
+    let mut current_z_order: usize = 0;
+    let mut text_buf = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                let name = e.local_name();
+                let name = name.as_ref();
+                match name {
+                    b"twoCellAnchor" | b"oneCellAnchor" => {
+                        in_anchor = true;
+                        is_two_cell = name == b"twoCellAnchor";
+                        current_z_order = anchor_counter;
+                        anchor_counter += 1;
+                        from = zero_marker;
+                        to = zero_marker;
+                        ext_cx = 0;
+                        ext_cy = 0;
+                        rel_id = None;
+                        rotation = None;
+                    }
+                    b"from" if in_anchor => in_from = true,
+                    b"to" if in_anchor && is_two_cell => in_to = true,
+                    // `oneCellAnchor`'s own `<xdr:ext>` (size, direct EMU) —
+                    // guarded against `a:ext` inside the graphicFrame's own
+                    // (non-authoritative, see module docs) `xdr:xfrm`,
+                    // which shares the same local name.
+                    b"ext" if in_anchor && !is_two_cell && !in_graphic_frame => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            match attr.key.as_ref() {
+                                b"cx" => {
+                                    ext_cx =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0)
+                                }
+                                b"cy" => {
+                                    ext_cy =
+                                        String::from_utf8_lossy(&attr.value).parse().unwrap_or(0)
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    b"graphicFrame" if in_anchor => in_graphic_frame = true,
+                    b"xfrm" if in_graphic_frame => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"rot" {
+                                rotation = String::from_utf8_lossy(&attr.value).parse().ok();
+                            }
+                        }
+                    }
+                    b"chart" if in_graphic_frame => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"r:id" {
+                                rel_id = Some(String::from_utf8_lossy(&attr.value).into_owned());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(e)) => {
+                text_buf = e.decode().map(|c| c.into_owned()).unwrap_or_default();
+            }
+            Ok(Event::End(e)) => {
+                let name = e.local_name();
+                let name = name.as_ref();
+                let value = text_buf.trim().parse::<i64>().unwrap_or(0);
+                match name {
+                    b"col" if in_from => from.col = value.max(0) as u32,
+                    b"colOff" if in_from => from.col_off = value,
+                    b"row" if in_from => from.row = value.max(0) as u32,
+                    b"rowOff" if in_from => from.row_off = value,
+                    b"col" if in_to => to.col = value.max(0) as u32,
+                    b"colOff" if in_to => to.col_off = value,
+                    b"row" if in_to => to.row = value.max(0) as u32,
+                    b"rowOff" if in_to => to.row_off = value,
+                    b"from" => in_from = false,
+                    b"to" => in_to = false,
+                    b"graphicFrame" => in_graphic_frame = false,
+                    b"twoCellAnchor" | b"oneCellAnchor" => {
+                        if in_anchor && let Some(id) = rel_id.take() {
+                            let (x, y) =
+                                crate::anchor::marker_to_emu(&from, cols, sheet_format, rows);
+                            let (width, height) = if is_two_cell {
+                                let (x2, y2) =
+                                    crate::anchor::marker_to_emu(&to, cols, sheet_format, rows);
+                                (x2 - x, y2 - y)
+                            } else {
+                                (ext_cx, ext_cy)
+                            };
+                            results.push(DrawingAnchor {
+                                rel_id: id,
+                                x,
+                                y,
+                                width,
+                                height,
+                                rotation,
+                                z_order: current_z_order,
+                            });
+                        }
+                        in_anchor = false;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    results
 }
 
 /// Type of conditional formatting rule.
@@ -618,6 +847,19 @@ pub struct Chart {
     /// Verbatim UTF-8 (lossy) text of the chart part's XML, for lossless
     /// raw-fallback preservation (ADR 0016 Decision 4).
     raw_xml: String,
+    /// Resolved anchor position, in EMU (ADR 0015 `positioned_container`
+    /// applied to ADR 0016 charts). Not populated by [`parse_chart`] itself
+    /// (which only sees the chart part, not the drawing part) — set
+    /// afterward by [`Workbook::load_resolved_sheet`] once the drawing
+    /// part's anchor is resolved and correlated to this chart via its
+    /// `r:id`. See [`ext::Chart::x`](crate::ext::Chart::x) for the
+    /// `None`-only-on-correlation-failure contract.
+    x: Option<i64>,
+    y: Option<i64>,
+    width: Option<i64>,
+    height: Option<i64>,
+    rotation: Option<i32>,
+    z_order: usize,
 }
 
 impl Chart {
@@ -662,6 +904,38 @@ impl Chart {
     /// (ADR 0016 Decision 4).
     pub fn raw_xml(&self) -> &str {
         &self.raw_xml
+    }
+
+    /// Horizontal offset of the chart's anchor, in EMU. See
+    /// [`ext::Chart::x`](crate::ext::Chart::x).
+    pub fn x(&self) -> Option<i64> {
+        self.x
+    }
+
+    /// Vertical offset of the chart's anchor, in EMU.
+    pub fn y(&self) -> Option<i64> {
+        self.y
+    }
+
+    /// Width of the chart's anchor, in EMU.
+    pub fn width(&self) -> Option<i64> {
+        self.width
+    }
+
+    /// Height of the chart's anchor, in EMU.
+    pub fn height(&self) -> Option<i64> {
+        self.height
+    }
+
+    /// Rotation, in OOXML's native 60,000ths-of-a-degree, when present.
+    pub fn rotation(&self) -> Option<i32> {
+        self.rotation
+    }
+
+    /// 0-based document-order index among the drawing part's anchor
+    /// elements.
+    pub fn z_order(&self) -> usize {
+        self.z_order
     }
 }
 
@@ -1671,6 +1945,12 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
         has_category_axis,
         has_value_axis,
         raw_xml: String::from_utf8_lossy(xml).into_owned(),
+        x: None,
+        y: None,
+        width: None,
+        height: None,
+        rotation: None,
+        z_order: 0,
     })
 }
 
