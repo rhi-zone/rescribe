@@ -206,7 +206,41 @@ impl Converter {
             // `document` rather than living inside a `workbook` container
             // (ADR 0015 leaves that container undecided). This keeps a
             // `sheet` node's children strictly `sheet_row`s.
-            children.extend(sheet.charts().iter().map(convert_chart));
+            //
+            // Each chart is wrapped in a `positioned_container` (ADR 0015)
+            // carrying its resolved anchor position (ADR 0015 applied to
+            // ADR 0016 chart placement, XLSX side: `ooxml-sml`'s `anchor`
+            // module resolves `xdr:twoCellAnchor`/`xdr:oneCellAnchor` cell
+            // + offset coordinates to absolute EMU using the sheet's
+            // column-width/row-height state). Position is `None` only when
+            // the chart's anchor couldn't be correlated with its drawing
+            // relationship at all (a malformed source file, not a
+            // resolution-precision gap — see `ooxml_sml::ext::Chart::x`) —
+            // in that case the chart is left unwrapped and a fidelity
+            // warning is emitted rather than silently dropping position.
+            for chart in sheet.charts() {
+                let chart_node = convert_chart(chart);
+                if let (Some(x), Some(y), Some(width), Some(height)) =
+                    (chart.x, chart.y, chart.width, chart.height)
+                {
+                    let mut container = Node::new(node::POSITIONED_CONTAINER)
+                        .prop(prop::POSITION_X, x)
+                        .prop(prop::POSITION_Y, y)
+                        .prop(prop::POSITION_WIDTH, width)
+                        .prop(prop::POSITION_HEIGHT, height)
+                        .prop(prop::POSITION_Z_ORDER, chart.z_order as i64);
+                    if let Some(rot) = chart.rotation {
+                        container = container.prop(prop::POSITION_ROTATION, rot as i64);
+                    }
+                    children.push(container.child(chart_node));
+                } else {
+                    self.warn(format!(
+                        "Chart in sheet \"{}\" has no resolvable anchor position (malformed drawing relationship); position not represented in IR",
+                        sheet.name()
+                    ));
+                    children.push(chart_node);
+                }
+            }
         }
 
         Ok(children)
@@ -849,7 +883,13 @@ impl EmitContext {
                     self.current_sheet_index = Some(self.workbook.sheet_count() - 1);
                 }
                 node::CHART => {
-                    self.convert_chart_node(node);
+                    self.convert_chart_node(node, None);
+                }
+                node::POSITIONED_CONTAINER
+                    if node.children.len() == 1
+                        && node.children[0].kind.as_str() == node::CHART =>
+                {
+                    self.convert_chart_node(&node.children[0], Some(node));
                 }
                 "heading" => {
                     // Flush any pending table first
@@ -1008,13 +1048,22 @@ impl EmitContext {
     /// [`build_minimal_chart_xml`], a best-effort generator covering the
     /// same v1 semantic-core fields the reader populates.
     ///
-    /// The chart's original anchor position isn't captured anywhere in the
-    /// `chart`/`chart_series` IR shape (out of ADR 0016's scope — position
-    /// belongs to `positioned_container`, ADR 0015, which `chart` nodes
-    /// don't currently use), so the written chart is placed at a fixed
-    /// default anchor rather than its original location. This is a known,
-    /// documented v1 gap, not a silent drop of the chart itself.
-    fn convert_chart_node(&mut self, node: &Node) {
+    /// `container` is the wrapping `positioned_container` (ADR 0015), when
+    /// the chart carries its real anchor (either read from an XLSX with a
+    /// resolvable drawing anchor, or supplied by an IR producer such as a
+    /// non-OOXML reader). When `Some`, the chart is written via
+    /// `embed_chart_at_emu` at the container's `position:x/y/width/height`
+    /// (and `position:rotation`, when present) — `ooxml-sml`'s `anchor`
+    /// module resolves those EMU values back to a cell+offset anchor using
+    /// the sheet's own column-width/row-height state (whatever this
+    /// sheet's cells/columns have already set). `container` is `None` for
+    /// a bare `chart` node with no positioning wrapper (a synthetic/non-
+    /// OOXML-sourced chart, or one whose original anchor couldn't be
+    /// resolved on read — see `convert_workbook`'s fidelity warning for
+    /// that case) — that case falls back to the original fixed
+    /// cell-unit default anchor (`(0, 0)`, 8 cols x 15 rows), unchanged
+    /// from this crate's original behavior.
+    fn convert_chart_node(&mut self, node: &Node, container: Option<&Node>) {
         let Some(idx) = self.current_sheet_index else {
             self.warn(
                 "Chart node with no preceding sheet to attach to; dropped on write".to_string(),
@@ -1025,10 +1074,29 @@ impl EmitContext {
             Some(xml) => xml.as_bytes().to_vec(),
             None => build_minimal_chart_xml(node).into_bytes(),
         };
-        if let Some(sheet) = self.workbook.sheet_mut(idx) {
-            sheet.embed_chart(&chart_xml, 0, 0, 8, 15);
-        } else {
+        let Some(sheet) = self.workbook.sheet_mut(idx) else {
             self.warn("Chart node's target sheet no longer exists; dropped on write".to_string());
+            return;
+        };
+        match container {
+            Some(c) => {
+                // Defaults (when a `positioned_container` is present but
+                // missing a field, which shouldn't happen for an
+                // IR-conformant producer) mirror what the old fixed
+                // cell-unit default `(0, 0, 8, 15)` resolves to under
+                // this crate's own default column-width/row-height
+                // fallbacks: 8 * 533400 = 4267200 EMU wide,
+                // 15 * 190500 = 2857500 EMU tall.
+                let x = c.props.get_int(prop::POSITION_X).unwrap_or(0);
+                let y = c.props.get_int(prop::POSITION_Y).unwrap_or(0);
+                let width = c.props.get_int(prop::POSITION_WIDTH).unwrap_or(4_267_200);
+                let height = c.props.get_int(prop::POSITION_HEIGHT).unwrap_or(2_857_500);
+                let rot = c.props.get_int(prop::POSITION_ROTATION).map(|r| r as i32);
+                sheet.embed_chart_at_emu(&chart_xml, x, y, width, height, rot);
+            }
+            None => {
+                sheet.embed_chart(&chart_xml, 0, 0, 8, 15);
+            }
         }
     }
 
@@ -1557,9 +1625,16 @@ mod tests {
         let bytes = emit(&doc).unwrap().value;
         let reread = parse_bytes(&bytes).unwrap().value;
 
-        // `chart` is a document-level sibling right after its `sheet`
-        // (see `convert_workbook`'s comment on chart placement).
-        let chart_node = &reread.content.children[1];
+        // The input `chart` node had no `positioned_container` wrapper, so
+        // it was written via the fixed cell-unit default anchor
+        // (`embed_chart(_, 0, 0, 8, 15)`, see `convert_chart_node`). On
+        // read-back, that anchor now resolves to a real EMU position (the
+        // resolver always succeeds via documented fallback defaults — see
+        // `ooxml_sml::anchor`), so the chart comes back wrapped in a
+        // `positioned_container` (ADR 0015) rather than as a bare sibling.
+        let container = &reread.content.children[1];
+        assert_eq!(container.kind.as_str(), node::POSITIONED_CONTAINER);
+        let chart_node = &container.children[0];
         assert_eq!(chart_node.kind.as_str(), node::CHART);
         assert_eq!(
             chart_node.props.get_str(prop::OOXML_CHART_XML),
