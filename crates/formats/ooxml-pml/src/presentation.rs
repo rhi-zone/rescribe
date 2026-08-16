@@ -444,6 +444,20 @@ impl<R: Read + Seek> Presentation<R> {
         slide: &Slide,
         rel_id: &str,
     ) -> Result<ooxml_dml::types::ChartSpace> {
+        let chart_xml = self.get_chart_xml(slide, rel_id)?;
+        parse_chart(&chart_xml)
+    }
+
+    /// Load the raw (unparsed) bytes of a chart part by its relationship ID.
+    ///
+    /// Use [`Slide::chart_rel_ids`] to get the relationship IDs for all charts
+    /// on a given slide. Unlike [`Presentation::get_chart`], this does not
+    /// require the `pml-charts`/`ooxml-dml` generated chart model — it's the
+    /// same `<c:chartSpace>` document [`Presentation::get_chart`] parses, as
+    /// raw UTF-8 bytes, for callers (e.g. rescribe's `chart`/`chart_series`
+    /// IR translation, ADR 0016) that reuse `ooxml-sml`'s hand-rolled chart
+    /// XML walker against PPTX chart parts rather than the generated model.
+    pub fn get_chart_xml(&mut self, slide: &Slide, rel_id: &str) -> Result<Vec<u8>> {
         // Resolve the chart part path via slide relationships
         let slide_rels = self
             .package
@@ -455,9 +469,7 @@ impl<R: Read + Seek> Presentation<R> {
             .ok_or_else(|| Error::Invalid(format!("Chart relationship {} not found", rel_id)))?;
 
         let chart_path = resolve_path(slide.slide_path(), &rel.target);
-        let chart_xml = self.package.read_part(&chart_path)?;
-
-        parse_chart(&chart_xml)
+        Ok(self.package.read_part(&chart_path)?)
     }
 
     /// Load all four SmartArt parts for a diagram.

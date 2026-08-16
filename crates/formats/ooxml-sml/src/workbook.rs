@@ -460,6 +460,19 @@ fn parse_comments_xml(xml: &[u8]) -> Result<Vec<ExtComment>> {
         .collect())
 }
 
+/// Parse a chart part's raw XML bytes (`<c:chartSpace>`, ECMA-376 §21.2)
+/// into [`ExtChart`].
+///
+/// Public so other OOXML format crates sharing the same DrawingML chart
+/// schema (e.g. `ooxml-pml`'s PPTX slide charts) can reuse this hand-rolled
+/// walker instead of duplicating chart-XML parsing logic — the schema
+/// underlying `xl/charts/chartN.xml` (SpreadsheetML) and
+/// `ppt/charts/chartN.xml` (PresentationML) is the same `<c:chartSpace>`
+/// DrawingML chart part in both cases.
+pub fn parse_chart_xml(xml: &[u8]) -> Result<ExtChart> {
+    parse_chart_ext(xml)
+}
+
 /// Parse chart for ext::Chart
 fn parse_chart_ext(xml: &[u8]) -> Result<ExtChart> {
     let old_chart = parse_chart(xml)?;
@@ -478,6 +491,12 @@ fn parse_chart_ext(xml: &[u8]) -> Result<ExtChart> {
             ChartType::Stock => ExtChartType::Stock,
             ChartType::Unknown => ExtChartType::Unknown,
         },
+        series: old_chart.series,
+        legend: old_chart.legend,
+        legend_position: old_chart.legend_position,
+        has_category_axis: old_chart.has_category_axis,
+        has_value_axis: old_chart.has_value_axis,
+        raw_xml: old_chart.raw_xml,
     })
 }
 
@@ -586,6 +605,19 @@ pub struct Chart {
     title: Option<String>,
     chart_type: ChartType,
     series: Vec<ChartSeries>,
+    /// Whether a `<c:legend>` element is present inside `<c:chart>`.
+    legend: bool,
+    /// Legend position, mapped from ECMA-376 `ST_LegendPos` (`b`/`l`/`r`/`t`/`tr`)
+    /// to the open strings `bottom`/`left`/`right`/`top`/`top-right`. Only set
+    /// when `legend` is `true`.
+    legend_position: Option<String>,
+    /// Whether a category axis (`<c:catAx>` or `<c:dateAx>`) is present in `<c:plotArea>`.
+    has_category_axis: bool,
+    /// Whether a value axis (`<c:valAx>`) is present in `<c:plotArea>`.
+    has_value_axis: bool,
+    /// Verbatim UTF-8 (lossy) text of the chart part's XML, for lossless
+    /// raw-fallback preservation (ADR 0016 Decision 4).
+    raw_xml: String,
 }
 
 impl Chart {
@@ -602,6 +634,34 @@ impl Chart {
     /// Get all data series in the chart.
     pub fn series(&self) -> &[ChartSeries] {
         &self.series
+    }
+
+    /// Whether the chart has a legend.
+    pub fn legend(&self) -> bool {
+        self.legend
+    }
+
+    /// The legend's position (open string: `bottom`/`left`/`right`/`top`/`top-right`),
+    /// set only when [`Chart::legend`] is `true`.
+    pub fn legend_position(&self) -> Option<&str> {
+        self.legend_position.as_deref()
+    }
+
+    /// Whether the chart has a category (or date) axis.
+    pub fn has_category_axis(&self) -> bool {
+        self.has_category_axis
+    }
+
+    /// Whether the chart has a value axis.
+    pub fn has_value_axis(&self) -> bool {
+        self.has_value_axis
+    }
+
+    /// The verbatim chart-part XML, decoded as UTF-8 (lossy). Populated
+    /// unconditionally so callers can always fall back to raw preservation
+    /// (ADR 0016 Decision 4).
+    pub fn raw_xml(&self) -> &str {
+        &self.raw_xml
     }
 }
 
@@ -1304,6 +1364,11 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
 
     let mut in_chart = false;
     let mut in_plot_area = false;
+    let mut in_legend = false;
+    let mut legend_present = false;
+    let mut legend_position: Option<String> = None;
+    let mut has_category_axis = false;
+    let mut has_value_axis = false;
     let mut in_title = false;
     let mut in_title_tx = false;
     let mut in_title_rich = false;
@@ -1381,6 +1446,30 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
                             ChartType::Surface
                         };
                     }
+                    b"catAx" | b"dateAx" if in_plot_area => has_category_axis = true,
+                    b"valAx" if in_plot_area => has_value_axis = true,
+                    b"legend" if in_chart && !in_plot_area => {
+                        in_legend = true;
+                        legend_present = true;
+                    }
+                    b"legendPos" if in_legend => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"val" {
+                                let val = String::from_utf8_lossy(&attr.value).into_owned();
+                                legend_position = Some(
+                                    match val.as_str() {
+                                        "b" => "bottom",
+                                        "l" => "left",
+                                        "r" => "right",
+                                        "t" => "top",
+                                        "tr" => "top-right",
+                                        other => other,
+                                    }
+                                    .to_string(),
+                                );
+                            }
+                        }
+                    }
                     b"title" if in_chart && !in_plot_area => {
                         in_title = true;
                         title_text.clear();
@@ -1434,6 +1523,46 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
                     _ => {}
                 }
             }
+            // Self-closing elements (`<c:idx val="0"/>`, `<c:legendPos
+            // val="b"/>`, and — defensively, though real files always give
+            // them children — `<c:catAx/>`/`<c:valAx/>`) are `Event::Empty`
+            // in quick_xml, not `Event::Start`; without this arm their
+            // attributes/presence are silently never observed.
+            Ok(Event::Empty(e)) => {
+                let name = e.local_name();
+                let name = name.as_ref();
+                match name {
+                    b"idx" if in_ser => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"val" {
+                                current_series_idx =
+                                    String::from_utf8_lossy(&attr.value).parse().unwrap_or(0);
+                            }
+                        }
+                    }
+                    b"legendPos" if in_legend => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"val" {
+                                let val = String::from_utf8_lossy(&attr.value).into_owned();
+                                legend_position = Some(
+                                    match val.as_str() {
+                                        "b" => "bottom",
+                                        "l" => "left",
+                                        "r" => "right",
+                                        "t" => "top",
+                                        "tr" => "top-right",
+                                        other => other,
+                                    }
+                                    .to_string(),
+                                );
+                            }
+                        }
+                    }
+                    b"catAx" | b"dateAx" if in_plot_area => has_category_axis = true,
+                    b"valAx" if in_plot_area => has_value_axis = true,
+                    _ => {}
+                }
+            }
             Ok(Event::Text(e)) => {
                 let text = e.decode().unwrap_or_default();
                 if in_title_t {
@@ -1450,6 +1579,7 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
                 match name {
                     b"chart" => in_chart = false,
                     b"plotArea" => in_plot_area = false,
+                    b"legend" if in_legend => in_legend = false,
                     b"title" if in_title => {
                         in_title = false;
                         if !title_text.is_empty() {
@@ -1536,6 +1666,11 @@ fn parse_chart(xml: &[u8]) -> Result<Chart> {
         title,
         chart_type,
         series,
+        legend: legend_present,
+        legend_position,
+        has_category_axis,
+        has_value_axis,
+        raw_xml: String::from_utf8_lossy(xml).into_owned(),
     })
 }
 

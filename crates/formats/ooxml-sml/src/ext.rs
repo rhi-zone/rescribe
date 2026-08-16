@@ -573,6 +573,20 @@ pub struct Chart {
     pub title: Option<String>,
     /// Chart type
     pub chart_type: ChartType,
+    /// Data series.
+    pub series: Vec<crate::workbook::ChartSeries>,
+    /// Whether the chart has a legend.
+    pub legend: bool,
+    /// Legend position (open string: `bottom`/`left`/`right`/`top`/`top-right`),
+    /// set only when `legend` is `true`.
+    pub legend_position: Option<String>,
+    /// Whether the chart has a category (or date) axis.
+    pub has_category_axis: bool,
+    /// Whether the chart has a value axis.
+    pub has_value_axis: bool,
+    /// Verbatim chart-part XML (UTF-8, lossy), populated unconditionally
+    /// for raw-fallback preservation (ADR 0016 Decision 4).
+    pub raw_xml: String,
 }
 
 /// The type of an embedded chart as exposed by [`ResolvedSheet`].
