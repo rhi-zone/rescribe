@@ -630,27 +630,300 @@ struct BuilderCell {
 /// A conditional formatting rule for writing.
 #[derive(Debug, Clone)]
 pub struct ConditionalFormat {
-    /// Cell range the rule applies to (e.g., "A1:C10").
+    /// Cell range the rule applies to (e.g., "A1:C10", or a space-separated
+    /// multi-range like "A1:A10 C1:C10").
     pub range: String,
     /// The rules in this conditional format.
     pub rules: Vec<ConditionalFormatRule>,
 }
 
-/// A single conditional formatting rule.
+/// A single conditional formatting rule (ECMA-376 Part 1, §18.3.1.10,
+/// `CT_CfRule`).
+///
+/// Built via [`ConditionalFormatRule::new`] plus the `with_*` methods below,
+/// or via one of [`ConditionalFormat`]'s `add_*_rule` convenience
+/// constructors for the common cases. `color_scale`/`data_bar`/`icon_set`
+/// colors are RGB-hex only — theme colors aren't supported by the writer,
+/// matching the same simplification [`FontStyle::color`] already makes.
 #[derive(Debug, Clone)]
 pub struct ConditionalFormatRule {
     /// Rule type.
     pub rule_type: crate::ConditionalRuleType,
     /// Priority (lower = higher priority).
     pub priority: u32,
-    /// Differential formatting ID.
+    /// Differential formatting ID (index into `dxfs`).
     pub dxf_id: Option<u32>,
-    /// Operator for cellIs rules.
+    /// Operator for `cellIs` rules (e.g. `"greaterThan"`).
     pub operator: Option<String>,
-    /// Formula(s) for the rule.
+    /// Formula(s) for the rule: 1-2 operands for `cellIs`, 1 formula for
+    /// `expression`.
     pub formulas: Vec<String>,
-    /// Text for containsText/beginsWith/endsWith rules.
+    /// Text for `containsText`/`notContainsText`/`beginsWith`/`endsWith`
+    /// rules.
     pub text: Option<String>,
+    /// Stop evaluating lower-priority rules if this one matches.
+    pub stop_if_true: Option<bool>,
+    /// For `aboveAverage` rules: match above (`Some(true)`, the default) or
+    /// below (`Some(false)`) average.
+    pub above_average: Option<bool>,
+    /// For `top10` rules: interpret `rank` as a percentage rather than a
+    /// count.
+    pub percent: Option<bool>,
+    /// For `top10` rules: match the bottom N rather than the top N.
+    pub bottom: Option<bool>,
+    /// For `timePeriod` rules: which period (e.g. `"today"`, `"last7Days"`).
+    pub time_period: Option<String>,
+    /// For `top10` rules: N (a count, or a percentage if `percent` is set).
+    pub rank: Option<u32>,
+    /// For `aboveAverage` rules: number of standard deviations.
+    pub std_dev: Option<i32>,
+    /// For `aboveAverage` rules: include values equal to the average.
+    pub equal_average: Option<bool>,
+    /// For `colorScale` rules: the gradient stops.
+    pub color_scale: Option<ColorScaleRule>,
+    /// For `dataBar` rules: the in-cell bar visualization.
+    pub data_bar: Option<DataBarRule>,
+    /// For `iconSet` rules: the icon-set visualization.
+    pub icon_set: Option<IconSetRule>,
+}
+
+impl ConditionalFormatRule {
+    /// Create a new rule of the given type and priority, with every other
+    /// field unset/empty.
+    pub fn new(rule_type: crate::ConditionalRuleType, priority: u32) -> Self {
+        Self {
+            rule_type,
+            priority,
+            dxf_id: None,
+            operator: None,
+            formulas: Vec::new(),
+            text: None,
+            stop_if_true: None,
+            above_average: None,
+            percent: None,
+            bottom: None,
+            time_period: None,
+            rank: None,
+            std_dev: None,
+            equal_average: None,
+            color_scale: None,
+            data_bar: None,
+            icon_set: None,
+        }
+    }
+
+    /// Set the differential-formatting ID.
+    pub fn with_dxf_id(mut self, dxf_id: u32) -> Self {
+        self.dxf_id = Some(dxf_id);
+        self
+    }
+
+    /// Set the operator (`cellIs` rules).
+    pub fn with_operator(mut self, operator: impl Into<String>) -> Self {
+        self.operator = Some(operator.into());
+        self
+    }
+
+    /// Set the formula(s).
+    pub fn with_formulas(mut self, formulas: Vec<String>) -> Self {
+        self.formulas = formulas;
+        self
+    }
+
+    /// Set the text (`containsText`-family rules).
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.text = Some(text.into());
+        self
+    }
+
+    /// Set `stopIfTrue`.
+    pub fn with_stop_if_true(mut self, stop_if_true: bool) -> Self {
+        self.stop_if_true = Some(stop_if_true);
+        self
+    }
+
+    /// Set `aboveAverage`.
+    pub fn with_above_average(mut self, above_average: bool) -> Self {
+        self.above_average = Some(above_average);
+        self
+    }
+
+    /// Set `percent` (`top10` rules).
+    pub fn with_percent(mut self, percent: bool) -> Self {
+        self.percent = Some(percent);
+        self
+    }
+
+    /// Set `bottom` (`top10` rules).
+    pub fn with_bottom(mut self, bottom: bool) -> Self {
+        self.bottom = Some(bottom);
+        self
+    }
+
+    /// Set the time period (`timePeriod` rules).
+    pub fn with_time_period(mut self, time_period: impl Into<String>) -> Self {
+        self.time_period = Some(time_period.into());
+        self
+    }
+
+    /// Set the rank (`top10` rules).
+    pub fn with_rank(mut self, rank: u32) -> Self {
+        self.rank = Some(rank);
+        self
+    }
+
+    /// Set the standard-deviation count (`aboveAverage` rules).
+    pub fn with_std_dev(mut self, std_dev: i32) -> Self {
+        self.std_dev = Some(std_dev);
+        self
+    }
+
+    /// Set `equalAverage` (`aboveAverage` rules).
+    pub fn with_equal_average(mut self, equal_average: bool) -> Self {
+        self.equal_average = Some(equal_average);
+        self
+    }
+
+    /// Set the color-scale visualization (`colorScale` rules).
+    pub fn with_color_scale(mut self, color_scale: ColorScaleRule) -> Self {
+        self.color_scale = Some(color_scale);
+        self
+    }
+
+    /// Set the data-bar visualization (`dataBar` rules).
+    pub fn with_data_bar(mut self, data_bar: DataBarRule) -> Self {
+        self.data_bar = Some(data_bar);
+        self
+    }
+
+    /// Set the icon-set visualization (`iconSet` rules).
+    pub fn with_icon_set(mut self, icon_set: IconSetRule) -> Self {
+        self.icon_set = Some(icon_set);
+        self
+    }
+}
+
+/// One color-stop / threshold value for a `colorScale`/`dataBar`/`iconSet`
+/// rule (ECMA-376 Part 1, §18.3.1.11, `CT_Cfvo`).
+#[derive(Debug, Clone)]
+pub struct CfValue {
+    /// How `value` is interpreted (number, percent, percentile, min, max,
+    /// or formula).
+    pub value_type: crate::types::ConditionalValueType,
+    /// The threshold value (unused when `value_type` is `Min`/`Max`).
+    pub value: Option<String>,
+    /// Whether the threshold is inclusive (`>=`) rather than exclusive
+    /// (icon sets only).
+    pub gte: Option<bool>,
+}
+
+impl CfValue {
+    /// Create a threshold value.
+    pub fn new(value_type: crate::types::ConditionalValueType, value: impl Into<String>) -> Self {
+        Self {
+            value_type,
+            value: Some(value.into()),
+            gte: None,
+        }
+    }
+
+    /// Create a `min`/`max` threshold with no explicit value.
+    pub fn min_max(value_type: crate::types::ConditionalValueType) -> Self {
+        Self {
+            value_type,
+            value: None,
+            gte: None,
+        }
+    }
+
+    /// Set whether the threshold is inclusive.
+    pub fn with_gte(mut self, gte: bool) -> Self {
+        self.gte = Some(gte);
+        self
+    }
+}
+
+/// A color for a `colorScale`/`dataBar`/`iconSet` visualization rule
+/// (ECMA-376 Part 1, §18.3.1.15, `CT_Color`). Unlike [`FontStyle::color`]
+/// (RGB-hex only), this carries the full attribute set — `theme`/`tint`/
+/// `indexed`/`auto` alongside `rgb` — since a conditional-formatting color
+/// read back from a real XLSX is commonly theme-based rather than a literal
+/// RGB value, and dropping that on write would be a silent round-trip loss.
+#[derive(Debug, Clone, Default)]
+pub struct CfColor {
+    /// RGB(A) hex color, e.g. `"FFFF0000"` for opaque red.
+    pub rgb: Option<String>,
+    /// Theme color index (into the theme's color scheme).
+    pub theme: Option<u32>,
+    /// Tint/shade applied to the theme color, in `[-1.0, 1.0]`.
+    pub tint: Option<f64>,
+    /// Indexed (legacy palette) color.
+    pub indexed: Option<u32>,
+    /// Automatic color (system default).
+    pub auto: Option<bool>,
+}
+
+impl CfColor {
+    /// Create a color from an RGB(A) hex string.
+    pub fn rgb(color: impl Into<String>) -> Self {
+        Self {
+            rgb: Some(color.into()),
+            ..Default::default()
+        }
+    }
+
+    /// Create a theme-based color.
+    pub fn theme(theme: u32) -> Self {
+        Self {
+            theme: Some(theme),
+            ..Default::default()
+        }
+    }
+
+    /// Set the tint/shade.
+    pub fn with_tint(mut self, tint: f64) -> Self {
+        self.tint = Some(tint);
+        self
+    }
+}
+
+/// A `colorScale` visualization (ECMA-376 Part 1, §18.3.1.16, `CT_ColorScale`).
+#[derive(Debug, Clone, Default)]
+pub struct ColorScaleRule {
+    /// Threshold values (2 or 3 entries, matching `colors`).
+    pub cfvo: Vec<CfValue>,
+    /// Colors at each threshold.
+    pub colors: Vec<CfColor>,
+}
+
+/// A `dataBar` visualization (ECMA-376 Part 1, §18.3.1.28, `CT_DataBar`).
+#[derive(Debug, Clone, Default)]
+pub struct DataBarRule {
+    /// Minimum bar length, as a percentage of cell width.
+    pub min_length: Option<u32>,
+    /// Maximum bar length, as a percentage of cell width.
+    pub max_length: Option<u32>,
+    /// Show the cell's numeric value alongside the bar.
+    pub show_value: Option<bool>,
+    /// Threshold values (2 entries: min and max).
+    pub cfvo: Vec<CfValue>,
+    /// Bar color.
+    pub color: CfColor,
+}
+
+/// An `iconSet` visualization (ECMA-376 Part 1, §18.3.1.49, `CT_IconSet`).
+#[derive(Debug, Clone, Default)]
+pub struct IconSetRule {
+    /// Which icon set (e.g. 3 traffic lights, 5 arrows).
+    pub icon_set: Option<crate::types::IconSetType>,
+    /// Show the cell's numeric value alongside the icon.
+    pub show_value: Option<bool>,
+    /// Interpret `cfvo` thresholds as percentages.
+    pub percent: Option<bool>,
+    /// Reverse the icon order.
+    pub reverse: Option<bool>,
+    /// Threshold values (one per icon).
+    pub cfvo: Vec<CfValue>,
 }
 
 impl ConditionalFormat {
@@ -662,6 +935,15 @@ impl ConditionalFormat {
         }
     }
 
+    /// Add a rule built via [`ConditionalFormatRule::new`] — the general
+    /// escape hatch covering every `cfRule` field, for callers (e.g. an IR
+    /// adapter round-tripping an existing rule) that need more control than
+    /// the `add_*_rule` convenience constructors below expose.
+    pub fn add_rule(mut self, rule: ConditionalFormatRule) -> Self {
+        self.rules.push(rule);
+        self
+    }
+
     /// Add a cell value comparison rule.
     pub fn add_cell_is_rule(
         mut self,
@@ -670,14 +952,11 @@ impl ConditionalFormat {
         priority: u32,
         dxf_id: Option<u32>,
     ) -> Self {
-        self.rules.push(ConditionalFormatRule {
-            rule_type: crate::ConditionalRuleType::CellIs,
-            priority,
-            dxf_id,
-            operator: Some(operator.to_string()),
-            formulas: vec![formula.into()],
-            text: None,
-        });
+        let mut rule = ConditionalFormatRule::new(crate::ConditionalRuleType::CellIs, priority)
+            .with_operator(operator)
+            .with_formulas(vec![formula.into()]);
+        rule.dxf_id = dxf_id;
+        self.rules.push(rule);
         self
     }
 
@@ -688,27 +967,19 @@ impl ConditionalFormat {
         priority: u32,
         dxf_id: Option<u32>,
     ) -> Self {
-        self.rules.push(ConditionalFormatRule {
-            rule_type: crate::ConditionalRuleType::Expression,
-            priority,
-            dxf_id,
-            operator: None,
-            formulas: vec![formula.into()],
-            text: None,
-        });
+        let mut rule = ConditionalFormatRule::new(crate::ConditionalRuleType::Expression, priority)
+            .with_formulas(vec![formula.into()]);
+        rule.dxf_id = dxf_id;
+        self.rules.push(rule);
         self
     }
 
     /// Add a duplicate values rule.
     pub fn add_duplicate_values_rule(mut self, priority: u32, dxf_id: Option<u32>) -> Self {
-        self.rules.push(ConditionalFormatRule {
-            rule_type: crate::ConditionalRuleType::DuplicateValues,
-            priority,
-            dxf_id,
-            operator: None,
-            formulas: Vec::new(),
-            text: None,
-        });
+        let mut rule =
+            ConditionalFormatRule::new(crate::ConditionalRuleType::DuplicateValues, priority);
+        rule.dxf_id = dxf_id;
+        self.rules.push(rule);
         self
     }
 
@@ -719,15 +990,39 @@ impl ConditionalFormat {
         priority: u32,
         dxf_id: Option<u32>,
     ) -> Self {
-        let text = text.into();
-        self.rules.push(ConditionalFormatRule {
-            rule_type: crate::ConditionalRuleType::ContainsText,
-            priority,
-            dxf_id,
-            operator: Some("containsText".to_string()),
-            formulas: Vec::new(),
-            text: Some(text),
-        });
+        let mut rule =
+            ConditionalFormatRule::new(crate::ConditionalRuleType::ContainsText, priority)
+                .with_operator("containsText")
+                .with_text(text);
+        rule.dxf_id = dxf_id;
+        self.rules.push(rule);
+        self
+    }
+
+    /// Add a color-scale visualization rule.
+    pub fn add_color_scale_rule(mut self, color_scale: ColorScaleRule, priority: u32) -> Self {
+        self.rules.push(
+            ConditionalFormatRule::new(crate::ConditionalRuleType::ColorScale, priority)
+                .with_color_scale(color_scale),
+        );
+        self
+    }
+
+    /// Add a data-bar visualization rule.
+    pub fn add_data_bar_rule(mut self, data_bar: DataBarRule, priority: u32) -> Self {
+        self.rules.push(
+            ConditionalFormatRule::new(crate::ConditionalRuleType::DataBar, priority)
+                .with_data_bar(data_bar),
+        );
+        self
+    }
+
+    /// Add an icon-set visualization rule.
+    pub fn add_icon_set_rule(mut self, icon_set: IconSetRule, priority: u32) -> Self {
+        self.rules.push(
+            ConditionalFormatRule::new(crate::ConditionalRuleType::IconSet, priority)
+                .with_icon_set(icon_set),
+        );
         self
     }
 }
@@ -4560,26 +4855,57 @@ fn build_one_conditional_format(cf: &ConditionalFormat) -> types::ConditionalFor
                 r#type: Some(map_conditional_rule_type(&rule.rule_type)),
                 dxf_id: rule.dxf_id,
                 priority: rule.priority as i32,
-                stop_if_true: None,
-                above_average: None,
-                percent: None,
-                bottom: None,
+                stop_if_true: rule.stop_if_true,
+                above_average: rule.above_average,
+                percent: rule.percent,
+                bottom: rule.bottom,
                 operator: rule
                     .operator
                     .as_ref()
                     .and_then(|op| parse_conditional_operator(op)),
                 text: rule.text.clone(),
-                time_period: None,
-                rank: None,
-                std_dev: None,
-                equal_average: None,
+                time_period: rule.time_period.as_deref().and_then(parse_time_period),
+                rank: rule.rank,
+                std_dev: rule.std_dev,
+                equal_average: rule.equal_average,
                 formula: rule.formulas.clone(),
                 #[cfg(feature = "sml-styling")]
-                color_scale: None,
+                color_scale: rule.color_scale.as_ref().map(|cs| {
+                    Box::new(types::ColorScale {
+                        cfvo: cs.cfvo.iter().map(build_cfvo).collect(),
+                        color: cs.colors.iter().map(build_color).collect(),
+                        #[cfg(feature = "extra-children")]
+                        extra_children: Vec::new(),
+                    })
+                }),
                 #[cfg(feature = "sml-styling")]
-                data_bar: None,
+                data_bar: rule.data_bar.as_ref().map(|db| {
+                    Box::new(types::DataBar {
+                        min_length: db.min_length,
+                        max_length: db.max_length,
+                        show_value: db.show_value,
+                        cfvo: db.cfvo.iter().map(build_cfvo).collect(),
+                        color: Box::new(build_color(&db.color)),
+                        #[cfg(feature = "extra-attrs")]
+                        extra_attrs: Default::default(),
+                        #[cfg(feature = "extra-children")]
+                        extra_children: Vec::new(),
+                    })
+                }),
                 #[cfg(feature = "sml-styling")]
-                icon_set: None,
+                icon_set: rule.icon_set.as_ref().map(|is| {
+                    Box::new(types::IconSet {
+                        icon_set: is.icon_set,
+                        show_value: is.show_value,
+                        percent: is.percent,
+                        reverse: is.reverse,
+                        cfvo: is.cfvo.iter().map(build_cfvo).collect(),
+                        #[cfg(feature = "extra-attrs")]
+                        extra_attrs: Default::default(),
+                        #[cfg(feature = "extra-children")]
+                        extra_children: Vec::new(),
+                    })
+                }),
                 #[cfg(feature = "sml-extensions")]
                 extension_list: None,
                 #[cfg(feature = "extra-attrs")]
@@ -4595,6 +4921,42 @@ fn build_one_conditional_format(cf: &ConditionalFormat) -> types::ConditionalFor
         #[cfg(feature = "extra-children")]
         extra_children: Vec::new(),
     }
+}
+
+/// Build a `CT_Cfvo` threshold value from a [`CfValue`].
+#[cfg(feature = "sml-styling")]
+fn build_cfvo(v: &CfValue) -> types::ConditionalFormatValue {
+    types::ConditionalFormatValue {
+        r#type: v.value_type,
+        value: v.value.clone(),
+        gte: v.gte,
+        extension_list: None,
+        #[cfg(feature = "extra-attrs")]
+        extra_attrs: Default::default(),
+        #[cfg(feature = "extra-children")]
+        extra_children: Vec::new(),
+    }
+}
+
+/// Build a `CT_Color` from a [`CfColor`] (RGB-hex only, see [`CfColor`]).
+#[cfg(feature = "sml-styling")]
+fn build_color(c: &CfColor) -> types::Color {
+    types::Color {
+        auto: c.auto,
+        indexed: c.indexed,
+        rgb: c.rgb.as_deref().map(hex_color_to_bytes),
+        theme: c.theme,
+        tint: c.tint,
+        #[cfg(feature = "extra-attrs")]
+        extra_attrs: Default::default(),
+    }
+}
+
+/// Parse a `timePeriod` rule's period string to the generated type.
+#[cfg(feature = "sml-styling")]
+fn parse_time_period(s: &str) -> Option<types::STTimePeriod> {
+    use std::str::FromStr;
+    types::STTimePeriod::from_str(s).ok()
 }
 
 /// Map ConditionalRuleType to generated ConditionalType.
@@ -5568,6 +5930,90 @@ mod tests {
         // Second conditional format has range B1:B10 and 1 rule
         assert_eq!(cfs[1].square_reference.as_deref(), Some("B1:B10"));
         assert_eq!(cfs[1].cf_rule.len(), 1);
+    }
+
+    #[test]
+    #[cfg(feature = "full")]
+    fn test_roundtrip_conditional_formatting_visualizations() {
+        use std::io::Cursor;
+
+        let mut wb = WorkbookBuilder::new();
+        let sheet = wb.add_sheet("Sheet1");
+        sheet.set_cell("A1", 10.0);
+        sheet.set_cell("A2", 20.0);
+        sheet.set_cell("A3", 30.0);
+
+        let color_scale = ColorScaleRule {
+            cfvo: vec![
+                CfValue::min_max(crate::types::ConditionalValueType::Min),
+                CfValue::min_max(crate::types::ConditionalValueType::Max),
+            ],
+            colors: vec![CfColor::rgb("FF0000"), CfColor::rgb("00FF00")],
+        };
+        let data_bar = DataBarRule {
+            min_length: Some(10),
+            max_length: Some(90),
+            show_value: Some(true),
+            cfvo: vec![
+                CfValue::min_max(crate::types::ConditionalValueType::Min),
+                CfValue::min_max(crate::types::ConditionalValueType::Max),
+            ],
+            color: CfColor::rgb("0000FF"),
+        };
+        let icon_set = IconSetRule {
+            icon_set: Some(crate::types::IconSetType::_3TrafficLights1),
+            show_value: Some(true),
+            percent: Some(true),
+            reverse: Some(false),
+            cfvo: vec![
+                CfValue::new(crate::types::ConditionalValueType::Percent, "0"),
+                CfValue::new(crate::types::ConditionalValueType::Percent, "33"),
+                CfValue::new(crate::types::ConditionalValueType::Percent, "67"),
+            ],
+        };
+
+        let cf = ConditionalFormat::new("A1:A3")
+            .add_color_scale_rule(color_scale, 1)
+            .add_data_bar_rule(data_bar, 2)
+            .add_icon_set_rule(icon_set, 3);
+        sheet.add_conditional_format(cf);
+
+        let mut buffer = Cursor::new(Vec::new());
+        wb.write(&mut buffer).unwrap();
+        buffer.set_position(0);
+        let mut workbook = crate::Workbook::from_reader(buffer).unwrap();
+        let read_sheet = workbook.resolved_sheet(0).unwrap();
+        let cfs = read_sheet.conditional_formatting();
+        assert_eq!(cfs.len(), 1);
+        assert_eq!(cfs[0].square_reference.as_deref(), Some("A1:A3"));
+        let rules = &cfs[0].cf_rule;
+        assert_eq!(rules.len(), 3);
+
+        let cs = rules[0].color_scale.as_ref().expect("color_scale");
+        assert_eq!(cs.cfvo.len(), 2);
+        assert_eq!(cs.color.len(), 2);
+        assert_eq!(
+            cs.color[0].rgb.as_deref(),
+            Some([0xFFu8, 0xFF, 0x00, 0x00].as_slice())
+        );
+
+        let db = rules[1].data_bar.as_ref().expect("data_bar");
+        assert_eq!(db.min_length, Some(10));
+        assert_eq!(db.max_length, Some(90));
+        assert_eq!(db.show_value, Some(true));
+        assert_eq!(
+            db.color.rgb.as_deref(),
+            Some([0xFFu8, 0x00, 0x00, 0xFF].as_slice())
+        );
+
+        let is = rules[2].icon_set.as_ref().expect("icon_set");
+        assert_eq!(
+            is.icon_set,
+            Some(crate::types::IconSetType::_3TrafficLights1)
+        );
+        assert_eq!(is.show_value, Some(true));
+        assert_eq!(is.percent, Some(true));
+        assert_eq!(is.cfvo.len(), 3);
     }
 
     #[test]
