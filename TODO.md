@@ -8809,48 +8809,79 @@ Still to implement, all separate follow-up work:
 4. Verify ODF rotation/z-order semantics before trusting `positioned_container`'s
    `position:rotation`/`position:z_order` properties for ODF round-tripping.
 
-## Chart IR shape (ADR 0016) — decided, not implemented (2026-08-16)
+## Chart IR shape (ADR 0016) — v1 implemented, generated-model migration deferred (2026-08-16)
 
-**Decision recorded, implementation not started.** Charts (XLSX/PPTX via OOXML
-DrawingML's chart schema, ODS/ODP via ODF's `office:chart`) are currently dropped from
-the IR entirely — no `chart` node kind exists. Both OOXML backends already emit an
-explicit fidelity warning rather than silently dropping (`rescribe-fmt-ooxml/src/xlsx.rs`
-and `pptx/read.rs`, "chart data not represented in IR"), which is correct per CLAUDE.md,
-but the underlying gap remains open. Full design and reasoning:
-`docs/adr/0016-chart-ir-shape.md`.
+**v1 semantic core + raw fallback implemented, both directions, both format backends.**
+Full design: `docs/adr/0016-chart-ir-shape.md`.
 
-Decided:
+Implemented:
 
-- New `rescribe-std` node kinds (not yet added to
-  `crates/nodes/rescribe-std/src/lib.rs`): `chart` (block-level) with `chart_series`
-  children.
-- Cell-range reference is a structured property, not a new node kind:
-  `chart:values-ref`/`chart:categories-ref` (`PropValue::String`, verbatim range-formula
-  string) on `chart_series`, following the same "leaf value on the owning node, not a
-  child node" precedent ADR 0015 Decision 2 set for `sheet_cell`'s typed value.
-- OOXML's cached snapshot (`numCache`/`StrCache`) is preserved: `chart:values`/
-  `chart:categories` (`PropValue::List`) hold either the literal data (no `-ref` set) or
-  the cached snapshot paired with a `-ref` (reference-backed). ODF has no cache
-  equivalent — an ODF-sourced series legitimately has `-ref` with no cache.
-- `chart:type` is an open string (`PropValue::String`), not a closed enum — matches the
-  one existing convention checked across all of `rescribe-std` (`NodeKind` and
-  `value:type` are both open strings with documented known values, no closed enum
-  anywhere in the crate for a similarly finite category).
-- v1 semantic scope: `chart` node's `title`, `chart:type`, `chart:legend`/
-  `chart:legend-position`, `chart:has-category-axis`/`chart:has-value-axis`;
-  `chart_series`'s `title` plus the values/categories properties above. Everything
-  beyond v1 (3D variants, combo charts, trendlines, error bars, per-point styling) is
-  **not** dropped — the `chart` node always also carries the full verbatim chart-part
-  XML as a raw property (`ooxml:chart-xml`/`odf:chart-xml`), so v1 is a correct partial
-  implementation (lossless round-trip via the raw blob) rather than a lossy one.
+- `chart`/`chart_series` node kinds and `chart:*` properties in
+  `crates/nodes/rescribe-std/src/lib.rs` (commit `95d95fd107`) — exactly the v1 shape
+  the ADR decided: `chart:type` open string, `chart:values(-ref)`/
+  `chart:categories(-ref)`, `chart:legend`/`chart:legend-position`,
+  `chart:has-category-axis`/`chart:has-value-axis`, `ooxml:chart-xml`/`odf:chart-xml`
+  raw fallback (unconditional, per Decision 4).
+- **OOXML (xlsx + pptx), reader and writer** (commits `63a9fe115e`, `eeabfc29c4`,
+  `93594e1e63`): `ooxml-sml`'s existing hand-rolled chart XML walk
+  (`workbook.rs::parse_chart`) extended to also capture legend presence/position,
+  category/value axis presence, and the verbatim chart-part XML — plus a real
+  pre-existing bug fix found along the way (`Event::Empty` self-closing tags like
+  `<c:legendPos val="b"/>` had no match arm at all, so legend position and series
+  index were silently never read). New shared `rescribe-fmt-ooxml/src/chart.rs`
+  (translation-only, calls into `ooxml-sml`, no XML parsing of its own — respects the
+  "rescribe module never parses" rule) used by both `xlsx.rs` and `pptx/read.rs`/
+  `write.rs`. PPTX reuses the same `ooxml_sml::parse_chart_xml` against PPTX chart
+  parts rather than a second parser (same DrawingML `<c:chartSpace>` schema
+  underlies both). Both writers re-emit `ooxml:chart-xml` verbatim when present
+  (confirmed byte-exact round-trip by test), falling back to a best-effort minimal
+  chart XML built from the semantic fields only when no raw blob is present (e.g. a
+  synthetically-constructed `chart` node). Fixtures: `fixtures/xlsx/chart-bar/`,
+  `fixtures/pptx/chart-bar/` (bar chart, title, legend+position, both axes,
+  reference-backed series with cached snapshot); `COVERAGE.md` updated in both dirs.
+- **ODF (ods + odp), reader and writer** (commits `701e2d8ad9`, `c3afb752fb`,
+  `72c889979a`): confirmed against the OASIS spec and this crate's own writer that
+  real ODF charts are always embedded objects (`<draw:frame><draw:object
+  xlink:href="./Object N"/></draw:frame>`, chart content in its own `Object
+  N/content.xml`), never an inline `chart:chart` — resolved via a second pass
+  (`resolve_embedded_charts`) that upgrades a captured raw `draw:object` reference
+  into a parsed `ast::Chart`, also capturing the verbatim `<office:chart>` subtree for
+  the raw fallback. Along the way, fixed an independent pre-existing gap: ODF's
+  `<table:shapes>` floating-shape container (`Sheet::shapes`) was previously silently
+  dropped, not even raw-preserved. Writer (`collect_chart_parts`) writes each chart's
+  `content.xml` as its own ZIP part plus manifest entry, re-emitting `odf:chart-xml`
+  verbatim when present. `rescribe/read.rs`/`write.rs` wire `chart`/`chart_series`
+  both directions. Fixture: `fixtures/odf/chart-bar/` (bar chart, title, legend, axes,
+  one reference-backed series — no cache, since ODF has none, per ADR 0016 Context);
+  `COVERAGE.md` updated.
+- Verification: `cargo test` green across `rescribe-std`, `ooxml-sml`, `ooxml-dml`,
+  `ooxml-pml`, `rescribe-fmt-ooxml`, `odf-fmt`, `rescribe-fixtures`; `cargo clippy
+  --all-targets --all-features -D warnings` clean for all of these; `cargo fmt` applied.
 
-Not implemented, all separate follow-up work:
+Explicitly still open (all still lossless — everything below is preserved only via the
+unconditional `ooxml:chart-xml`/`odf:chart-xml` raw fallback, not structurally modeled
+or fixture-asserted yet):
 
-1. Add the new node kinds and `chart:*` properties to `rescribe-std`.
-2. Wire `rescribe-fmt-ooxml/src/xlsx.rs` and `pptx/read.rs` (plus write sides) onto
-   `ooxml-dml`'s `dml-charts`-gated generated types (already codegen'd,
-   `crates/formats/ooxml-dml/src/generated.rs`) rather than `ooxml-sml/src/
-   workbook.rs`'s existing ad hoc chart XML walk.
-3. Wire `odf-fmt`'s `rescribe` module for `office:chart`.
-4. Add `fixtures/xlsx/`, `fixtures/pptx/`, `fixtures/ods/`, `fixtures/odp/` chart
-   fixtures per CLAUDE.md's "no new feature without a fixture" rule.
+1. **Generated-model migration deferred.** ADR 0016's Consequences suggested wiring
+   through `ooxml-dml`'s `dml-charts`-gated generated ECMA-376 §21.2 types
+   (`crates/formats/ooxml-dml/src/generated.rs`, ~130 types) instead of
+   `ooxml-sml/src/workbook.rs`'s hand-rolled walk. That migration is explicitly a
+   "multi-day vertical" per the ADR's own Context section and was out of scope for
+   this pass — v1 extends the existing hand-rolled parser instead. Superseding it with
+   the generated model remains open follow-up work, same shape as ADR 0015's
+   `xlsx.rs` `table`/`table_cell` → `sheet`/`sheet_cell` supersession.
+2. Chart types beyond bar, multiple series per chart, literal (non-reference)
+   values/categories: the parser/IR shape already supports these (nothing to build),
+   just no dedicated fixture yet for OOXML. For ODF, no real-world literal-data case
+   was found during implementation, so it's unverified whether one exists at all.
+3. No dedicated `.odp` fixture — the ODF chart code path is shared between `.ods` and
+   `.odp` and is exercised by unit tests, but not by a fixture.
+4. 3D variants, combo charts, trendlines, error bars, per-point styling, detailed axis
+   formatting: out of v1 semantic scope by design (ADR 0016 Decision 4) for both
+   backends — raw-preserved only, not structurally modeled.
+5. A chart's original anchor position (x/y/width/height on the page/sheet) isn't
+   captured in the IR — `chart` doesn't use `positioned_container` (out of ADR 0016's
+   scope as decided). Both OOXML writers place re-emitted charts at a fixed default
+   anchor rather than the original location; this is a real position-fidelity gap, not
+   covered by the raw-XML fallback (the fallback covers the chart's own content, not
+   its host-document anchor).
