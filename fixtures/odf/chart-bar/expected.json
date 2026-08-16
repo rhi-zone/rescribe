@@ -5,7 +5,13 @@
   "assertions": [
     { "path": "/0", "kind": "sheet", "props": { "odf:name": "Sales" } },
     { "path": "/0/0", "kind": "sheet_row" },
-    { "path": "/0/3", "kind": "positioned_container" },
+    { "path": "/0/3", "kind": "positioned_container", "props": {
+      "position:x": 0,
+      "position:y": 2160000,
+      "position:width": 3600000,
+      "position:height": 2160000,
+      "position:z_order": 0
+    } },
     { "path": "/0/3/0", "kind": "chart", "props": {
       "title": "Revenue",
       "chart:type": "bar",

@@ -12,8 +12,19 @@
       }
     },
     {
-      "kind": "chart",
+      "kind": "positioned_container",
       "path": "/0/0",
+      "props": {
+        "position:x": 457200,
+        "position:y": 1600200,
+        "position:width": 8229600,
+        "position:height": 4000000,
+        "position:z_order": 0
+      }
+    },
+    {
+      "kind": "chart",
+      "path": "/0/0/0",
       "props": {
         "chart:has-category-axis": true,
         "chart:has-value-axis": true,
@@ -25,7 +36,7 @@
     },
     {
       "kind": "chart_series",
-      "path": "/0/0/0",
+      "path": "/0/0/0/0",
       "props": {
         "title": "Revenue"
       }
