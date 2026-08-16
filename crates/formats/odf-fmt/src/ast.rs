@@ -423,6 +423,9 @@ pub struct Sheet {
     pub columns: Vec<ColumnDef>,
     /// Row data, in order.
     pub rows: Vec<SheetRow>,
+    /// Floating shapes/charts anchored to this sheet (`<table:shapes>`),
+    /// e.g. a chart embedded via `<draw:frame><draw:object .../></draw:frame>`.
+    pub shapes: Vec<DrawShape>,
 }
 
 /// A column definition (`<table:table-column>`).
@@ -476,6 +479,63 @@ pub struct NamedRange {
     pub cell_range_address: Option<String>,
     /// `table:base-cell-address` — the anchor cell for relative addressing.
     pub base_cell_address: Option<String>,
+}
+
+// ── Charts (ADR 0016) ────────────────────────────────────────────────────────
+
+/// A parsed `<office:chart>` subtree — the body of an embedded chart object's
+/// own `content.xml` (referenced from a `<draw:frame><draw:object
+/// xlink:href="./Object N"/></draw:frame>` in the host document). Real ODF
+/// files never embed `chart:chart` inline in the host `content.xml`; the
+/// chart always lives in its own package sub-part, resolved via the
+/// `draw:object` reference — confirmed against the OASIS ODF spec and this
+/// crate's own writer, which must reproduce that same package shape.
+#[derive(Debug, Clone, Default)]
+pub struct Chart {
+    /// `chart:class` on `<chart:chart>`, with the `chart:` namespace prefix
+    /// stripped (e.g. `"bar"`, `"line"`, `"pie"`) — see ADR 0016 Decision 3.
+    pub chart_class: Option<String>,
+    /// Text content of `<chart:title>`.
+    pub title: Option<String>,
+    /// Whether a `<chart:legend>` element is present.
+    pub legend: bool,
+    /// `chart:legend-position` on `<chart:legend>`.
+    pub legend_position: Option<String>,
+    /// Whether an `x`-dimension (`chart:axis dimension="x"`) axis is
+    /// present — ODF's category axis.
+    pub has_category_axis: bool,
+    /// Whether a `y`-dimension (`chart:axis dimension="y"`) axis is
+    /// present — ODF's value axis.
+    pub has_value_axis: bool,
+    /// The chart's data series, in document order.
+    pub series: Vec<ChartSeries>,
+    /// Verbatim `<office:chart>...</office:chart>` subtree XML, captured
+    /// unconditionally (ADR 0016 Decision 4) so the v1 semantic subset
+    /// above stays lossless regardless of what it doesn't yet model.
+    pub raw_xml: String,
+}
+
+/// One `<chart:series>` within a `Chart`.
+#[derive(Debug, Clone, Default)]
+pub struct ChartSeries {
+    /// `chart:class` on `<chart:series>`, `chart:` prefix stripped, when it
+    /// differs from the chart-level class (combo charts).
+    pub series_class: Option<String>,
+    /// `chart:values-cell-range-address` — the verbatim ODF range-reference
+    /// string for this series' values. ODF has no cached-value-snapshot
+    /// equivalent to OOXML's numCache (checked against the schema this
+    /// session), so a reference-backed ODF series never carries literal
+    /// values alongside it.
+    pub values_cell_range_address: Option<String>,
+    /// `<chart:categories table:cell-range-address="...">`, read from the
+    /// chart's `<chart:plot-area>` (categories are stored once at
+    /// plot-area/chart level in this schema, not per-series — the
+    /// `table:cell-range-address` attribute lives on `chart:plot-area` and
+    /// `chart:categories`, not on `chart:series`, confirmed against
+    /// `ChartSeriesAttlist`/`ChartPlotAreaAttlist` in `generated.rs`) and
+    /// broadcast to every series, since ODF applies one category axis to
+    /// the whole plot area.
+    pub categories_cell_range_address: Option<String>,
 }
 
 // ── Presentation (ODP) ────────────────────────────────────────────────────────
@@ -546,6 +606,10 @@ pub enum DrawShapeContent {
         href: String,
         mime_type: Option<String>,
     },
+    /// `<draw:object>` resolved to an embedded chart object subdirectory
+    /// (ADR 0016) — `href` is the object's package-relative directory
+    /// (e.g. `"Object 1"`, no `./` prefix, no trailing slash).
+    Chart { href: String, chart: Chart },
     /// Anything else preserved as raw XML.
     Other(String),
     #[default]

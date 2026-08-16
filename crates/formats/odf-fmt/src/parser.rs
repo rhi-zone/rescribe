@@ -123,12 +123,18 @@ fn parse_archive(
     };
 
     // content.xml
-    let (body, automatic_styles, list_styles) =
+    let (mut body, automatic_styles, list_styles) =
         if let Some(xml) = read_zip_text(archive, "content.xml") {
             parse_content_xml(&xml, diags)
         } else {
             (OdfBody::Empty, Vec::new(), Vec::new())
         };
+
+    // Resolve `draw:object` references into embedded chart objects (ADR
+    // 0016) — needs `archive` access to read the referenced sub-part's
+    // `content.xml`, which `parse_content_xml` (operating on `content.xml`'s
+    // XML text alone) does not have.
+    resolve_embedded_charts(&mut body, archive);
 
     OdfDocument {
         mimetype,
@@ -150,6 +156,254 @@ pub(crate) fn read_zip_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str)
     let mut content = String::new();
     file.read_to_string(&mut content).ok()?;
     Some(content)
+}
+
+// ── Embedded charts (ADR 0016) ──────────────────────────────────────────────
+//
+// A real ODF chart is never inlined in the host document's `content.xml` —
+// it is an embedded object: `<draw:frame>` containing a self-closing (or,
+// rarely, non-empty) `<draw:object xlink:href="./Object N"/>`, where
+// `Object N/content.xml` is the chart's own `office:document-content` with
+// body `<office:chart><chart:chart>...</chart:chart></office:chart>`.
+// `parse_content_xml` above has no ZIP archive access (it parses
+// `content.xml`'s XML text alone), so `draw:object` falls through its
+// generic "unknown child" raw-capture path, producing
+// `DrawShapeContent::Other(raw)` where `raw` is just the (nearly empty)
+// `<draw:object .../>` reference tag. This section is the second pass,
+// run from `parse_archive` (which does have archive access): it walks the
+// already-parsed body, finds every `Other(raw)` whose tag is `draw:object`,
+// resolves the referenced sub-part, and upgrades it to
+// `DrawShapeContent::Chart`.
+
+/// Walk a parsed body's shape lists and resolve any `draw:object` reference
+/// into a `Chart`. Scoped to `Sheet::shapes` (ODS) and
+/// `DrawPage::shapes`/`NotesPage::shapes` (ODP) — the two shapes-based
+/// structures a chart can be anchored to; charts embedded via ODT's inline
+/// `draw:frame`/`FrameChild` are out of this pass's scope (ADR 0016's
+/// v1 fixture scope is ODS/ODP-sourced charts).
+fn resolve_embedded_charts(body: &mut OdfBody, archive: &mut ZipArchive<Cursor<&[u8]>>) {
+    match body {
+        OdfBody::Spreadsheet(sheet_body) => {
+            for sheet in &mut sheet_body.sheets {
+                resolve_shapes(&mut sheet.shapes, archive);
+            }
+        }
+        OdfBody::Presentation(pres_body) => {
+            for page in &mut pres_body.pages {
+                resolve_shapes(&mut page.shapes, archive);
+                if let Some(notes) = &mut page.notes {
+                    resolve_shapes(&mut notes.shapes, archive);
+                }
+            }
+        }
+        OdfBody::Text(_) | OdfBody::Empty => {}
+    }
+}
+
+fn resolve_shapes(shapes: &mut [DrawShape], archive: &mut ZipArchive<Cursor<&[u8]>>) {
+    for shape in shapes {
+        if let DrawShapeContent::Other(raw) = &shape.content
+            && raw.trim_start().starts_with("<draw:object")
+            && let Some(raw_href) = extract_xml_attr(raw, "xlink:href")
+        {
+            let dir = raw_href
+                .strip_prefix("./")
+                .unwrap_or(&raw_href)
+                .trim_end_matches('/')
+                .to_string();
+            if let Some(chart) = read_embedded_chart(archive, &dir) {
+                shape.content = DrawShapeContent::Chart { href: dir, chart };
+            }
+        }
+    }
+}
+
+/// Extract a single attribute's value from a captured raw XML tag string
+/// (e.g. `<draw:object xlink:href="./Object 1"/>`) without a full XML
+/// parser — the raw string is a single already-serialized start/empty tag,
+/// not general XML, so a targeted scan is sufficient and matches this
+/// crate's existing raw-capture conventions (see `attr_from_list`, which
+/// does the analogous lookup over already-collected `(String, String)` attr
+/// pairs rather than re-parsing).
+fn extract_xml_attr(raw: &str, attr: &str) -> Option<String> {
+    let needle = format!("{attr}=\"");
+    let start = raw.find(&needle)? + needle.len();
+    let end = raw[start..].find('"')? + start;
+    Some(raw[start..end].to_string())
+}
+
+/// Read and parse the chart sub-document at package-relative directory
+/// `dir` (e.g. `"Object 1"`, already stripped of `./` and trailing `/`).
+/// Returns `None` if the referenced part doesn't exist or doesn't contain
+/// an `<office:chart>` body (e.g. the object is some other embedded-object
+/// type, not a chart).
+fn read_embedded_chart(archive: &mut ZipArchive<Cursor<&[u8]>>, dir: &str) -> Option<Chart> {
+    let part_path = format!("{dir}/content.xml");
+    let xml = read_zip_text(archive, &part_path)?;
+    parse_chart_subtree(&xml)
+}
+
+/// Parse a chart sub-document's `content.xml` text (an
+/// `office:document-content` whose body is `<office:chart><chart:chart>`)
+/// into a [`Chart`]. Returns `None` if no `<office:chart>` element is
+/// present — the embedded object is some other type, not a chart.
+///
+/// Dispatches purely by element name (matching this file's existing
+/// convention throughout, e.g. `parse_frame_content`/`parse_content_xml`)
+/// rather than tracking full ancestry, since `chart:axis`/`chart:series`/
+/// `chart:categories`/`chart:legend`/`chart:title` only ever occur once
+/// inside a chart's `chart:plot-area`/`chart:chart`, never elsewhere in a
+/// chart sub-document.
+fn parse_chart_subtree(xml: &str) -> Option<Chart> {
+    let start = xml.find("<office:chart")?;
+    let end_tag = "</office:chart>";
+    let raw_xml = match xml[start..].find(end_tag) {
+        Some(rel_end) => xml[start..start + rel_end + end_tag.len()].to_string(),
+        // `<office:chart/>` (empty, no children) — self-closing form.
+        None => {
+            let rel_end = xml[start..].find("/>")?;
+            xml[start..start + rel_end + 2].to_string()
+        }
+    };
+
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut chart = Chart {
+        raw_xml,
+        ..Chart::default()
+    };
+    let mut categories_ref: Option<String> = None;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                match tag.as_str() {
+                    // Envelope elements to descend through, not skip: the
+                    // reader starts at the top of the whole `content.xml`
+                    // sub-document (`<office:document-content>` ->
+                    // `<office:body>` -> `<office:chart>`), not already
+                    // positioned inside `office:chart`.
+                    "office:document-content" | "office:body" | "office:chart" => {}
+                    "chart:chart" => {
+                        chart.chart_class =
+                            attr_from_list(&a, "chart:class").map(|c| strip_chart_ns(&c));
+                    }
+                    "chart:plot-area" => {
+                        // ODF <=1.2 stored the shared cell range directly here;
+                        // 1.3+ uses the `<chart:categories>` child instead
+                        // (see `Chart::series`' doc comment). Take whichever
+                        // is present, preferring `chart:categories` if both
+                        // end up set (checked again after the loop, since
+                        // `chart:categories` is a later sibling).
+                        if categories_ref.is_none() {
+                            categories_ref = attr_from_list(&a, "table:cell-range-address");
+                        }
+                        // Don't skip — descend into plot-area's children
+                        // (axis/series/categories) as ordinary top-level events.
+                    }
+                    "chart:title" => {
+                        let text = read_text_until(&mut reader, "chart:title");
+                        if !text.is_empty() {
+                            chart.title = Some(text);
+                        }
+                    }
+                    "chart:legend" => {
+                        chart.legend = true;
+                        chart.legend_position = attr_from_list(&a, "chart:legend-position");
+                        skip_element(&mut reader);
+                    }
+                    "chart:axis" => {
+                        match attr_from_list(&a, "chart:dimension").as_deref() {
+                            Some("x") => chart.has_category_axis = true,
+                            Some("y") => chart.has_value_axis = true,
+                            _ => {}
+                        }
+                        skip_element(&mut reader);
+                    }
+                    "chart:categories" => {
+                        categories_ref = attr_from_list(&a, "table:cell-range-address");
+                        skip_element(&mut reader);
+                    }
+                    "chart:series" => {
+                        chart.series.push(ChartSeries {
+                            series_class: attr_from_list(&a, "chart:class")
+                                .map(|c| strip_chart_ns(&c)),
+                            values_cell_range_address: attr_from_list(
+                                &a,
+                                "chart:values-cell-range-address",
+                            ),
+                            categories_cell_range_address: None,
+                        });
+                        skip_element(&mut reader);
+                    }
+                    _ => {
+                        skip_element(&mut reader);
+                    }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                match tag.as_str() {
+                    "chart:chart" => {
+                        chart.chart_class =
+                            attr_from_list(&a, "chart:class").map(|c| strip_chart_ns(&c));
+                    }
+                    "chart:legend" => {
+                        chart.legend = true;
+                        chart.legend_position = attr_from_list(&a, "chart:legend-position");
+                    }
+                    "chart:axis" => match attr_from_list(&a, "chart:dimension").as_deref() {
+                        Some("x") => chart.has_category_axis = true,
+                        Some("y") => chart.has_value_axis = true,
+                        _ => {}
+                    },
+                    "chart:categories" => {
+                        categories_ref = attr_from_list(&a, "table:cell-range-address");
+                    }
+                    "chart:series" => {
+                        chart.series.push(ChartSeries {
+                            series_class: attr_from_list(&a, "chart:class")
+                                .map(|c| strip_chart_ns(&c)),
+                            values_cell_range_address: attr_from_list(
+                                &a,
+                                "chart:values-cell-range-address",
+                            ),
+                            categories_cell_range_address: None,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:chart" {
+                    break;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    for series in &mut chart.series {
+        series.categories_cell_range_address = categories_ref.clone();
+    }
+
+    Some(chart)
+}
+
+/// Strip a `chart:`-namespaced token's prefix (e.g. `"chart:bar"` ->
+/// `"bar"`) — ADR 0016 Decision 3's `chart:type` vocabulary is a plain,
+/// unprefixed open string shared across formats.
+fn strip_chart_ns(class: &str) -> String {
+    class.strip_prefix("chart:").unwrap_or(class).to_string()
 }
 
 // ── content.xml ──────────────────────────────────────────────────────────────
@@ -280,6 +534,7 @@ fn parse_sheet_attrs(
         .unwrap_or(true);
     let mut columns = Vec::new();
     let mut rows = Vec::new();
+    let mut shapes = Vec::new();
     let mut buf = Vec::new();
 
     loop {
@@ -301,6 +556,9 @@ fn parse_sheet_attrs(
                     }
                     "table:table-rows" | "table:table-header-rows" => {
                         rows.extend(parse_row_group(reader, &tag, diags));
+                    }
+                    "table:shapes" => {
+                        shapes.extend(parse_shapes_group(reader, "table:shapes", diags));
                     }
                     _ => {
                         skip_element(reader);
@@ -341,7 +599,64 @@ fn parse_sheet_attrs(
         print,
         columns,
         rows,
+        shapes,
     }
+}
+
+/// Parse a `<table:shapes>` wrapper's `draw:frame`/`draw:custom-shape`/
+/// `draw:g` children — floating shapes (including embedded chart objects,
+/// ADR 0016) anchored to a sheet. Shares `parse_draw_shape_attrs` with the
+/// presentation-page shape list since `DrawShape` is not ODT/ODS/ODP-specific.
+fn parse_shapes_group(
+    reader: &mut Reader<&[u8]>,
+    end_tag: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<DrawShape> {
+    let mut shapes = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                if tag == "draw:frame" || tag == "draw:custom-shape" || tag == "draw:g" {
+                    shapes.push(parse_draw_shape_attrs(&a, &tag, reader, diags));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                if tag == "draw:frame" || tag == "draw:custom-shape" {
+                    let a = collect_attrs(e);
+                    shapes.push(DrawShape {
+                        style_name: attr_from_list(&a, "draw:style-name"),
+                        text_style_name: attr_from_list(&a, "draw:text-style-name"),
+                        name: attr_from_list(&a, "draw:name"),
+                        presentation_class: attr_from_list(&a, "presentation:class"),
+                        x: attr_from_list(&a, "svg:x"),
+                        y: attr_from_list(&a, "svg:y"),
+                        width: attr_from_list(&a, "svg:width"),
+                        height: attr_from_list(&a, "svg:height"),
+                        transform: attr_from_list(&a, "draw:transform"),
+                        z_index: attr_from_list(&a, "draw:z-index").and_then(|v| v.parse().ok()),
+                        content: DrawShapeContent::Empty,
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    shapes
 }
 
 fn parse_column_def_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> ColumnDef {
@@ -746,11 +1061,20 @@ fn parse_draw_shape_content(
             }
             Ok(Event::Empty(ref e)) => {
                 let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
                 if tag == "draw:image" {
-                    let a = collect_attrs(e);
                     let href = attr_from_list(&a, "xlink:href").unwrap_or_default();
                     let mime_type = attr_from_list(&a, "draw:mime-type");
                     content = DrawShapeContent::Image { href, mime_type };
+                } else {
+                    // Includes `draw:object` (the common self-closing shape
+                    // of an embedded-object reference, e.g. a chart — ADR
+                    // 0016). Captured raw here; `resolve_embedded_charts`
+                    // (which has ZIP archive access, unlike this XML-only
+                    // recursive descent) upgrades a `draw:object` reference
+                    // to `DrawShapeContent::Chart` after this parse
+                    // completes.
+                    content = DrawShapeContent::Other(capture_raw_empty(&tag, &a));
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -2103,6 +2427,17 @@ pub(crate) fn capture_raw_from_name_attrs(
     let inner = capture_raw_until(reader, name);
     raw.push_str(&inner);
     raw.push_str(&format!("</{name}>"));
+    raw
+}
+
+/// Capture a self-closing (`Event::Empty`) element's XML: just the tag with
+/// its pre-collected attrs, no children/close tag to read.
+pub(crate) fn capture_raw_empty(name: &str, attrs: &[(String, String)]) -> String {
+    let mut raw = format!("<{name}");
+    for (k, v) in attrs {
+        raw.push_str(&format!(" {k}=\"{v}\""));
+    }
+    raw.push_str("/>");
     raw
 }
 

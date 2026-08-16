@@ -21,9 +21,19 @@ pub fn emit(doc: &OdfDocument) -> Result<Vec<u8>, Error> {
     zip.start_file("mimetype", stored)?;
     zip.write_all(doc.mimetype.as_bytes())?;
 
+    // Embedded chart objects (ADR 0016), collected from `DrawShapeContent::
+    // Chart` wherever it appears in the body (sheet-anchored or
+    // presentation-anchored). Folded into the same "extra parts" set as
+    // `doc.extra_parts` below so they get one write loop and one manifest
+    // pass, keyed by their own `"{dir}/content.xml"` path — not stored on
+    // `OdfDocument` itself, since they're derived from the body's shapes,
+    // not independent package parts a caller sets directly.
+    let mut all_extra_parts = doc.extra_parts.clone();
+    all_extra_parts.extend(collect_chart_parts(doc));
+
     // META-INF/manifest.xml
     zip.start_file("META-INF/manifest.xml", deflated)?;
-    write!(zip, "{}", build_manifest(doc))?;
+    write!(zip, "{}", build_manifest(doc, &all_extra_parts))?;
 
     // meta.xml
     zip.start_file("meta.xml", deflated)?;
@@ -43,19 +53,19 @@ pub fn emit(doc: &OdfDocument) -> Result<Vec<u8>, Error> {
         zip.write_all(data)?;
     }
 
-    // Other raw-preserved package parts (settings.xml, RDF metadata parts).
-    // Iterated in sorted key order (not just any `HashMap` iteration order):
-    // `events()`/`StreamingParser`'s independent reconstruction of the same
-    // `extra_parts` map starts from its own separately-hashed `HashMap`, so
-    // an unsorted iteration order here would make `emit()`'s output
-    // non-reproducible byte-for-byte across the two code paths even though
-    // the content is identical — see the `streaming_writer` cross-check in
-    // `rescribe-fixtures`.
-    let mut extra_paths: Vec<&String> = doc.extra_parts.keys().collect();
+    // Other raw-preserved package parts (settings.xml, RDF metadata parts,
+    // embedded chart objects). Iterated in sorted key order (not just any
+    // `HashMap` iteration order): `events()`/`StreamingParser`'s
+    // independent reconstruction of the same `extra_parts` map starts from
+    // its own separately-hashed `HashMap`, so an unsorted iteration order
+    // here would make `emit()`'s output non-reproducible byte-for-byte
+    // across the two code paths even though the content is identical — see
+    // the `streaming_writer` cross-check in `rescribe-fixtures`.
+    let mut extra_paths: Vec<&String> = all_extra_parts.keys().collect();
     extra_paths.sort();
     for path in extra_paths {
         zip.start_file(path, deflated)?;
-        zip.write_all(&doc.extra_parts[path])?;
+        zip.write_all(&all_extra_parts[path])?;
     }
 
     let cursor = zip.finish()?;
@@ -79,7 +89,10 @@ pub fn emit_lenient(doc: &OdfDocument) -> Vec<u8> {
 
 // ── Manifest ──────────────────────────────────────────────────────────────────
 
-fn build_manifest(doc: &OdfDocument) -> String {
+fn build_manifest(
+    doc: &OdfDocument,
+    all_extra_parts: &std::collections::HashMap<String, Vec<u8>>,
+) -> String {
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     s.push_str("<manifest:manifest xmlns:manifest=\"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0\" manifest:version=\"1.3\">\n");
@@ -96,9 +109,19 @@ fn build_manifest(doc: &OdfDocument) -> String {
             " <manifest:file-entry manifest:full-path=\"{path}\" manifest:media-type=\"{mime}\"/>\n"
         ));
     }
-    let mut extra_paths: Vec<&String> = doc.extra_parts.keys().collect();
+    let mut extra_paths: Vec<&String> = all_extra_parts.keys().collect();
     extra_paths.sort();
     for path in extra_paths {
+        // An embedded chart object sub-part (ADR 0016), e.g.
+        // `"Object 1/content.xml"` — needs a directory manifest entry
+        // (`"Object 1/"`, media-type `application/vnd.oasis.opendocument.chart`)
+        // in addition to the content.xml entry itself, matching how a real
+        // ODF package declares an embedded object's own root part.
+        if let Some(dir) = path.strip_suffix("/content.xml") {
+            s.push_str(&format!(
+                " <manifest:file-entry manifest:full-path=\"{dir}/\" manifest:version=\"1.3\" manifest:media-type=\"application/vnd.oasis.opendocument.chart\"/>\n"
+            ));
+        }
         let mime = if path.ends_with(".rdf") {
             "application/rdf+xml"
         } else {
@@ -851,6 +874,13 @@ fn write_sheet(s: &mut String, sheet: &Sheet) {
         }
         s.push_str("</table:table-row>\n");
     }
+    if !sheet.shapes.is_empty() {
+        s.push_str("<table:shapes>\n");
+        for shape in &sheet.shapes {
+            write_draw_shape(s, shape);
+        }
+        s.push_str("</table:shapes>\n");
+    }
     s.push_str("</table:table>\n");
 }
 
@@ -950,9 +980,147 @@ fn write_draw_shape(s: &mut String, shape: &DrawShape) {
             s.push_str(raw);
             s.push('\n');
         }
+        DrawShapeContent::Chart { href, .. } => {
+            // The chart's own `content.xml` is written separately as a ZIP
+            // part (`OdfDocument::extra_parts`, staged by
+            // `rescribe::write::WriteCtx::resolve_chart`) — this is just
+            // the host document's reference to it (ADR 0016).
+            s.push_str(&format!(
+                "<draw:object xlink:href=\"./{}\" xlink:type=\"simple\"/>\n",
+                xml_escape(href)
+            ));
+        }
         DrawShapeContent::Empty => {}
     }
     s.push_str("</draw:frame>\n");
+}
+
+// ── Embedded charts (ADR 0016) ──────────────────────────────────────────────
+
+/// Walk the body's shape lists (mirrors `parser::resolve_embedded_charts`'s
+/// read-side walk) and build each embedded chart object's `content.xml`
+/// bytes, keyed by `"{href}/content.xml"`.
+fn collect_chart_parts(doc: &OdfDocument) -> std::collections::HashMap<String, Vec<u8>> {
+    let mut parts = std::collections::HashMap::new();
+    match &doc.body {
+        OdfBody::Spreadsheet(body) => {
+            for sheet in &body.sheets {
+                collect_chart_parts_from_shapes(&sheet.shapes, &mut parts);
+            }
+        }
+        OdfBody::Presentation(body) => {
+            for page in &body.pages {
+                collect_chart_parts_from_shapes(&page.shapes, &mut parts);
+                if let Some(notes) = &page.notes {
+                    collect_chart_parts_from_shapes(&notes.shapes, &mut parts);
+                }
+            }
+        }
+        OdfBody::Text(_) | OdfBody::Empty => {}
+    }
+    parts
+}
+
+fn collect_chart_parts_from_shapes(
+    shapes: &[DrawShape],
+    parts: &mut std::collections::HashMap<String, Vec<u8>>,
+) {
+    for shape in shapes {
+        if let DrawShapeContent::Chart { href, chart } = &shape.content {
+            parts.insert(
+                format!("{href}/content.xml"),
+                build_chart_content_xml(chart).into_bytes(),
+            );
+        }
+    }
+}
+
+/// Build the embedded chart object's `content.xml` bytes: the raw
+/// `<office:chart>` blob when present (re-emitted verbatim, ADR 0016
+/// Decision 4 — this is what keeps a real ODF-sourced chart byte-exact
+/// through read→write), or a synthesized minimal chart body from the
+/// semantic fields otherwise.
+fn build_chart_content_xml(chart: &Chart) -> String {
+    let body = if !chart.raw_xml.is_empty() {
+        chart.raw_xml.clone()
+    } else {
+        synthesize_chart_xml(chart)
+    };
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <office:document-content \
+         xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" \
+         xmlns:chart=\"urn:oasis:names:tc:opendocument:xmlns:chart:1.0\" \
+         xmlns:svg=\"urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0\" \
+         xmlns:table=\"urn:oasis:names:tc:opendocument:xmlns:table:1.0\" \
+         xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\" \
+         office:version=\"1.3\">\n\
+         <office:body>\n{body}\n</office:body>\n\
+         </office:document-content>"
+    )
+}
+
+/// Synthesize a minimal `<office:chart>` from a `Chart`'s semantic fields
+/// only — used when there is no raw `office:chart` blob to re-emit (a chart
+/// constructed directly, not sourced from ODF). Best-effort: covers ADR
+/// 0016's v1 semantic core (class, title, legend, axis presence, series
+/// values/categories references), not the format's full chart schema.
+fn synthesize_chart_xml(chart: &Chart) -> String {
+    let class = chart
+        .chart_class
+        .as_deref()
+        .map(|c| format!("chart:{c}"))
+        .unwrap_or_else(|| "chart:bar".to_owned());
+    let mut s = format!(
+        "<office:chart><chart:chart chart:class=\"{}\">",
+        xml_escape(&class)
+    );
+    if let Some(t) = &chart.title {
+        s.push_str(&format!(
+            "<chart:title><text:p>{}</text:p></chart:title>",
+            xml_escape(t)
+        ));
+    }
+    s.push_str("<chart:plot-area>");
+    if chart.has_category_axis {
+        s.push_str("<chart:axis chart:dimension=\"x\"/>");
+    }
+    if chart.has_value_axis {
+        s.push_str("<chart:axis chart:dimension=\"y\"/>");
+    }
+    if let Some(cref) = chart
+        .series
+        .iter()
+        .find_map(|series| series.categories_cell_range_address.as_deref())
+    {
+        s.push_str(&format!(
+            "<chart:categories table:cell-range-address=\"{}\"/>",
+            xml_escape(cref)
+        ));
+    }
+    for series in &chart.series {
+        s.push_str("<chart:series");
+        if let Some(sc) = &series.series_class {
+            s.push_str(&format!(" chart:class=\"chart:{}\"", xml_escape(sc)));
+        }
+        if let Some(v) = &series.values_cell_range_address {
+            s.push_str(&format!(
+                " chart:values-cell-range-address=\"{}\"",
+                xml_escape(v)
+            ));
+        }
+        s.push_str("/>");
+    }
+    s.push_str("</chart:plot-area>");
+    if chart.legend {
+        s.push_str("<chart:legend");
+        if let Some(pos) = &chart.legend_position {
+            s.push_str(&format!(" chart:legend-position=\"{}\"", xml_escape(pos)));
+        }
+        s.push_str("/>");
+    }
+    s.push_str("</chart:chart></office:chart>");
+    s
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

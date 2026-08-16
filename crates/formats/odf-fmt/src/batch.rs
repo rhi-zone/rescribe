@@ -445,7 +445,11 @@ enum BuildFrame {
         page: DrawPage,
     },
     Shape {
-        shape: DrawShape,
+        // Boxed: `DrawShape` grew past clippy's `large_enum_variant`
+        // threshold once `DrawShapeContent::Chart` (ADR 0016) was added —
+        // that variant is rare relative to how often a `BuildFrame` is
+        // pushed/popped, so indirection here costs nothing that matters.
+        shape: Box<DrawShape>,
     },
     TextBox {
         blocks: Vec<TextBlock>,
@@ -693,6 +697,11 @@ impl DocBuilder {
                         print,
                         columns,
                         rows,
+                        // No `OdfEvent` for floating shapes/charts exists
+                        // yet (ADR 0016 scoped the event-stream API out of
+                        // this pass) — always empty via this event-driven
+                        // path, not a per-call omission.
+                        shapes: Vec::new(),
                     });
                 }
             }
@@ -785,11 +794,13 @@ impl DocBuilder {
                     height: height.map(|s| s.into_owned()),
                     ..Default::default()
                 };
-                self.stack.push(BuildFrame::Shape { shape });
+                self.stack.push(BuildFrame::Shape {
+                    shape: Box::new(shape),
+                });
             }
             OdfEvent::EndShape => {
                 if let Some(BuildFrame::Shape { shape }) = self.stack.pop() {
-                    self.attach_shape(shape);
+                    self.attach_shape(*shape);
                 }
             }
             OdfEvent::StartTextBox => {
