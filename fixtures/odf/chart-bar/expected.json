@@ -1,0 +1,22 @@
+{
+  "description": "ODS spreadsheet with a bar chart embedded as a floating shape anchored to the sheet (ADR 0016): title, legend, category/value axes, and one series with values/categories as cell-range references (no cached snapshot — ODF has none, unlike OOXML's numCache/strCache)",
+  "category": "happy",
+  "metadata": { "title": "Sales Chart" },
+  "assertions": [
+    { "path": "/0", "kind": "sheet", "props": { "odf:name": "Sales" } },
+    { "path": "/0/0", "kind": "sheet_row" },
+    { "path": "/0/3", "kind": "positioned_container" },
+    { "path": "/0/3/0", "kind": "chart", "props": {
+      "title": "Revenue",
+      "chart:type": "bar",
+      "chart:legend": true,
+      "chart:legend-position": "end",
+      "chart:has-category-axis": true,
+      "chart:has-value-axis": true
+    } },
+    { "path": "/0/3/0/0", "kind": "chart_series", "props": {
+      "chart:values-ref": "Sales.B2:B3",
+      "chart:categories-ref": "Sales.A2:A3"
+    } }
+  ]
+}

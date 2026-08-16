@@ -87,6 +87,33 @@ spec.
       `odf:type=slide`; shapes as `positioned_container` with EMU
       `position:x`/`y`/`width`/`height` and `position:z_order` — ADR 0015)
 
+## Charts (ADR 0016)
+- [x] chart embedded as a sheet-anchored floating shape (.ods) — `chart-bar`
+      (bar chart: `chart` node with `title`/`chart:type`/`chart:legend`/
+      `chart:legend-position`/`chart:has-category-axis`/
+      `chart:has-value-axis`, one `chart_series` child with
+      `chart:values-ref`/`chart:categories-ref` cell-range references, plus
+      the unconditional `odf:chart-xml` raw fallback). Real ODF charts are
+      always embedded objects (`<draw:frame><draw:object
+      xlink:href="./Object N"/></draw:frame>`, chart content in its own
+      `Object N/content.xml` sub-part) — never inlined `chart:chart` in the
+      host `content.xml` — confirmed against the OASIS spec and this crate's
+      own reader/writer, which reproduce that same package shape.
+- [ ] chart embedded on a presentation slide (.odp) — not yet covered by a
+      dedicated fixture; the reader/writer code path is shared with `.ods`
+      (`DrawShapeContent::Chart` on `DrawPage::shapes`/`NotesPage::shapes`,
+      exercised by unit tests in `crates/formats/odf-fmt/src/rescribe/
+      write.rs`, but no `fixtures/odf/` entry yet)
+- [ ] chart with literal (non-referenced) values/categories — ODF's
+      `chart:series`/`chart:categories` are cell-range-reference-only in
+      every real-world case this session found; not modeled as a distinct
+      fixture since the IR's `chart:values`/`chart:categories` (literal)
+      path is exercised by other formats' fixtures, not ODF's
+- [ ] ODF-specific long-tail chart constructs (3D charts, combo charts,
+      trendlines, error bars, per-data-point styling, wall/floor formatting)
+      — out of ADR 0016 v1 scope; preserved only via the raw `odf:chart-xml`
+      fallback, not asserted as structured fixture data
+
 ## Adversarial
 - [x] empty body — `adv-empty`
 - [x] malformed ZIP — `adv-bad-zip`

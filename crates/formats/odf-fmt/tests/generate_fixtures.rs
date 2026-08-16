@@ -889,6 +889,126 @@ fn generate_odp_body() {
     );
 }
 
+#[test]
+#[ignore = "run explicitly to regenerate fixture inputs"]
+fn generate_chart_bar() {
+    // A bar chart embedded in an .ods sheet (ADR 0016): one series with
+    // literal values via `chart:values-cell-range-address`, categories via
+    // `chart:categories`' `table:cell-range-address` — both cell-range
+    // references, no cached snapshot (ODF has none, unlike OOXML's
+    // numCache/strCache — see ADR 0016's Context).
+    let chart = Chart {
+        chart_class: Some("bar".to_string()),
+        title: Some("Revenue".to_string()),
+        legend: true,
+        legend_position: Some("end".to_string()),
+        has_category_axis: true,
+        has_value_axis: true,
+        series: vec![ChartSeries {
+            series_class: None,
+            values_cell_range_address: Some("Sales.B2:B3".to_string()),
+            categories_cell_range_address: Some("Sales.A2:A3".to_string()),
+        }],
+        raw_xml: String::new(),
+    };
+    let chart_shape = DrawShape {
+        x: Some("0cm".to_string()),
+        y: Some("6cm".to_string()),
+        width: Some("10cm".to_string()),
+        height: Some("6cm".to_string()),
+        z_index: Some(0),
+        content: DrawShapeContent::Chart {
+            href: "Object 1".to_string(),
+            chart,
+        },
+        ..DrawShape::default()
+    };
+
+    write_fixture_as(
+        "chart-bar",
+        "ods",
+        OdfDocument {
+            mimetype: "application/vnd.oasis.opendocument.spreadsheet".to_string(),
+            body: OdfBody::Spreadsheet(SpreadsheetBody {
+                sheets: vec![Sheet {
+                    name: Some("Sales".to_string()),
+                    rows: vec![
+                        SheetRow {
+                            cells: vec![
+                                SheetCell {
+                                    value_type: Some("string".to_string()),
+                                    value: Some("Product".to_string()),
+                                    content: vec![TextBlock::Paragraph(Paragraph {
+                                        content: vec![Inline::Text("Product".to_string())],
+                                        ..Default::default()
+                                    })],
+                                    ..Default::default()
+                                },
+                                SheetCell {
+                                    value_type: Some("string".to_string()),
+                                    value: Some("Revenue".to_string()),
+                                    content: vec![TextBlock::Paragraph(Paragraph {
+                                        content: vec![Inline::Text("Revenue".to_string())],
+                                        ..Default::default()
+                                    })],
+                                    ..Default::default()
+                                },
+                            ],
+                            ..Default::default()
+                        },
+                        SheetRow {
+                            cells: vec![
+                                SheetCell {
+                                    value_type: Some("string".to_string()),
+                                    value: Some("Widget".to_string()),
+                                    content: vec![TextBlock::Paragraph(Paragraph {
+                                        content: vec![Inline::Text("Widget".to_string())],
+                                        ..Default::default()
+                                    })],
+                                    ..Default::default()
+                                },
+                                SheetCell {
+                                    value_type: Some("float".to_string()),
+                                    value: Some("1500".to_string()),
+                                    ..Default::default()
+                                },
+                            ],
+                            ..Default::default()
+                        },
+                        SheetRow {
+                            cells: vec![
+                                SheetCell {
+                                    value_type: Some("string".to_string()),
+                                    value: Some("Gadget".to_string()),
+                                    content: vec![TextBlock::Paragraph(Paragraph {
+                                        content: vec![Inline::Text("Gadget".to_string())],
+                                        ..Default::default()
+                                    })],
+                                    ..Default::default()
+                                },
+                                SheetCell {
+                                    value_type: Some("float".to_string()),
+                                    value: Some("2300".to_string()),
+                                    ..Default::default()
+                                },
+                            ],
+                            ..Default::default()
+                        },
+                    ],
+                    shapes: vec![chart_shape],
+                    ..Default::default()
+                }],
+                named_ranges: vec![],
+            }),
+            meta: OdfMeta {
+                title: Some("Sales Chart".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+}
+
 // ── Adversarial fixtures ──────────────────────────────────────────────────────
 
 #[test]
