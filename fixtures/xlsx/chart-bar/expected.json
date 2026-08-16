@@ -1,0 +1,151 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "Sheet1"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/0"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
+      "props": {
+        "value:data": "Quarter",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
+      "props": {
+        "value:data": "Revenue",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/1"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
+      "props": {
+        "value:data": "Q1",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
+      "props": {
+        "value:data": "10",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
+      "props": {
+        "value:data": "Q2",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
+      "props": {
+        "value:data": "20",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/3"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
+      "props": {
+        "value:data": "Q3",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
+      "props": {
+        "value:data": "15",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/4"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/0",
+      "props": {
+        "value:data": "Q4",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/1",
+      "props": {
+        "value:data": "25",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "chart",
+      "path": "/1",
+      "props": {
+        "chart:has-category-axis": true,
+        "chart:has-value-axis": true,
+        "chart:legend": true,
+        "chart:legend-position": "bottom",
+        "chart:type": "bar",
+        "ooxml:chart-xml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\n  <c:chart>\n    <c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title>\n    <c:plotArea>\n      <c:layout/>\n      <c:barChart>\n        <c:ser>\n          <c:idx val=\"0\"/>\n          <c:order val=\"0\"/>\n          <c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>\n          <c:cat>\n            <c:strRef>\n              <c:f>Sheet1!$A$2:$A$5</c:f>\n              <c:strCache>\n                <c:ptCount val=\"4\"/>\n                <c:pt idx=\"0\"><c:v>Q1</c:v></c:pt>\n                <c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>\n                <c:pt idx=\"2\"><c:v>Q3</c:v></c:pt>\n                <c:pt idx=\"3\"><c:v>Q4</c:v></c:pt>\n              </c:strCache>\n            </c:strRef>\n          </c:cat>\n          <c:val>\n            <c:numRef>\n              <c:f>Sheet1!$B$2:$B$5</c:f>\n              <c:numCache>\n                <c:ptCount val=\"4\"/>\n                <c:pt idx=\"0\"><c:v>10</c:v></c:pt>\n                <c:pt idx=\"1\"><c:v>20</c:v></c:pt>\n                <c:pt idx=\"2\"><c:v>15</c:v></c:pt>\n                <c:pt idx=\"3\"><c:v>25</c:v></c:pt>\n              </c:numCache>\n            </c:numRef>\n          </c:val>\n        </c:ser>\n        <c:axId val=\"1\"/>\n        <c:axId val=\"2\"/>\n      </c:barChart>\n      <c:catAx>\n        <c:axId val=\"1\"/>\n        <c:scaling><c:orientation val=\"minMax\"/></c:scaling>\n        <c:delete val=\"0\"/>\n        <c:axPos val=\"b\"/>\n        <c:crossAx val=\"2\"/>\n      </c:catAx>\n      <c:valAx>\n        <c:axId val=\"2\"/>\n        <c:scaling><c:orientation val=\"minMax\"/></c:scaling>\n        <c:delete val=\"0\"/>\n        <c:axPos val=\"l\"/>\n        <c:crossAx val=\"1\"/>\n      </c:valAx>\n    </c:plotArea>\n    <c:legend><c:legendPos val=\"b\"/></c:legend>\n    <c:plotVisOnly val=\"1\"/>\n  </c:chart>\n</c:chartSpace>",
+        "title": "Quarterly Revenue"
+      }
+    },
+    {
+      "kind": "chart_series",
+      "path": "/1/0",
+      "props": {
+        "chart:categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "chart:categories-ref": "Sheet1!$A$2:$A$5",
+        "chart:values": [
+          10.0,
+          20.0,
+          15.0,
+          25.0
+        ],
+        "chart:values-ref": "Sheet1!$B$2:$B$5",
+        "title": "Revenue"
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "XLSX worksheet with a bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot)"
+}

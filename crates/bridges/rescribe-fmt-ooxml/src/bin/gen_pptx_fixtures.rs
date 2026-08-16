@@ -25,7 +25,14 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
     let mut props_map = serde_json::Map::new();
     // String props — skip "url" on image nodes (resource ID is non-deterministic)
     let skip_url = kind == node::IMAGE;
-    for key in &["content", "url", "alt"] {
+    for key in &[
+        "content",
+        "url",
+        "alt",
+        "title",
+        "chart:type",
+        "chart:legend-position",
+    ] {
         if *key == "url" && skip_url {
             continue;
         }
@@ -46,6 +53,15 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
     }
     if let Some(notes) = node.props.get_bool("notes") {
         props_map.insert("notes".to_string(), serde_json::Value::Bool(notes));
+    }
+    for key in &[
+        "chart:legend",
+        "chart:has-category-axis",
+        "chart:has-value-axis",
+    ] {
+        if let Some(v) = node.props.get_bool(key) {
+            props_map.insert(key.to_string(), serde_json::Value::Bool(v));
+        }
     }
     if !props_map.is_empty() {
         obj["props"] = serde_json::Value::Object(props_map);
@@ -519,6 +535,82 @@ fn main() {
             ]);
         }),
         "PPTX slide with mixed inline formatting in a single text shape",
+    );
+
+    // ── Charts (ADR 0016) ──────────────────────────────────────────────────
+    //
+    // PPTX chart parts (`ppt/charts/chartN.xml`) share the exact same
+    // DrawingML `<c:chartSpace>` schema as XLSX chart parts, so this reuses
+    // the same chart XML `xlsx.rs`'s `chart-bar` fixture embeds — see
+    // `crates/bridges/rescribe-fmt-ooxml/src/chart.rs` and
+    // `ooxml_sml::parse_chart_xml`, which both the xlsx and pptx readers
+    // call into.
+    write_fixture(
+        "chart-bar",
+        make_pptx(|b| {
+            let s = b.add_slide();
+            s.add_title("Quarterly Revenue");
+            let chart_xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <c:chart>
+    <c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title>
+    <c:plotArea>
+      <c:layout/>
+      <c:barChart>
+        <c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>
+          <c:cat>
+            <c:strRef>
+              <c:f>Sheet1!$A$2:$A$5</c:f>
+              <c:strCache>
+                <c:ptCount val="4"/>
+                <c:pt idx="0"><c:v>Q1</c:v></c:pt>
+                <c:pt idx="1"><c:v>Q2</c:v></c:pt>
+                <c:pt idx="2"><c:v>Q3</c:v></c:pt>
+                <c:pt idx="3"><c:v>Q4</c:v></c:pt>
+              </c:strCache>
+            </c:strRef>
+          </c:cat>
+          <c:val>
+            <c:numRef>
+              <c:f>Sheet1!$B$2:$B$5</c:f>
+              <c:numCache>
+                <c:ptCount val="4"/>
+                <c:pt idx="0"><c:v>10</c:v></c:pt>
+                <c:pt idx="1"><c:v>20</c:v></c:pt>
+                <c:pt idx="2"><c:v>15</c:v></c:pt>
+                <c:pt idx="3"><c:v>25</c:v></c:pt>
+              </c:numCache>
+            </c:numRef>
+          </c:val>
+        </c:ser>
+        <c:axId val="1"/>
+        <c:axId val="2"/>
+      </c:barChart>
+      <c:catAx>
+        <c:axId val="1"/>
+        <c:scaling><c:orientation val="minMax"/></c:scaling>
+        <c:delete val="0"/>
+        <c:axPos val="b"/>
+        <c:crossAx val="2"/>
+      </c:catAx>
+      <c:valAx>
+        <c:axId val="2"/>
+        <c:scaling><c:orientation val="minMax"/></c:scaling>
+        <c:delete val="0"/>
+        <c:axPos val="l"/>
+        <c:crossAx val="1"/>
+      </c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="b"/></c:legend>
+    <c:plotVisOnly val="1"/>
+  </c:chart>
+</c:chartSpace>"#;
+            s.embed_chart(chart_xml.to_vec(), 457200, 1600200, 8229600, 4000000);
+        }),
+        "PPTX slide with an embedded bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot)",
     );
 
     println!("Done.");

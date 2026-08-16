@@ -77,7 +77,15 @@ tested via the builder API and are documented as library limitations.
 - [lib] grouped shapes (`<p:grpSp>`) — not in PresentationBuilder API
 - [lib] connectors / lines — not in PresentationBuilder API
 - [lib] SmartArt — not in PresentationBuilder API
-- [lib] chart — not in PresentationBuilder API; fidelity warning emitted
+
+## Charts (ADR 0016: `docs/adr/0016-chart-ir-shape.md`)
+- [x] chart with title, legend (+position), category axis, value axis — `chart-bar`
+- [x] one series with reference-backed values + cached snapshot — `chart-bar`
+- [x] reference-backed categories + cached snapshot — `chart-bar`
+- [x] raw chart-part XML fallback (`ooxml:chart-xml`), populated unconditionally — `chart-bar` (reader parses via `ooxml_sml::parse_chart_xml` against the raw chart-part bytes, reusing the same DrawingML `<c:chartSpace>` walker `xlsx.rs` uses — see `crates/formats/ooxml-pml/src/presentation.rs`'s `Presentation::get_chart_xml`)
+- [lib] chart writer round-trip (`chart`/`chart_series` nodes → PPTX) — implemented (`pptx/write.rs`'s `emit_chart`, re-emits `ooxml:chart-xml` verbatim via `ooxml_pml::SlideBuilder::embed_chart`) but not yet exercised by a dedicated read-emit-reread round-trip fixture
+- [lib] chart type coverage beyond bar, multiple series, literal (non-reference) values — same v1 scope note as `fixtures/xlsx/COVERAGE.md`'s Charts section; the underlying parser/IR shape supports these, not yet separately fixture-covered for PPTX
+- [lib] 3D variants, combo charts, trendlines, error bars, per-point styling — out of v1's semantic scope (ADR 0016 Decision 4); preserved only via the raw `ooxml:chart-xml` fallback
 
 ## Slide transitions / animations
 - [lib] slide transition (`<p:transition>`) — not in PresentationBuilder API

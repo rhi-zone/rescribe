@@ -1,0 +1,50 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "path": "/0/0",
+      "props": {
+        "chart:has-category-axis": true,
+        "chart:has-value-axis": true,
+        "chart:legend": true,
+        "chart:legend-position": "bottom",
+        "chart:type": "bar",
+        "title": "Quarterly Revenue"
+      }
+    },
+    {
+      "kind": "chart_series",
+      "path": "/0/0/0",
+      "props": {
+        "title": "Revenue"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/1",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Quarterly Revenue"
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "PPTX slide with an embedded bar chart (title, legend, category/value axes, one series with cell-range-referenced values/categories and a cached snapshot)"
+}

@@ -84,3 +84,14 @@ features that produce fidelity warnings and are not represented in the IR.
 
 ## Composition
 - [x] multi-sheet with mixed cell types — `mixed-content`
+
+## Charts (ADR 0016: `docs/adr/0016-chart-ir-shape.md`)
+- [x] chart with title, legend (+position), category axis, value axis — `chart-bar`
+- [x] one series with reference-backed values + cached snapshot (`chart:values`/`chart:values-ref`) — `chart-bar`
+- [x] reference-backed categories + cached snapshot (`chart:categories`/`chart:categories-ref`) — `chart-bar`
+- [x] raw chart-part XML fallback (`ooxml:chart-xml`), populated unconditionally — `chart-bar`
+- [lib] chart type coverage beyond bar (line/pie/area/scatter/doughnut/radar/surface/bubble/stock) — `ooxml-sml`'s hand-rolled `parse_chart` supports all of these (same code path as `chart-bar`), just not separately fixture-covered yet
+- [lib] literal (non-reference) series values/categories — the v1 shape supports it (absent `-ref` prop), not yet a dedicated fixture
+- [lib] multiple series in one chart — supported by the IR shape and the reader/writer, not yet a dedicated fixture
+- [lib] 3D variants, combo charts, trendlines, error bars, per-point styling — out of v1's semantic scope (ADR 0016 Decision 4); preserved only via the raw `ooxml:chart-xml` fallback, no semantic modeling
+- [lib] chart on a dedicated chartsheet (vs. embedded in a worksheet) — not exercised
