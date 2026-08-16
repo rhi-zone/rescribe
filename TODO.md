@@ -8887,7 +8887,7 @@ or fixture-asserted yet):
    its host-document anchor).
    **Update (2026-08-16): closed for ODF and PPTX, still open for XLSX — see below.**
 
-## Chart anchor/placement position (ADR 0015 `positioned_container` applied to ADR 0016 charts) — ODF/PPTX closed, XLSX blocked (2026-08-16)
+## Chart anchor/placement position (ADR 0015 `positioned_container` applied to ADR 0016 charts) — ODF/PPTX/XLSX all closed (2026-08-16, XLSX closed same day in a follow-up session)
 
 Follow-up to item 5 above. `chart` nodes are now wrapped in a `positioned_container`
 (ADR 0015) carrying the chart's real host-document placement, for ODF (both `.ods`/
@@ -9002,3 +9002,144 @@ fidelity/precision tradeoff to take before touching `ooxml-sml`'s `parse_chart`/
 (`sheet.embed_chart(&chart_xml, 0, 0, 8, 15)`, cell-unit based, unchanged this
 session), and `fixtures/xlsx/chart-bar/expected.json` is unchanged (no
 `positioned_container` wrapper).
+
+**Update (2026-08-16, follow-up session): closed.** The blocker above was resolved by
+choosing option (a)'s shape but with the *exact* formula rather than a fixed
+approximation — the "guess" the prior session ruled out was a single fixed constant
+substituted for real per-file data; a documented, spec-cited formula applied to
+whatever column-width/row-height data the file *does* carry (falling back to the
+schema's own literal defaults only when that data is absent) is not a guess in the
+same sense — it's the same kind of exact-formula resolution ADR 0015's EMU coordinate
+handling already uses elsewhere, just with an extra indirection (character-width units
+before EMU) that OOXML's other coordinate systems don't need.
+
+**Resolver** (`crates/formats/ooxml-sml/src/anchor.rs`, new module): resolves a
+`CT_Marker` (`col`/`colOff`/`row`/`rowOff`) to an absolute EMU `(x, y)` by summing the
+resolved width/height of every preceding column/row plus the marker's own offset.
+- Column width, character units -> pixels: `pixels = floor(((256 * width +
+  floor(128 / MDW)) / 256) * MDW)` — ECMA-376 Part 1 §18.3.1.13 (`col`/`width`
+  remarks), corroborated by
+  <https://learn.microsoft.com/en-us/answers/questions/5858112/column-and-character-widths>
+  and the MS-OI29500 conformance-clause note for the same section.
+- `MDW` (Maximum Digit Width) = 7 for the standard default font (Calibri 11pt @ 96
+  DPI) — cited from the ClosedXML wiki
+  (<https://github.com/ClosedXML/ClosedXML/wiki/Cell-Dimensions>): "Calibri has MDW 7
+  at 11pts."
+- Pixels -> EMU: `EMU = pixels * 9525` (914400 EMU/inch ÷ 96 px/inch), confirmed
+  against openpyxl's `units.py` (`pixels_to_EMU(value) = int(value * 9525)`).
+- When `defaultColWidth` is absent, `baseColWidth` (schema default 8) is used
+  directly as the `width` input to the same formula — the documented relationship
+  per `baseColWidth`'s own spec description.
+- Row height is already in points; `EMU = points * 12700` (914400/72).
+- Fallback chains (both column width and row height): explicit per-column/`<cols>`
+  range or per-row `@ht` override, else `sheetFormatPr`'s default
+  (`defaultColWidth`/`defaultRowHeight`), else the schema/literal default
+  (`baseColWidth`=8; row height 15pt, Excel's well-known literal default, used only
+  when `<sheetFormatPr>` is entirely absent — when present, `defaultRowHeight` is
+  spec-required on it). Verified against the real `.xsd` files this session
+  (`CT_SheetFormatPr`, `CT_Col`, `CT_Marker`) — `CT_Col.min`/`.max` are confirmed
+  1-based and inclusive-range, matching this crate's own
+  `column_letter_to_number("A") == Some(1)`.
+- Unit-tested directly (`anchor::tests`): explicit `<cols>` entry, `defaultColWidth`
+  present with no `<cols>`, neither present (pure `baseColWidth` fallback), a `<cols>`
+  range covering the target column, row-height fallback chain, and an
+  EMU-to-marker-and-back round-trip.
+- Also provides the reverse direction (`emu_to_col_marker`/`emu_to_row_marker`,
+  absolute EMU -> cell + offset), used by the writer.
+
+**Reader wiring**: `ooxml-sml/src/workbook.rs` gained `parse_drawing_anchors` (a
+hand-rolled `xdr:wsDr` walker — no generated model exists for
+`dml-spreadsheetDrawing` in this crate, consistent with `parse_chart`'s existing
+hand-rolled `<c:chartSpace>` walk) that resolves each `xdr:twoCellAnchor`/
+`xdr:oneCellAnchor`'s `from`/`to`-or-`ext` to an absolute EMU box via the `anchor`
+module, reads `xdr:graphicFrame/xdr:xfrm/@rot`, and assigns `z_order` as the 0-based
+document-order index among *all* anchor elements in the drawing (matching the PPTX
+`p:graphicFrame` document-order convention, ADR 0015 Decision 6). `load_resolved_sheet`
+correlates each resolved anchor to its chart part by `r:id` and pushes charts in the
+drawing's real document order (not the unordered `.rels` list order); a chart whose
+`r:id` doesn't correlate to any anchor (a malformed drawing part) is still not
+dropped — it's pushed with no position, and `xlsx.rs` leaves it unwrapped by
+`positioned_container` with a fidelity warning rather than guessing. `ooxml_sml::ext::
+Chart` and the internal `workbook::Chart` both gained `x`/`y`/`width`/`height:
+Option<i64>`, `rotation: Option<i32>`, `z_order: usize` fields (mirroring
+`ooxml-pml::ChartAnchor`'s shape).
+
+**`rescribe-fmt-ooxml/src/xlsx.rs`**: reader (`convert_workbook`) wraps each chart with
+a resolved position in a `positioned_container` (same `position:x/y/width/height/
+z_order`/`position:rotation` shape as ODF/PPTX); a chart with no resolvable position
+is left bare with a fidelity warning. Writer (`convert_nodes`) gained a match arm for
+`positioned_container` wrapping a single `chart` child (mirroring `pptx/write.rs`'s
+equivalent arm) and `convert_chart_node` now takes an `Option<&Node>` container,
+calling the new `embed_chart_at_emu` when present (falling back to the original fixed
+cell-unit `embed_chart(_, 0, 0, 8, 15)` for a bare `chart` node, unchanged).
+`position:z_order` has no XLSX-specific meaning beyond preserving the property
+round-trip — a single sheet's drawing has no documented multi-chart stacking concept
+distinct from `p:graphicFrame`'s document-order-is-z-order convention that PPTX
+already uses, and this session's fixtures only ever have one chart per sheet, so no
+sorting-on-flush machinery (PPTX's `PendingChart`) was added; a future multi-chart-
+per-sheet fixture should revisit whether one is needed.
+
+**Writer design choice — `oneCellAnchor` over `twoCellAnchor` for the new EMU-precise
+path** (`ooxml-sml::writer::SheetBuilder::embed_chart_at_emu`, new; `embed_chart`
+unchanged, still emits `twoCellAnchor`): `oneCellAnchor`'s `xdr:ext` carries width/
+height directly in EMU, so only the anchor (`from`) corner needs resolving to
+cell+offset — not a second "to" corner — so the chart's size round-trips exactly with
+no column-width-resolution rounding compounding across two resolved corners, while
+position stays cell-relative (move-with-cells, matching Excel's own default `editAs`
+behavior for either anchor type). Both anchor types are legal for a `graphicFrame` per
+`EG_Anchor` (ECMA-376 Part 1 §20.5.2.35), and real-world Excel accepts either — this is
+an implementation-shape call, not a spec or compatibility requirement, documented in
+`build_drawing_xml`'s doc comment. `ChartEntry` was split into a `ChartAnchorKind`
+enum (`Cell { x, y, width, height }` for the original API, `Emu { col, col_off, row,
+row_off, width_emu, height_emu, rot }` for the new one) so `build_drawing_xml` emits
+the matching anchor element per entry; existing `embed_chart`-based tests are
+unaffected (byte-identical `twoCellAnchor` output). A new unit test,
+`test_embed_chart_at_emu_round_trips_through_write_and_read`, writes a chart via
+`embed_chart_at_emu` with a 90° rotation (`90 * 60_000` in OOXML's native units) and
+confirms the drawing XML uses `oneCellAnchor` (not `twoCellAnchor`) and that reading
+it back via `Workbook::resolved_sheet` reproduces the exact x/y/width/height/rotation/
+z_order.
+
+**Fixtures**: `crates/bridges/rescribe-fmt-ooxml/src/bin/gen_xlsx_fixtures.rs`'s
+chart-bar generator now calls `s.set_column_width_range("D", "L", 10.0)` before
+`embed_chart` (columns D-L, the chart's anchor span, given an explicit 10-character
+width; columns A-C fall back to the schema default, since this builder never emits
+`<sheetFormatPr>` at all) — this was the exact authoring gap the prior session
+identified as the blocker. A second fixture, `chart-bar-default-width`, was added
+(not a modification of `chart-bar`, so the original "no column-width data anywhere"
+scenario stays covered as its own fixture) with *no* column-width call at all,
+exercising the pure `baseColWidth`=8 fallback path.
+
+Hand-computed EMU arithmetic (both match the generated `expected.json` byte-for-byte,
+cross-checked by running `gen_xlsx_fixtures` and diffing):
+- Column width formula sanity: width=8 chars (schema default) -> pixels =
+  `floor(((256*8+18)/256)*7)` = `floor(56.4921875)` = 56 -> EMU = 56*9525 = 533400.
+  width=10 chars -> pixels = `floor(((256*10+18)/256)*7)` = `floor(70.4921875)` = 70
+  -> EMU = 70*9525 = 666750. Row height: no `<sheetFormatPr>` in either fixture ->
+  literal default 15pt -> EMU = 15*12700 = 190500.
+- **`chart-bar`** (anchor `from` col=3/row=0, `to` col=11/row=15, cols D-L=10 chars,
+  A-C default): `x = 3 cols A-C * 533400 = 1,600,200`; `y = 0` (row 0, nothing
+  before it); `to.x = 3*533400 (A-C) + 8*666750 (D-K, cols 3..10 exclusive of the
+  `to` marker's own column 11=L) = 1,600,200 + 5,334,000 = 6,934,200`, so
+  `width = 6,934,200 - 1,600,200 = 5,334,000`; `to.y = 15*190500 = 2,857,500`, so
+  `height = 2,857,500 - 0 = 2,857,500`. Result:
+  `position:x=1600200, position:y=0, position:width=5334000, position:height=2857500,
+  position:z_order=0` — matches `fixtures/xlsx/chart-bar/expected.json` exactly.
+- **`chart-bar-default-width`** (same anchor, all columns at the 8-char/533400-EMU
+  default): `x = 3*533400 = 1,600,200`; `y = 0`; `to.x = 11*533400 = 5,867,400`, so
+  `width = 5,867,400 - 1,600,200 = 4,267,200`; `to.y = 2,857,500`, `height =
+  2,857,500`. Result: `position:x=1600200, position:y=0, position:width=4267200,
+  position:height=2857500, position:z_order=0` — matches
+  `fixtures/xlsx/chart-bar-default-width/expected.json` exactly.
+
+**Verification**: `cargo test -q -p ooxml-sml -p rescribe-fmt-ooxml -p rescribe-fixtures`,
+`cargo clippy --all-targets --all-features -p ooxml-sml -p rescribe-fmt-ooxml -- -D
+warnings`, and `cargo fmt` all clean.
+
+**Remaining gaps**: multi-chart-per-sheet z-order stacking/sorting on write (see the
+`position:z_order` note above) is unexercised by any fixture — the resolver and reader
+support it (document-order z_order assignment), but the writer doesn't sort on flush
+the way PPTX's `PendingChart` does, since nothing forces a specific re-emit order for
+a single sheet's drawing today. `oneCellAnchor`'s `editAs` (move/size-with-cells
+options) is not surfaced as an IR concept either way (matches PPTX/ODF's existing
+scope, out of ADR 0016 v1).
