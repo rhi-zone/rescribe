@@ -26,18 +26,83 @@
 //! ```
 
 use ooxml_sml::{
-    CellValue, RowExt, Workbook,
+    CellValue, ConditionalRuleType, NumberFormatKind, RowExt, StylesheetExt, Workbook,
     ext::{CellExt, ResolvedSheet},
+    types,
+    writer::{
+        CfColor, CfValue, ColorScaleRule, ConditionalFormat, ConditionalFormatRule, DataBarRule,
+        IconSetRule,
+    },
 };
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, ParseError,
-    Properties, Severity, SourceInfo, WarningKind,
+    PropValue, Properties, Severity, SourceInfo, WarningKind,
 };
 use rescribe_std::{node, prop};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek};
 use std::path::Path;
+
+/// Raw-preservation property (CLAUDE.md's "Raw preservation" convention,
+/// `{format}:{name}` namespacing): a cell's verbatim OOXML number-format
+/// code string (e.g. `"$#,##0.00"`, `"m/d/yyyy"`), set whenever the cell's
+/// resolved `numFmtId` isn't the default ("General", id 0). Paired with the
+/// semantic `value:type` projection (see [`ooxml_sml::classify_format_code`])
+/// the same way ADR 0015 pairs EMU coordinates with a raw fallback property
+/// — so the writer can re-emit the exact original display format rather
+/// than a canonical substitute, on any cell that carries one, not only the
+/// four number-format-derived `value:type`s.
+const NUMBER_FORMAT_PROP: &str = "xlsx:number_format";
+
+// ── Conditional formatting (`cfRule`) node kinds ────────────────────────────
+//
+// Namespaced under `xlsx:` (CLAUDE.md's `{format}:{name}` node-kind
+// convention, e.g. `html:div`) rather than added to rescribe-std's shared
+// vocabulary: ODF's only conditional-formatting representation
+// (`calcext:conditional-formats`) is an unstable LibreOffice extension, not
+// part of the stable OASIS ODF spec (verified this session) — so there is
+// no second format's real native data model to shape a cross-format
+// `rescribe-std` vocabulary against yet. Per this repo's own precedent for
+// adding shared IR vocabulary (ADR 0005's bibliography kinds, ADR 0015's
+// sheet/cell kinds), that shape is validated against *multiple* formats'
+// actual data models before being committed — not derived from one format
+// alone. This is scoped, OOXML-specific raw-ish modeling instead, matching
+// CLAUDE.md's "Raw preservation" pattern; a future cross-format ADR can
+// still promote it to shared vocabulary once a second format's real shape
+// is in hand.
+//
+// A `xlsx:conditional_format` node (child of `sheet`) holds the range
+// (`xlsx:range`, OOXML's native `sqref` syntax — e.g. `"A1:C10"` or a
+// space-separated multi-range — reused verbatim rather than inventing a
+// generic cross-format cell-range concept) and one `xlsx:conditional_format_rule`
+// child per `cfRule`. Each rule node carries every `cfRule` field that
+// real OOXML files populate (ECMA-376 Part 1, §18.3.1.10, `CT_CfRule`,
+// cross-checked against `ooxml-sml`'s generated `ConditionalRule`/
+// `ColorScale`/`DataBar`/`IconSet` types this session) as properties;
+// `colorScale`/`dataBar`/`iconSet`'s structured sub-elements (`cfvo`/
+// `color` lists) use `PropValue::Map`/`PropValue::List` rather than a
+// flattened string encoding, so they stay individually inspectable.
+const CONDITIONAL_FORMAT: &str = "xlsx:conditional_format";
+const CONDITIONAL_FORMAT_RULE: &str = "xlsx:conditional_format_rule";
+const CF_RANGE: &str = "xlsx:range";
+const CF_TYPE: &str = "xlsx:cf_type";
+const CF_PRIORITY: &str = "xlsx:priority";
+const CF_DXF_ID: &str = "xlsx:dxf_id";
+const CF_OPERATOR: &str = "xlsx:operator";
+const CF_FORMULA: &str = "xlsx:formula";
+const CF_TEXT: &str = "xlsx:text";
+const CF_STOP_IF_TRUE: &str = "xlsx:stop_if_true";
+const CF_ABOVE_AVERAGE: &str = "xlsx:above_average";
+const CF_PERCENT: &str = "xlsx:percent";
+const CF_BOTTOM: &str = "xlsx:bottom";
+const CF_EQUAL_AVERAGE: &str = "xlsx:equal_average";
+const CF_TIME_PERIOD: &str = "xlsx:time_period";
+const CF_RANK: &str = "xlsx:rank";
+const CF_STD_DEV: &str = "xlsx:std_dev";
+const CF_COLOR_SCALE: &str = "xlsx:color_scale";
+const CF_DATA_BAR: &str = "xlsx:data_bar";
+const CF_ICON_SET: &str = "xlsx:icon_set";
 
 // ── Reader ───────────────────────────────────────────────────────────────────
 
@@ -83,12 +148,18 @@ pub fn parse_bytes(bytes: &[u8]) -> Result<ConversionResult<Document>, ParseErro
 
 struct Converter {
     warnings: Vec<FidelityWarning>,
+    /// The workbook's styles (`xl/styles.xml`), cloned up front so cell
+    /// number-format lookups (`style_index` -> `numFmtId` -> format code ->
+    /// [`NumberFormatKind`]) don't need to hold a borrow of `Workbook`
+    /// alongside the per-sheet `&mut` calls that resolve sheets.
+    stylesheet: Option<ooxml_sml::types::Stylesheet>,
 }
 
 impl Converter {
     fn new() -> Self {
         Self {
             warnings: Vec::new(),
+            stylesheet: None,
         }
     }
 
@@ -104,6 +175,8 @@ impl Converter {
         &mut self,
         workbook: &mut Workbook<R>,
     ) -> Result<Vec<Node>, ParseError> {
+        self.stylesheet = workbook.stylesheet().cloned();
+
         let mut children = Vec::new();
         let sheet_names = workbook
             .sheet_names()
@@ -136,7 +209,9 @@ impl Converter {
     /// sheets in a multi-sheet workbook (a dangling `heading` with nothing
     /// after it, or a sheet dropped outright).
     fn convert_sheet(&mut self, sheet: &ResolvedSheet) -> Result<Node, ParseError> {
-        let sheet_node = Node::new(node::SHEET).prop(prop::TITLE, sheet.name().to_string());
+        let sheet_node = Node::new(node::SHEET)
+            .prop(prop::TITLE, sheet.name().to_string())
+            .children(convert_conditional_formats(sheet.conditional_formatting()));
 
         if sheet.row_count() == 0 {
             return Ok(sheet_node);
@@ -144,13 +219,9 @@ impl Converter {
 
         // Emit fidelity warnings for features we detect but don't (yet) fully
         // model. Merged cells are handled below via `rowspan`/`colspan` on
-        // the top-left cell, so they no longer need a warning here.
-        if sheet.has_conditional_formatting() {
-            self.warn(format!(
-                "Conditional formatting detected in sheet \"{}\"; not represented in IR (modeling the full cfRule condition space — cellIs/expression/colorScale/dataBar/iconSet — is a larger undertaking left for a future pass)",
-                sheet.name()
-            ));
-        }
+        // the top-left cell, and conditional formatting via
+        // `xlsx:conditional_format` child nodes (see the constants above),
+        // so neither needs a warning here.
         // Warn if any cell carries non-default style (fonts, colors, fills, borders, alignment).
         if sheet.rows().any(|row| {
             row.cells_iter()
@@ -191,9 +262,14 @@ impl Converter {
                 {
                     let val = sheet.cell_value(cell);
                     let formula = cell.formula_text();
+                    let nf_kind = self
+                        .stylesheet
+                        .as_ref()
+                        .map(|s| s.number_format_kind(cell.style_index))
+                        .unwrap_or(NumberFormatKind::Number);
 
                     if formula.is_some() || !val.is_empty() {
-                        let (value_type, value_data) = self.convert_cell_value(&val);
+                        let (value_type, value_data) = self.convert_cell_value(&val, nf_kind);
                         let value_type = if formula.is_some() {
                             "formula-result"
                         } else {
@@ -205,6 +281,13 @@ impl Converter {
                     }
                     if let Some(f) = formula {
                         cell_node = cell_node.prop(prop::VALUE_FORMULA, f.to_string());
+                    }
+                    if let Some(raw_fmt) = self
+                        .stylesheet
+                        .as_ref()
+                        .and_then(|s| s.cell_number_format(cell.style_index))
+                    {
+                        cell_node = cell_node.prop(NUMBER_FORMAT_PROP, raw_fmt);
                     }
 
                     if let Some((rowspan, colspan)) = merge_map.get(&(row_num, col_num)) {
@@ -229,16 +312,29 @@ impl Converter {
     /// Resolve a `CellValue` to its `(value:type, value:data)` pair.
     ///
     /// `Currency`/`Percentage`/`Date`/`Time` (part of ADR 0015's `value:type`
-    /// union, sourced from ODF's `office:value-type`) are not produced here:
-    /// `ooxml-sml`'s `CellValue` only distinguishes `Number`/`String`/
-    /// `Boolean`/`Error`/`Empty` — OOXML resolves those four indirectly via a
-    /// cell's number-format string (e.g. `"0.00%"` → percentage, `"$#,##0.00"`
-    /// → currency, `"m/d/yyyy"` → date), which `ooxml-sml` does not currently
-    /// expose as a classifier. Writing a general Excel number-format-code
-    /// classifier is a real undertaking on its own (format codes are an
-    /// under-specified mini-language) — left as a follow-up, not attempted in
-    /// this pass. All numeric cells map to `"number"` until that lands.
-    fn convert_cell_value(&mut self, value: &CellValue) -> (&'static str, String) {
+    /// union, sourced from ODF's `office:value-type`) are not distinguished
+    /// by `ooxml-sml`'s `CellValue` itself — it only carries
+    /// `Number`/`String`/`Boolean`/`Error`/`Empty` — but OOXML resolves
+    /// those four indirectly via a cell's number-format string (e.g.
+    /// `"0.00%"` → percentage, `"$#,##0.00"` → currency, `"m/d/yyyy"` →
+    /// date), classified by the caller via `nf_kind`
+    /// (`ooxml_sml::classify_format_code`) and passed in here. A format
+    /// combining date *and* time tokens (e.g. builtin ID 22, `"m/d/yy
+    /// h:mm"`) classifies as `NumberFormatKind::DateTime`; the IR's
+    /// `value:type` union (like ODF's own `office:value-type`) has no
+    /// separate "datetime" — mapped to `"date"` here, matching ODF's own
+    /// convention of using `office:value-type="date"` with a full
+    /// date-plus-time `office:date-value` for combined values (see
+    /// `odf-fmt/src/rescribe/read.rs`'s `map_odf_value_type`). The
+    /// underlying numeric value itself (`value:data`) is unaffected either
+    /// way — it stays the raw Excel serial number, not a converted date/time
+    /// string, so round-tripping through this crate alone never risks a
+    /// precision-losing serial<->calendar conversion.
+    fn convert_cell_value(
+        &mut self,
+        value: &CellValue,
+        nf_kind: NumberFormatKind,
+    ) -> (&'static str, String) {
         match value {
             CellValue::Empty => ("string", String::new()),
             CellValue::String(s) => ("string", s.clone()),
@@ -249,7 +345,14 @@ impl Converter {
                 } else {
                     n.to_string()
                 };
-                ("number", s)
+                let value_type = match nf_kind {
+                    NumberFormatKind::Number => "number",
+                    NumberFormatKind::Percentage => "percentage",
+                    NumberFormatKind::Currency => "currency",
+                    NumberFormatKind::Date | NumberFormatKind::DateTime => "date",
+                    NumberFormatKind::Time => "time",
+                };
+                (value_type, s)
             }
             CellValue::Boolean(b) => ("boolean", if *b { "true" } else { "false" }.to_string()),
             CellValue::Error(e) => {
@@ -264,6 +367,174 @@ impl Converter {
             }
         }
     }
+}
+
+/// Convert a sheet's `cfRule`s into `xlsx:conditional_format` nodes — see
+/// the node-kind constants above for the design rationale.
+fn convert_conditional_formats(cfs: &[types::ConditionalFormatting]) -> Vec<Node> {
+    cfs.iter()
+        .map(|cf| {
+            let node = match &cf.square_reference {
+                Some(range) => Node::new(CONDITIONAL_FORMAT).prop(CF_RANGE, range.clone()),
+                None => Node::new(CONDITIONAL_FORMAT),
+            };
+            node.children(cf.cf_rule.iter().map(convert_conditional_rule))
+        })
+        .collect()
+}
+
+fn convert_conditional_rule(rule: &types::ConditionalRule) -> Node {
+    let mut node = Node::new(CONDITIONAL_FORMAT_RULE).prop(CF_PRIORITY, rule.priority as i64);
+    if let Some(t) = &rule.r#type {
+        node = node.prop(CF_TYPE, t.to_string());
+    }
+    if let Some(dxf_id) = rule.dxf_id {
+        node = node.prop(CF_DXF_ID, dxf_id as i64);
+    }
+    if let Some(op) = &rule.operator {
+        node = node.prop(CF_OPERATOR, op.to_string());
+    }
+    if let Some(text) = &rule.text {
+        node = node.prop(CF_TEXT, text.clone());
+    }
+    if let Some(v) = rule.stop_if_true {
+        node = node.prop(CF_STOP_IF_TRUE, v);
+    }
+    if let Some(v) = rule.above_average {
+        node = node.prop(CF_ABOVE_AVERAGE, v);
+    }
+    if let Some(v) = rule.percent {
+        node = node.prop(CF_PERCENT, v);
+    }
+    if let Some(v) = rule.bottom {
+        node = node.prop(CF_BOTTOM, v);
+    }
+    if let Some(v) = rule.equal_average {
+        node = node.prop(CF_EQUAL_AVERAGE, v);
+    }
+    if let Some(tp) = &rule.time_period {
+        node = node.prop(CF_TIME_PERIOD, tp.to_string());
+    }
+    if let Some(v) = rule.rank {
+        node = node.prop(CF_RANK, v as i64);
+    }
+    if let Some(v) = rule.std_dev {
+        node = node.prop(CF_STD_DEV, v as i64);
+    }
+    if !rule.formula.is_empty() {
+        node = node.prop(
+            CF_FORMULA,
+            PropValue::List(
+                rule.formula
+                    .iter()
+                    .map(|f| PropValue::String(f.clone()))
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(cs) = &rule.color_scale {
+        node = node.prop(CF_COLOR_SCALE, color_scale_to_propvalue(cs));
+    }
+    if let Some(db) = &rule.data_bar {
+        node = node.prop(CF_DATA_BAR, data_bar_to_propvalue(db));
+    }
+    if let Some(is) = &rule.icon_set {
+        node = node.prop(CF_ICON_SET, icon_set_to_propvalue(is));
+    }
+    node
+}
+
+fn cfvo_to_propvalue(v: &types::ConditionalFormatValue) -> PropValue {
+    let mut m = HashMap::new();
+    m.insert("type".to_string(), PropValue::String(v.r#type.to_string()));
+    if let Some(val) = &v.value {
+        m.insert("value".to_string(), PropValue::String(val.clone()));
+    }
+    if let Some(gte) = v.gte {
+        m.insert("gte".to_string(), PropValue::Bool(gte));
+    }
+    PropValue::Map(m)
+}
+
+fn color_to_propvalue(c: &types::Color) -> PropValue {
+    let mut m = HashMap::new();
+    if let Some(rgb) = &c.rgb {
+        m.insert("rgb".to_string(), PropValue::String(rgb_bytes_to_hex(rgb)));
+    }
+    if let Some(theme) = c.theme {
+        m.insert("theme".to_string(), PropValue::Int(theme as i64));
+    }
+    if let Some(tint) = c.tint {
+        m.insert("tint".to_string(), PropValue::Float(tint));
+    }
+    if let Some(indexed) = c.indexed {
+        m.insert("indexed".to_string(), PropValue::Int(indexed as i64));
+    }
+    if let Some(auto) = c.auto {
+        m.insert("auto".to_string(), PropValue::Bool(auto));
+    }
+    PropValue::Map(m)
+}
+
+fn color_scale_to_propvalue(cs: &types::ColorScale) -> PropValue {
+    let mut m = HashMap::new();
+    m.insert(
+        "cfvo".to_string(),
+        PropValue::List(cs.cfvo.iter().map(cfvo_to_propvalue).collect()),
+    );
+    m.insert(
+        "color".to_string(),
+        PropValue::List(cs.color.iter().map(color_to_propvalue).collect()),
+    );
+    PropValue::Map(m)
+}
+
+fn data_bar_to_propvalue(db: &types::DataBar) -> PropValue {
+    let mut m = HashMap::new();
+    if let Some(v) = db.min_length {
+        m.insert("min_length".to_string(), PropValue::Int(v as i64));
+    }
+    if let Some(v) = db.max_length {
+        m.insert("max_length".to_string(), PropValue::Int(v as i64));
+    }
+    if let Some(v) = db.show_value {
+        m.insert("show_value".to_string(), PropValue::Bool(v));
+    }
+    m.insert(
+        "cfvo".to_string(),
+        PropValue::List(db.cfvo.iter().map(cfvo_to_propvalue).collect()),
+    );
+    m.insert("color".to_string(), color_to_propvalue(&db.color));
+    PropValue::Map(m)
+}
+
+fn icon_set_to_propvalue(is: &types::IconSet) -> PropValue {
+    let mut m = HashMap::new();
+    if let Some(v) = is.icon_set {
+        m.insert("icon_set".to_string(), PropValue::String(v.to_string()));
+    }
+    if let Some(v) = is.show_value {
+        m.insert("show_value".to_string(), PropValue::Bool(v));
+    }
+    if let Some(v) = is.percent {
+        m.insert("percent".to_string(), PropValue::Bool(v));
+    }
+    if let Some(v) = is.reverse {
+        m.insert("reverse".to_string(), PropValue::Bool(v));
+    }
+    m.insert(
+        "cfvo".to_string(),
+        PropValue::List(is.cfvo.iter().map(cfvo_to_propvalue).collect()),
+    );
+    PropValue::Map(m)
+}
+
+/// Format RGB(A) bytes (as `types::Color.rgb` stores them, e.g. `[0xFF,
+/// 0xFF, 0x00, 0x00]` for opaque red) as an uppercase hex string
+/// (`"FFFF0000"`) — the inverse of `ooxml_sml::writer`'s internal
+/// `hex_color_to_bytes`.
+fn rgb_bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02X}")).collect()
 }
 
 fn extract_metadata<R: Read + Seek>(_workbook: &Workbook<R>) -> Properties {
@@ -323,6 +594,176 @@ fn letter_to_column(letters: &str) -> u32 {
 }
 
 // ── Writer ───────────────────────────────────────────────────────────────────
+
+/// Rebuild a [`ConditionalFormatRule`] from an `xlsx:conditional_format_rule`
+/// node's props — the inverse of `convert_conditional_rule`. Returns `None`
+/// only when the node carries neither a recognizable `xlsx:cf_type` nor a
+/// priority, which shouldn't happen for a node this crate itself produced,
+/// but a document assembled by hand elsewhere might omit either.
+fn conditional_format_rule_from_node(node: &Node) -> Option<ConditionalFormatRule> {
+    let rule_type = node
+        .props
+        .get_str(CF_TYPE)
+        .and_then(ConditionalRuleType::parse)?;
+    let priority = node.props.get_int(CF_PRIORITY).unwrap_or(1).max(0) as u32;
+
+    let mut rule = ConditionalFormatRule::new(rule_type, priority);
+    if let Some(v) = node.props.get_int(CF_DXF_ID) {
+        rule = rule.with_dxf_id(v as u32);
+    }
+    if let Some(v) = node.props.get_str(CF_OPERATOR) {
+        rule = rule.with_operator(v);
+    }
+    if let Some(v) = node.props.get_str(CF_TEXT) {
+        rule = rule.with_text(v);
+    }
+    if let Some(v) = node.props.get_bool(CF_STOP_IF_TRUE) {
+        rule = rule.with_stop_if_true(v);
+    }
+    if let Some(v) = node.props.get_bool(CF_ABOVE_AVERAGE) {
+        rule = rule.with_above_average(v);
+    }
+    if let Some(v) = node.props.get_bool(CF_PERCENT) {
+        rule = rule.with_percent(v);
+    }
+    if let Some(v) = node.props.get_bool(CF_BOTTOM) {
+        rule = rule.with_bottom(v);
+    }
+    if let Some(v) = node.props.get_bool(CF_EQUAL_AVERAGE) {
+        rule = rule.with_equal_average(v);
+    }
+    if let Some(v) = node.props.get_str(CF_TIME_PERIOD) {
+        rule = rule.with_time_period(v);
+    }
+    if let Some(v) = node.props.get_int(CF_RANK) {
+        rule = rule.with_rank(v as u32);
+    }
+    if let Some(v) = node.props.get_int(CF_STD_DEV) {
+        rule = rule.with_std_dev(v as i32);
+    }
+    if let Some(PropValue::List(items)) = node.props.get(CF_FORMULA) {
+        let formulas = items
+            .iter()
+            .filter_map(|v| match v {
+                PropValue::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect();
+        rule = rule.with_formulas(formulas);
+    }
+    if let Some(PropValue::Map(m)) = node.props.get(CF_COLOR_SCALE) {
+        rule = rule.with_color_scale(color_scale_from_map(m));
+    }
+    if let Some(PropValue::Map(m)) = node.props.get(CF_DATA_BAR) {
+        rule = rule.with_data_bar(data_bar_from_map(m));
+    }
+    if let Some(PropValue::Map(m)) = node.props.get(CF_ICON_SET) {
+        rule = rule.with_icon_set(icon_set_from_map(m));
+    }
+    Some(rule)
+}
+
+fn map_get_str<'a>(m: &'a HashMap<String, PropValue>, key: &str) -> Option<&'a str> {
+    match m.get(key) {
+        Some(PropValue::String(s)) => Some(s),
+        _ => None,
+    }
+}
+
+fn map_get_bool(m: &HashMap<String, PropValue>, key: &str) -> Option<bool> {
+    match m.get(key) {
+        Some(PropValue::Bool(b)) => Some(*b),
+        _ => None,
+    }
+}
+
+fn map_get_int(m: &HashMap<String, PropValue>, key: &str) -> Option<i64> {
+    match m.get(key) {
+        Some(PropValue::Int(i)) => Some(*i),
+        _ => None,
+    }
+}
+
+fn map_get_float(m: &HashMap<String, PropValue>, key: &str) -> Option<f64> {
+    match m.get(key) {
+        Some(PropValue::Float(f)) => Some(*f),
+        _ => None,
+    }
+}
+
+fn cfvo_from_map(m: &HashMap<String, PropValue>) -> Option<CfValue> {
+    let value_type = map_get_str(m, "type").and_then(|s| s.parse().ok())?;
+    let mut v = match map_get_str(m, "value") {
+        Some(val) => CfValue::new(value_type, val),
+        None => CfValue::min_max(value_type),
+    };
+    if let Some(gte) = map_get_bool(m, "gte") {
+        v = v.with_gte(gte);
+    }
+    Some(v)
+}
+
+fn cfvo_list_from_propvalue(v: Option<&PropValue>) -> Vec<CfValue> {
+    match v {
+        Some(PropValue::List(items)) => items
+            .iter()
+            .filter_map(|item| match item {
+                PropValue::Map(m) => cfvo_from_map(m),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn color_from_map(m: &HashMap<String, PropValue>) -> CfColor {
+    CfColor {
+        rgb: map_get_str(m, "rgb").map(str::to_string),
+        theme: map_get_int(m, "theme").map(|v| v as u32),
+        tint: map_get_float(m, "tint"),
+        indexed: map_get_int(m, "indexed").map(|v| v as u32),
+        auto: map_get_bool(m, "auto"),
+    }
+}
+
+fn color_scale_from_map(m: &HashMap<String, PropValue>) -> ColorScaleRule {
+    ColorScaleRule {
+        cfvo: cfvo_list_from_propvalue(m.get("cfvo")),
+        colors: match m.get("color") {
+            Some(PropValue::List(items)) => items
+                .iter()
+                .map(|item| match item {
+                    PropValue::Map(cm) => color_from_map(cm),
+                    _ => CfColor::default(),
+                })
+                .collect(),
+            _ => Vec::new(),
+        },
+    }
+}
+
+fn data_bar_from_map(m: &HashMap<String, PropValue>) -> DataBarRule {
+    DataBarRule {
+        min_length: map_get_int(m, "min_length").map(|v| v as u32),
+        max_length: map_get_int(m, "max_length").map(|v| v as u32),
+        show_value: map_get_bool(m, "show_value"),
+        cfvo: cfvo_list_from_propvalue(m.get("cfvo")),
+        color: match m.get("color") {
+            Some(PropValue::Map(cm)) => color_from_map(cm),
+            _ => CfColor::default(),
+        },
+    }
+}
+
+fn icon_set_from_map(m: &HashMap<String, PropValue>) -> IconSetRule {
+    IconSetRule {
+        icon_set: map_get_str(m, "icon_set").and_then(|s| s.parse().ok()),
+        show_value: map_get_bool(m, "show_value"),
+        percent: map_get_bool(m, "percent"),
+        reverse: map_get_bool(m, "reverse"),
+        cfvo: cfvo_list_from_propvalue(m.get("cfvo")),
+    }
+}
 
 /// Emit a document as XLSX.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -443,11 +884,16 @@ impl EmitContext {
     fn convert_sheet(&mut self, sheet_node: &Node, name: &str) {
         let sheet = self.workbook.add_sheet(name);
 
-        for (row_idx, row_node) in sheet_node.children.iter().enumerate() {
+        // A running counter incremented only for `sheet_row` children, not
+        // `enumerate()` position: `sheet_node` may also carry
+        // `xlsx:conditional_format` siblings (see the constants above),
+        // which must not consume a row-number slot.
+        let mut row_num = 0u32;
+        for row_node in sheet_node.children.iter() {
             if row_node.kind.as_str() != node::SHEET_ROW {
                 continue;
             }
-            let row_num = row_idx as u32 + 1;
+            row_num += 1;
 
             for (col_idx, cell_node) in row_node.children.iter().enumerate() {
                 if cell_node.kind.as_str() != node::SHEET_CELL {
@@ -458,29 +904,41 @@ impl EmitContext {
 
                 let formula = cell_node.props.get_str(prop::VALUE_FORMULA);
                 let value_data = cell_node.props.get_str(prop::VALUE);
+                let value_type = cell_node.props.get_str(prop::VALUE_TYPE);
+                let number_format = Self::number_format_for_write(cell_node, value_type);
 
                 if let Some(f) = formula {
-                    sheet.set_formula(&cell_ref, f.to_string());
+                    match number_format {
+                        Some(fmt) => sheet.set_formula_styled(
+                            &cell_ref,
+                            f.to_string(),
+                            ooxml_sml::CellStyle::new().with_number_format(fmt),
+                        ),
+                        None => sheet.set_formula(&cell_ref, f.to_string()),
+                    }
                 } else if let Some(data) = value_data {
-                    match cell_node.props.get_str(prop::VALUE_TYPE) {
-                        Some("number") => {
-                            if let Ok(num) = data.parse::<f64>() {
-                                sheet.set_cell(&cell_ref, num);
-                            } else {
-                                sheet.set_cell(&cell_ref, data.to_string());
+                    let write_value: ooxml_sml::WriteCellValue = match value_type {
+                        Some("number" | "percentage" | "currency" | "date" | "time") => {
+                            match data.parse::<f64>() {
+                                Ok(num) => num.into(),
+                                Err(_) => data.to_string().into(),
                             }
                         }
-                        Some("boolean") => {
-                            sheet.set_cell(&cell_ref, data.eq_ignore_ascii_case("true"));
-                        }
+                        Some("boolean") => data.eq_ignore_ascii_case("true").into(),
                         // "string", "formula-result" (a plain, non-formula
                         // cell should never carry this, but it's handled the
                         // same as "string" if it does), or any other/absent
                         // type: write the value as a string, preserving it
                         // exactly.
-                        _ => {
-                            sheet.set_cell(&cell_ref, data.to_string());
-                        }
+                        _ => data.to_string().into(),
+                    };
+                    match number_format {
+                        Some(fmt) => sheet.set_cell_styled(
+                            &cell_ref,
+                            write_value,
+                            ooxml_sml::CellStyle::new().with_number_format(fmt),
+                        ),
+                        None => sheet.set_cell(&cell_ref, write_value),
                     }
                 }
 
@@ -500,8 +958,54 @@ impl EmitContext {
                 }
             }
         }
+
+        for cf_node in &sheet_node.children {
+            if cf_node.kind.as_str() != CONDITIONAL_FORMAT {
+                continue;
+            }
+            let Some(range) = cf_node.props.get_str(CF_RANGE) else {
+                continue;
+            };
+            let mut cf = ConditionalFormat::new(range);
+            for rule_node in &cf_node.children {
+                if rule_node.kind.as_str() != CONDITIONAL_FORMAT_RULE {
+                    continue;
+                }
+                if let Some(rule) = conditional_format_rule_from_node(rule_node) {
+                    cf = cf.add_rule(rule);
+                }
+            }
+            sheet.add_conditional_format(cf);
+        }
     }
 
+    /// Resolve the number-format code (if any) a `sheet_cell` should be
+    /// written with: the verbatim raw format (`xlsx:number_format`, set by
+    /// the reader — see [`NUMBER_FORMAT_PROP`]) if present, so a cell
+    /// read from an XLSX round-trips its exact display format; otherwise a
+    /// canonical projected format for `value:type`s whose semantics can't
+    /// be represented at all without *some* number format (`currency`,
+    /// `percentage`, `date`, `time` — a plain `"number"`/`"string"`/etc.
+    /// cell authored directly in the IR, with no raw format captured, needs
+    /// no number format to round-trip correctly, so stays `None`).
+    fn number_format_for_write<'a>(
+        cell_node: &'a Node,
+        value_type: Option<&str>,
+    ) -> Option<&'a str> {
+        if let Some(raw) = cell_node.props.get_str(NUMBER_FORMAT_PROP) {
+            return Some(raw);
+        }
+        match value_type {
+            Some("currency") => Some("$#,##0.00"),
+            Some("percentage") => Some("0.00%"),
+            Some("date") => Some("yyyy-mm-dd"),
+            Some("time") => Some("hh:mm:ss"),
+            _ => None,
+        }
+    }
+}
+
+impl EmitContext {
     /// Generic `table`-node fallback: converts a plain prose `table` (as
     /// produced by any non-spreadsheet format reader — commonmark, RST,
     /// etc.) into a workbook sheet. Kept alongside the native `sheet` path
@@ -719,5 +1223,263 @@ mod tests {
         assert!(!result.value.is_empty());
         // XLSX files start with ZIP magic
         assert_eq!(&result.value[0..4], &[0x50, 0x4b, 0x03, 0x04]);
+    }
+
+    /// Build a one-cell XLSX with the given number format via
+    /// `ooxml_sml::WorkbookBuilder`, parse it back through this crate's
+    /// reader, and return the resulting `sheet_cell` node's props.
+    fn roundtrip_number_format(value: f64, number_format: &str) -> Properties {
+        let mut wb = ooxml_sml::WorkbookBuilder::new();
+        {
+            let sheet = wb.add_sheet("Sheet1");
+            sheet.set_cell_styled(
+                "A1",
+                value,
+                ooxml_sml::CellStyle::new().with_number_format(number_format),
+            );
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        wb.write(&mut bytes).unwrap();
+        let doc = parse_bytes(&bytes.into_inner()).unwrap().value;
+        let sheet = &doc.content.children[0];
+        assert_eq!(sheet.kind.as_str(), node::SHEET);
+        let cell = &sheet.children[0].children[0];
+        assert_eq!(cell.kind.as_str(), node::SHEET_CELL);
+        cell.props.clone()
+    }
+
+    #[test]
+    fn test_read_percentage_number_format() {
+        let props = roundtrip_number_format(0.5, "0.00%");
+        assert_eq!(props.get_str(prop::VALUE_TYPE), Some("percentage"));
+        assert_eq!(props.get_str(prop::VALUE), Some("0.5"));
+        assert_eq!(props.get_str(NUMBER_FORMAT_PROP), Some("0.00%"));
+    }
+
+    #[test]
+    fn test_read_currency_number_format() {
+        let props = roundtrip_number_format(19.99, "$#,##0.00");
+        assert_eq!(props.get_str(prop::VALUE_TYPE), Some("currency"));
+        assert_eq!(props.get_str(NUMBER_FORMAT_PROP), Some("$#,##0.00"));
+    }
+
+    #[test]
+    fn test_read_date_number_format() {
+        let props = roundtrip_number_format(45000.0, "yyyy-mm-dd");
+        assert_eq!(props.get_str(prop::VALUE_TYPE), Some("date"));
+        assert_eq!(props.get_str(NUMBER_FORMAT_PROP), Some("yyyy-mm-dd"));
+    }
+
+    #[test]
+    fn test_read_time_number_format() {
+        let props = roundtrip_number_format(0.5, "hh:mm:ss");
+        assert_eq!(props.get_str(prop::VALUE_TYPE), Some("time"));
+        assert_eq!(props.get_str(NUMBER_FORMAT_PROP), Some("hh:mm:ss"));
+    }
+
+    #[test]
+    fn test_read_datetime_number_format_maps_to_date() {
+        // A combined date+time format (builtin ID 22) has no distinct
+        // `value:type` in the IR's union (matching ODF's own convention of
+        // treating a combined date+time value as `office:value-type="date"`
+        // with a full date-plus-time value) — see `convert_cell_value`.
+        let props = roundtrip_number_format(45000.5, "m/d/yy h:mm");
+        assert_eq!(props.get_str(prop::VALUE_TYPE), Some("date"));
+        assert_eq!(props.get_str(NUMBER_FORMAT_PROP), Some("m/d/yy h:mm"));
+    }
+
+    #[test]
+    fn test_plain_number_has_no_number_format_prop() {
+        // A cell with no explicit style at all (no `xf` entry, so no
+        // numFmtId to resolve) shouldn't carry a raw xlsx:number_format
+        // prop. Note this is distinct from explicitly requesting the
+        // "General" format code via a style, which registers a real
+        // (if semantically default) custom `xf` entry and does round-trip
+        // its raw format string, same as any other explicit format.
+        let mut wb = ooxml_sml::WorkbookBuilder::new();
+        {
+            let sheet = wb.add_sheet("Sheet1");
+            sheet.set_cell("A1", 42.0);
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        wb.write(&mut bytes).unwrap();
+        let doc = parse_bytes(&bytes.into_inner()).unwrap().value;
+        let cell = &doc.content.children[0].children[0].children[0];
+        assert_eq!(cell.props.get_str(prop::VALUE_TYPE), Some("number"));
+        assert_eq!(cell.props.get_str(NUMBER_FORMAT_PROP), None);
+    }
+
+    #[test]
+    fn test_write_percentage_cell_gets_number_format_when_authored_directly() {
+        // A sheet_cell authored directly in the IR (not read from an XLSX,
+        // so no raw xlsx:number_format prop) with value:type="percentage"
+        // should still round-trip as a percentage: the writer falls back to
+        // a canonical projected number format.
+        let sheet = Node::new(NodeKind::from(node::SHEET))
+            .prop(prop::TITLE, "Sheet1")
+            .child(
+                Node::new(NodeKind::from(node::SHEET_ROW)).child(
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "percentage")
+                        .prop(prop::VALUE, "0.5"),
+                ),
+            );
+        let doc =
+            Document::new().with_content(Node::new(NodeKind::from(node::DOCUMENT)).child(sheet));
+        let bytes = emit(&doc).unwrap().value;
+        let reread = parse_bytes(&bytes).unwrap().value;
+        let cell = &reread.content.children[0].children[0].children[0];
+        assert_eq!(cell.props.get_str(prop::VALUE_TYPE), Some("percentage"));
+        assert_eq!(cell.props.get_str(prop::VALUE), Some("0.5"));
+    }
+
+    #[test]
+    fn test_read_conditional_formatting() {
+        let mut wb = ooxml_sml::WorkbookBuilder::new();
+        {
+            let sheet = wb.add_sheet("Sheet1");
+            sheet.set_cell("A1", 10.0);
+            sheet.set_cell("A2", 20.0);
+            let cf = ConditionalFormat::new("A1:A2")
+                .add_cell_is_rule("greaterThan", "15", 1, Some(0))
+                .add_color_scale_rule(
+                    ColorScaleRule {
+                        cfvo: vec![
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Min),
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Max),
+                        ],
+                        colors: vec![CfColor::rgb("FF0000"), CfColor::rgb("00FF00")],
+                    },
+                    2,
+                );
+            sheet.add_conditional_format(cf);
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        wb.write(&mut bytes).unwrap();
+        let doc = parse_bytes(&bytes.into_inner()).unwrap().value;
+        let sheet = &doc.content.children[0];
+
+        let cf_node = sheet
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == CONDITIONAL_FORMAT)
+            .expect("conditional_format node");
+        assert_eq!(cf_node.props.get_str(CF_RANGE), Some("A1:A2"));
+        assert_eq!(cf_node.children.len(), 2);
+
+        let cell_is_rule = &cf_node.children[0];
+        assert_eq!(cell_is_rule.kind.as_str(), CONDITIONAL_FORMAT_RULE);
+        assert_eq!(cell_is_rule.props.get_str(CF_TYPE), Some("cellIs"));
+        assert_eq!(cell_is_rule.props.get_str(CF_OPERATOR), Some("greaterThan"));
+        assert_eq!(cell_is_rule.props.get_int(CF_DXF_ID), Some(0));
+        assert_eq!(cell_is_rule.props.get_int(CF_PRIORITY), Some(1));
+        match cell_is_rule.props.get(CF_FORMULA) {
+            Some(PropValue::List(items)) => {
+                assert_eq!(items, &vec![PropValue::String("15".to_string())]);
+            }
+            other => panic!("expected formula list, got {other:?}"),
+        }
+
+        let color_scale_rule = &cf_node.children[1];
+        assert_eq!(color_scale_rule.props.get_str(CF_TYPE), Some("colorScale"));
+        match color_scale_rule.props.get(CF_COLOR_SCALE) {
+            Some(PropValue::Map(m)) => {
+                let PropValue::List(colors) = &m["color"] else {
+                    panic!("expected color list")
+                };
+                assert_eq!(colors.len(), 2);
+                let PropValue::Map(c0) = &colors[0] else {
+                    panic!("expected color map")
+                };
+                assert_eq!(c0.get("rgb"), Some(&PropValue::String("FFFF0000".into())));
+            }
+            other => panic!("expected color_scale map, got {other:?}"),
+        }
+
+        // Round-trip through the writer: re-emit and re-parse, confirming
+        // the rule survives intact.
+        let bytes2 = emit(&doc).unwrap().value;
+        let doc2 = parse_bytes(&bytes2).unwrap().value;
+        let sheet2 = &doc2.content.children[0];
+        let cf_node2 = sheet2
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == CONDITIONAL_FORMAT)
+            .expect("conditional_format node survives round-trip");
+        assert_eq!(cf_node2.props.get_str(CF_RANGE), Some("A1:A2"));
+        assert_eq!(cf_node2.children.len(), 2);
+        assert_eq!(cf_node2.children[0].props.get_str(CF_TYPE), Some("cellIs"));
+        assert_eq!(
+            cf_node2.children[1].props.get_str(CF_TYPE),
+            Some("colorScale")
+        );
+    }
+
+    #[test]
+    fn test_conditional_format_does_not_shift_row_numbers() {
+        // A `sheet` node with an `xlsx:conditional_format` child appearing
+        // before the `sheet_row` children (as the reader now produces, see
+        // `convert_sheet`) must not shift row numbers when written back —
+        // regression test for the row_idx-vs-row_num bug this feature
+        // could have introduced.
+        let sheet = Node::new(NodeKind::from(node::SHEET))
+            .prop(prop::TITLE, "Sheet1")
+            .child(Node::new(NodeKind::from(CONDITIONAL_FORMAT)).prop(CF_RANGE, "A1:A2"))
+            .child(
+                Node::new(NodeKind::from(node::SHEET_ROW)).child(
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "row1"),
+                ),
+            )
+            .child(
+                Node::new(NodeKind::from(node::SHEET_ROW)).child(
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "row2"),
+                ),
+            );
+        let doc =
+            Document::new().with_content(Node::new(NodeKind::from(node::DOCUMENT)).child(sheet));
+        let bytes = emit(&doc).unwrap().value;
+        let reread = parse_bytes(&bytes).unwrap().value;
+        let reread_sheet = &reread.content.children[0];
+        let rows: Vec<&Node> = reread_sheet
+            .children
+            .iter()
+            .filter(|n| n.kind.as_str() == node::SHEET_ROW)
+            .collect();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].children[0].props.get_str(prop::VALUE), Some("row1"));
+        assert_eq!(rows[1].children[0].props.get_str(prop::VALUE), Some("row2"));
+    }
+
+    #[test]
+    fn test_number_format_raw_prop_round_trips_verbatim_through_write() {
+        // A cell carrying a raw xlsx:number_format prop (as the reader
+        // sets it) must be re-emitted with that exact format code, not a
+        // canonical substitute — verified here with a currency format
+        // whose literal string differs from the writer's own canonical
+        // "$#,##0.00" default.
+        let sheet = Node::new(NodeKind::from(node::SHEET))
+            .prop(prop::TITLE, "Sheet1")
+            .child(
+                Node::new(NodeKind::from(node::SHEET_ROW)).child(
+                    Node::new(NodeKind::from(node::SHEET_CELL))
+                        .prop(prop::VALUE_TYPE, "currency")
+                        .prop(prop::VALUE, "19.99")
+                        .prop(NUMBER_FORMAT_PROP, "#,##0.00 \u{20ac}"),
+                ),
+            );
+        let doc =
+            Document::new().with_content(Node::new(NodeKind::from(node::DOCUMENT)).child(sheet));
+        let bytes = emit(&doc).unwrap().value;
+        let reread = parse_bytes(&bytes).unwrap().value;
+        let cell = &reread.content.children[0].children[0].children[0];
+        assert_eq!(cell.props.get_str(prop::VALUE_TYPE), Some("currency"));
+        assert_eq!(
+            cell.props.get_str(NUMBER_FORMAT_PROP),
+            Some("#,##0.00 \u{20ac}")
+        );
     }
 }

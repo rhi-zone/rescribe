@@ -28,19 +28,21 @@ features that produce fidelity warnings and are not represented in the IR.
 - [x] numeric values (float) — `numbers`
 - [x] boolean values — `booleans`
 - [x] formula cells — `formula`
-- [lib] date/time values — ooxml-sml resolves dates to numbers; no semantic date type in IR
+- [x] date/time/currency/percentage values — `number-formats` (cell numFmtId classified via `ooxml_sml::classify_format_code` into `value:type`; a combined date+time format maps to `"date"`, matching ODF's own value-type convention for a full date-plus-time value; the underlying value stays the raw Excel serial number, not a converted date/time string)
 - [lib] error values — ooxml-sml CellValue::Error emits fidelity warning; hard to construct via builder
 - [x] empty cells — `adv-empty-sheet` (sheet with no data)
 
 ## Cell properties preserved in IR
 - [x] xlsx:cell-type prop — `basic` (string cells get "s", numbers "n", booleans "b")
 - [x] xlsx:formula prop — `formula`
+- [x] xlsx:number_format prop (raw number-format code, paired with the semantic `value:type` projection) — `number-formats`
 - [x] mixed cell types in one sheet — `cell-types-mixed`
 
 ## Sheet structure
 - [x] header row (first row → table_header) — `basic`
 - [x] data rows (table_cell) — `basic`
 - [x] merged cells (fidelity warning, content preserved) — `merged-cells`
+- [x] conditional formatting: cellIs, colorScale, dataBar, iconSet (modeled as `xlsx:conditional_format`/`xlsx:conditional_format_rule` child nodes on the sheet — OOXML-namespaced, not `rescribe-std` vocabulary, since ODF's only conditional-formatting representation is an unstable LibreOffice extension with no stable spec to validate a cross-format shape against; no fidelity warning needed) — `conditional-formatting`
 - [x] frozen panes (not in IR, content preserved) — `freeze-pane`
 - [x] auto-filter (not in IR, content preserved) — `auto-filter`
 - [x] column widths (not in IR, content preserved) — `column-widths`
@@ -59,7 +61,7 @@ features that produce fidelity warnings and are not represented in the IR.
 - [lib] fill color — style index detected; warning emitted
 - [lib] borders — style index detected; warning emitted
 - [lib] alignment — style index detected; warning emitted
-- [lib] number format — ooxml-sml resolves to raw number; format string not in IR
+- [x] number format — classified into `value:type` (percentage/currency/date/time/number, `number-formats`) and the verbatim format code preserved raw via `xlsx:number_format` for exact round-trip (font/color/fill/border/alignment styling is still `[lib]`, unaffected)
 
 ## Workbook metadata
 - [lib] author / created date — not in WorkbookBuilder API

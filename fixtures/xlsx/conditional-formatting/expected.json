@@ -1,0 +1,178 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "ConditionalFormatting"
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format",
+      "path": "/0/0",
+      "props": {
+        "xlsx:range": "A1:A3"
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format_rule",
+      "path": "/0/0/0",
+      "props": {
+        "xlsx:cf_type": "cellIs",
+        "xlsx:dxf_id": 0,
+        "xlsx:formula": [
+          "15"
+        ],
+        "xlsx:operator": "greaterThan",
+        "xlsx:priority": 1
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format_rule",
+      "path": "/0/0/1",
+      "props": {
+        "xlsx:cf_type": "colorScale",
+        "xlsx:color_scale": {
+          "cfvo": [
+            {
+              "type": "min"
+            },
+            {
+              "type": "max"
+            }
+          ],
+          "color": [
+            {
+              "rgb": "FFFF0000"
+            },
+            {
+              "rgb": "FF00FF00"
+            }
+          ]
+        },
+        "xlsx:priority": 2
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format",
+      "path": "/0/1",
+      "props": {
+        "xlsx:range": "B1:B2"
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format_rule",
+      "path": "/0/1/0",
+      "props": {
+        "xlsx:cf_type": "dataBar",
+        "xlsx:data_bar": {
+          "cfvo": [
+            {
+              "type": "min"
+            },
+            {
+              "type": "max"
+            }
+          ],
+          "color": {
+            "rgb": "FF0000FF"
+          },
+          "max_length": 90,
+          "min_length": 10,
+          "show_value": true
+        },
+        "xlsx:priority": 1
+      }
+    },
+    {
+      "kind": "xlsx:conditional_format_rule",
+      "path": "/0/1/1",
+      "props": {
+        "xlsx:cf_type": "iconSet",
+        "xlsx:icon_set": {
+          "cfvo": [
+            {
+              "type": "percent",
+              "value": "0"
+            },
+            {
+              "type": "percent",
+              "value": "33"
+            },
+            {
+              "type": "percent",
+              "value": "67"
+            }
+          ],
+          "icon_set": "3TrafficLights1",
+          "percent": true,
+          "reverse": false,
+          "show_value": true
+        },
+        "xlsx:priority": 2
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
+      "props": {
+        "value:data": "10",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
+      "props": {
+        "value:data": "5",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/3"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
+      "props": {
+        "value:data": "20",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
+      "props": {
+        "value:data": "50",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/4"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/0",
+      "props": {
+        "value:data": "30",
+        "value:type": "number"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/1"
+    }
+  ],
+  "category": "happy",
+  "description": "XLSX conditional formatting (cfRule: cellIs, colorScale, dataBar, iconSet) — modeled as xlsx:conditional_format/xlsx:conditional_format_rule child nodes on the sheet (OOXML-namespaced, not rescribe-std vocabulary — see the node-kind constants' doc comment in xlsx.rs for why), no fidelity warning needed"
+}

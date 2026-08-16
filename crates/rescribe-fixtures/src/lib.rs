@@ -171,7 +171,11 @@ fn check_assertion(node: &Node, assertion: &Assertion, failures: &mut Vec<Failur
 /// the expectation is present in the map with a matching value (recursively,
 /// via this same function) — extra keys in the actual map beyond what's
 /// asserted are ignored, matching this crate's general "assert what you
-/// care about" philosophy for `props`/`children_count`.
+/// care about" philosophy for `props`/`children_count`. A JSON array matches
+/// a `PropValue::List` element-wise (same length, each element matching
+/// recursively) — unlike `Map`, `List` order is significant and there's no
+/// "extra elements ignored" allowance, since list position is itself part
+/// of what a `List`-valued prop (e.g. formula operands) means.
 fn prop_value_matches(expected: &serde_json::Value, actual: &PropValue) -> bool {
     match (expected, actual) {
         (serde_json::Value::String(s), PropValue::String(a)) => s == a,
@@ -184,6 +188,13 @@ fn prop_value_matches(expected: &serde_json::Value, actual: &PropValue) -> bool 
             map.get(k)
                 .is_some_and(|actual_v| prop_value_matches(v, actual_v))
         }),
+        (serde_json::Value::Array(items), PropValue::List(actual_items)) => {
+            items.len() == actual_items.len()
+                && items
+                    .iter()
+                    .zip(actual_items)
+                    .all(|(e, a)| prop_value_matches(e, a))
+        }
         _ => false,
     }
 }

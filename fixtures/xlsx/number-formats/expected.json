@@ -1,0 +1,162 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "sheet",
+      "path": "/0",
+      "props": {
+        "title": "NumberFormats"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/0"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/0/0",
+      "props": {
+        "value:data": "Label",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/0/1",
+      "props": {
+        "value:data": "Value",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/1"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/0",
+      "props": {
+        "value:data": "Percentage",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/1/1",
+      "props": {
+        "value:data": "0.5",
+        "value:type": "percentage",
+        "xlsx:number_format": "0.00%"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/0",
+      "props": {
+        "value:data": "Currency",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/2/1",
+      "props": {
+        "value:data": "19.99",
+        "value:type": "currency",
+        "xlsx:number_format": "$#,##0.00"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/3"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/0",
+      "props": {
+        "value:data": "Date",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/3/1",
+      "props": {
+        "value:data": "45000",
+        "value:type": "date",
+        "xlsx:number_format": "yyyy-mm-dd"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/4"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/0",
+      "props": {
+        "value:data": "Time",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/4/1",
+      "props": {
+        "value:data": "0.5",
+        "value:type": "time",
+        "xlsx:number_format": "hh:mm:ss"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/5"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/5/0",
+      "props": {
+        "value:data": "DateTime",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/5/1",
+      "props": {
+        "value:data": "45000.5",
+        "value:type": "date",
+        "xlsx:number_format": "m/d/yy h:mm"
+      }
+    },
+    {
+      "kind": "sheet_row",
+      "path": "/0/6"
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/6/0",
+      "props": {
+        "value:data": "PlainNumber",
+        "value:type": "string"
+      }
+    },
+    {
+      "kind": "sheet_cell",
+      "path": "/0/6/1",
+      "props": {
+        "value:data": "42",
+        "value:type": "number"
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "XLSX number-format-derived cell types — a cell's numFmtId is classified (ooxml_sml::classify_format_code) into value:type=percentage/currency/date/time (a combined date+time format maps to \"date\", matching ODF's own value-type convention); the raw format code round-trips verbatim via xlsx:number_format"
+}

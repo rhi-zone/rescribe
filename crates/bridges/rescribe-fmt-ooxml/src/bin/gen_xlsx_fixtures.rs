@@ -1,8 +1,11 @@
 /// Generate XLSX fixture files for the rescribe-fmt-ooxml xlsx test suite.
 ///
 /// Run with: cargo run -p rescribe-fmt-ooxml --bin gen_xlsx_fixtures --features xlsx
-use ooxml_sml::writer::WorkbookBuilder;
-use rescribe_core::Node;
+use ooxml_sml::writer::{
+    CellStyle, CfColor, CfValue, ColorScaleRule, ConditionalFormat, DataBarRule, IconSetRule,
+    WorkbookBuilder,
+};
+use rescribe_core::{Node, PropValue};
 use std::io::Cursor;
 
 // ── XLSX construction helpers ──────────────────────────────────────────────
@@ -17,28 +20,34 @@ fn make_xlsx(build: impl FnOnce(&mut WorkbookBuilder)) -> Vec<u8> {
 
 // ── Expected JSON generation ───────────────────────────────────────────────
 
+/// Convert a `PropValue` to its `serde_json::Value` equivalent, matching
+/// `rescribe-fixtures`'s `prop_value_matches` comparator exactly (String,
+/// Int/Float -> Number, Bool, List, Map) so every prop on a node — not just
+/// an allowlisted subset — can be asserted on.
+fn propvalue_to_json(v: &PropValue) -> serde_json::Value {
+    match v {
+        PropValue::String(s) => serde_json::Value::String(s.clone()),
+        PropValue::Int(i) => serde_json::json!(i),
+        PropValue::Float(f) => serde_json::json!(f),
+        PropValue::Bool(b) => serde_json::Value::Bool(*b),
+        PropValue::List(items) => {
+            serde_json::Value::Array(items.iter().map(propvalue_to_json).collect())
+        }
+        PropValue::Map(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), propvalue_to_json(v)))
+                .collect(),
+        ),
+    }
+}
+
 fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>) {
     let kind = node.kind.as_str();
     let mut obj = serde_json::json!({ "path": path, "kind": kind });
 
     let mut props_map = serde_json::Map::new();
-    // String props
-    for key in &[
-        "content",
-        "title",
-        "value:type",
-        "value:data",
-        "value:formula",
-    ] {
-        if let Some(val) = node.props.get_str(key) {
-            props_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
-        }
-    }
-    // Int props
-    for key in &["level", "rowspan", "colspan"] {
-        if let Some(val) = node.props.get_int(key) {
-            props_map.insert(key.to_string(), serde_json::Value::Number(val.into()));
-        }
+    for (key, val) in node.props.iter() {
+        props_map.insert(key.clone(), propvalue_to_json(val));
     }
     if !props_map.is_empty() {
         obj["props"] = serde_json::Value::Object(props_map);
@@ -212,6 +221,40 @@ fn main() {
         "XLSX sheet with mixed cell types — string, number, boolean, formula",
     );
 
+    write_fixture(
+        "number-formats",
+        make_xlsx(|wb| {
+            let s = wb.add_sheet("NumberFormats");
+            s.set_cell("A1", "Label");
+            s.set_cell("B1", "Value");
+            s.set_cell("A2", "Percentage");
+            s.set_cell_styled("B2", 0.5, CellStyle::new().with_number_format("0.00%"));
+            s.set_cell("A3", "Currency");
+            s.set_cell_styled(
+                "B3",
+                19.99,
+                CellStyle::new().with_number_format("$#,##0.00"),
+            );
+            s.set_cell("A4", "Date");
+            s.set_cell_styled(
+                "B4",
+                45000.0,
+                CellStyle::new().with_number_format("yyyy-mm-dd"),
+            );
+            s.set_cell("A5", "Time");
+            s.set_cell_styled("B5", 0.5, CellStyle::new().with_number_format("hh:mm:ss"));
+            s.set_cell("A6", "DateTime");
+            s.set_cell_styled(
+                "B6",
+                45000.5,
+                CellStyle::new().with_number_format("m/d/yy h:mm"),
+            );
+            s.set_cell("A7", "PlainNumber");
+            s.set_cell("B7", 42i64);
+        }),
+        "XLSX number-format-derived cell types — a cell's numFmtId is classified (ooxml_sml::classify_format_code) into value:type=percentage/currency/date/time (a combined date+time format maps to \"date\", matching ODF's own value-type convention); the raw format code round-trips verbatim via xlsx:number_format",
+    );
+
     // ── Structural features ───────────────────────────────────────────────
 
     write_fixture(
@@ -228,6 +271,65 @@ fn main() {
             s.set_cell("C3", "data3");
         }),
         "XLSX merged cells — modeled via rowspan/colspan on the top-left sheet_cell, no fidelity warning needed",
+    );
+
+    write_fixture(
+        "conditional-formatting",
+        make_xlsx(|wb| {
+            let s = wb.add_sheet("ConditionalFormatting");
+            s.set_cell("A1", 10.0);
+            s.set_cell("A2", 20.0);
+            s.set_cell("A3", 30.0);
+
+            // A cellIs rule and a colorScale rule sharing one range.
+            let cf = ConditionalFormat::new("A1:A3")
+                .add_cell_is_rule("greaterThan", "15", 1, Some(0))
+                .add_color_scale_rule(
+                    ColorScaleRule {
+                        cfvo: vec![
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Min),
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Max),
+                        ],
+                        colors: vec![CfColor::rgb("FF0000"), CfColor::rgb("00FF00")],
+                    },
+                    2,
+                );
+            s.add_conditional_format(cf);
+
+            // A dataBar rule and an iconSet rule on a second range.
+            s.set_cell("B1", 5.0);
+            s.set_cell("B2", 50.0);
+            let cf2 = ConditionalFormat::new("B1:B2")
+                .add_data_bar_rule(
+                    DataBarRule {
+                        min_length: Some(10),
+                        max_length: Some(90),
+                        show_value: Some(true),
+                        cfvo: vec![
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Min),
+                            CfValue::min_max(ooxml_sml::types::ConditionalValueType::Max),
+                        ],
+                        color: CfColor::rgb("0000FF"),
+                    },
+                    1,
+                )
+                .add_icon_set_rule(
+                    IconSetRule {
+                        icon_set: Some(ooxml_sml::types::IconSetType::_3TrafficLights1),
+                        show_value: Some(true),
+                        percent: Some(true),
+                        reverse: Some(false),
+                        cfvo: vec![
+                            CfValue::new(ooxml_sml::types::ConditionalValueType::Percent, "0"),
+                            CfValue::new(ooxml_sml::types::ConditionalValueType::Percent, "33"),
+                            CfValue::new(ooxml_sml::types::ConditionalValueType::Percent, "67"),
+                        ],
+                    },
+                    2,
+                );
+            s.add_conditional_format(cf2);
+        }),
+        "XLSX conditional formatting (cfRule: cellIs, colorScale, dataBar, iconSet) — modeled as xlsx:conditional_format/xlsx:conditional_format_rule child nodes on the sheet (OOXML-namespaced, not rescribe-std vocabulary — see the node-kind constants' doc comment in xlsx.rs for why), no fidelity warning needed",
     );
 
     write_fixture(
