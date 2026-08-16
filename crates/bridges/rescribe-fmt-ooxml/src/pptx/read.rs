@@ -64,22 +64,35 @@ pub fn parse_with_options(
         // `ooxml_sml::parse_chart_xml` (the same hand-rolled walker
         // `xlsx.rs` uses) rather than a second, duplicated parser built on
         // `ooxml-pml`'s generated `dml-charts` model (out of scope for this
-        // pass — see ADR 0016 Consequences). The `chart` node is appended
-        // as a child of this slide's `div` node: a chart is block-level
-        // (ADR 0016) slide content, unlike xlsx's chart-to-sheet sibling
-        // placement, which exists there only because a `sheet` node's
-        // children are constrained to `sheet_row`s.
-        for rel_id in slide.chart_rel_ids() {
-            match pres.get_chart_xml(slide, rel_id) {
+        // pass — see ADR 0016 Consequences). The `chart` node is wrapped in
+        // a `positioned_container` (ADR 0015) carrying the chart's real
+        // `p:graphicFrame` anchor (position/size/rotation/z-order), and
+        // that wrapper is appended as a child of this slide's `div` node:
+        // a chart is block-level (ADR 0016) slide content, unlike xlsx's
+        // chart-to-sheet sibling placement, which exists there only because
+        // a `sheet` node's children are constrained to `sheet_row`s.
+        for anchor in slide.chart_anchors() {
+            match pres.get_chart_xml(slide, &anchor.rel_id) {
                 Ok(xml) => match ooxml_sml::parse_chart_xml(&xml) {
                     Ok(chart) => {
-                        slide_node = slide_node.child(crate::chart::convert_chart(&chart));
+                        let chart_node = crate::chart::convert_chart(&chart);
+                        let mut container = Node::new(node::POSITIONED_CONTAINER)
+                            .prop(prop::POSITION_X, anchor.x)
+                            .prop(prop::POSITION_Y, anchor.y)
+                            .prop(prop::POSITION_WIDTH, anchor.width)
+                            .prop(prop::POSITION_HEIGHT, anchor.height)
+                            .prop(prop::POSITION_Z_ORDER, anchor.z_order as i64);
+                        if let Some(rot) = anchor.rotation {
+                            container = container.prop(prop::POSITION_ROTATION, rot as i64);
+                        }
+                        container = container.child(chart_node);
+                        slide_node = slide_node.child(container);
                     }
                     Err(e) => warn(
                         &mut warnings,
                         format!(
                             "Slide {}: failed to parse embedded chart (rel {}): {}",
-                            slide_num, rel_id, e
+                            slide_num, anchor.rel_id, e
                         ),
                     ),
                 },
@@ -87,7 +100,7 @@ pub fn parse_with_options(
                     &mut warnings,
                     format!(
                         "Slide {}: failed to read embedded chart part (rel {}): {}",
-                        slide_num, rel_id, e
+                        slide_num, anchor.rel_id, e
                     ),
                 ),
             }

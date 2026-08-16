@@ -56,8 +56,34 @@ fn emit_structured(
     for node in nodes {
         if node.kind.as_str() == node::DIV && node.props.get("slide").is_some() {
             let slide = builder.add_slide();
-            emit_slide_children(slide, &node.children, doc, warnings);
+            let mut charts: Vec<PendingChart> = Vec::new();
+            emit_slide_children(slide, &node.children, doc, warnings, &mut charts);
+            flush_pending_charts(slide, charts);
         }
+    }
+}
+
+/// A chart queued for embedding, carrying its z-order (ADR 0015 Decision 6:
+/// OOXML has no explicit z-index, so charts must be re-emitted in document
+/// order sorted by `position:z_order` — the write-side mirror of the
+/// read-side derivation in `ooxml-pml`'s `extract_charts_and_smartart_from_slide`).
+struct PendingChart {
+    z_order: i64,
+    xml: Vec<u8>,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    rot: Option<i32>,
+}
+
+/// Embed all queued charts on a slide, sorted by `z_order` ascending so the
+/// resulting `p:graphicFrame` document order reproduces the intended
+/// stacking order.
+fn flush_pending_charts(slide: &mut ooxml_pml::SlideBuilder, mut charts: Vec<PendingChart>) {
+    charts.sort_by_key(|c| c.z_order);
+    for c in charts {
+        slide.embed_chart_rotated(c.xml, c.x, c.y, c.cx, c.cy, c.rot);
     }
 }
 
@@ -66,6 +92,7 @@ fn emit_slide_children(
     children: &[Node],
     doc: &Document,
     warnings: &mut Vec<FidelityWarning>,
+    charts: &mut Vec<PendingChart>,
 ) {
     for child in children {
         match child.kind.as_str() {
@@ -98,7 +125,7 @@ fn emit_slide_children(
                     }
                 } else {
                     // Nested div without slide prop — recurse.
-                    emit_slide_children(slide, &child.children, doc, warnings);
+                    emit_slide_children(slide, &child.children, doc, warnings, charts);
                 }
             }
             k if k == node::LIST => {
@@ -114,7 +141,22 @@ fn emit_slide_children(
                 }
             }
             k if k == node::CHART => {
-                emit_chart(slide, child);
+                let z_order = charts.len() as i64;
+                charts.push(pending_chart_for_node(child, None, z_order));
+            }
+            k if k == node::POSITIONED_CONTAINER
+                && child.children.len() == 1
+                && child.children[0].kind.as_str() == node::CHART =>
+            {
+                let z_order = child
+                    .props
+                    .get_int(prop::POSITION_Z_ORDER)
+                    .unwrap_or(charts.len() as i64);
+                charts.push(pending_chart_for_node(
+                    &child.children[0],
+                    Some(child),
+                    z_order,
+                ));
             }
             _ => {
                 // Fallback: extract any text.
@@ -242,25 +284,47 @@ fn emit_table(slide: &mut ooxml_pml::SlideBuilder, table_node: &Node) {
     }
 }
 
-/// Write a `chart` node (ADR 0016) to the slide. Per ADR 0016 Decision 4, an
-/// OOXML-sourced `chart` node always carries its original chart-part XML
-/// verbatim (`prop::OOXML_CHART_XML`), so the common case is a byte-exact
-/// re-emit; only a chart node with no raw XML at all (constructed
-/// programmatically, or from a non-OOXML source) falls back to
+/// Build a [`PendingChart`] for a `chart` node (ADR 0016). Per ADR 0016
+/// Decision 4, an OOXML-sourced `chart` node always carries its original
+/// chart-part XML verbatim (`prop::OOXML_CHART_XML`), so the common case is
+/// a byte-exact re-emit; only a chart node with no raw XML at all
+/// (constructed programmatically, or from a non-OOXML source) falls back to
 /// [`crate::chart::build_minimal_chart_xml`]'s best-effort generator — see
 /// that function's doc comment for its (documented) v1 semantic-core scope.
 ///
-/// Like the xlsx writer, the chart's original anchor position isn't
-/// captured anywhere in the `chart`/`chart_series` IR shape, so this uses a
-/// fixed default anchor (same values `emit_table` above uses for its own
-/// default placement) rather than the original location — a known,
-/// documented v1 gap, not a silent drop of the chart itself.
-fn emit_chart(slide: &mut ooxml_pml::SlideBuilder, chart_node: &Node) {
+/// `container` is the wrapping `positioned_container` (ADR 0015), when the
+/// chart was read with its real anchor. When `None` (a bare `chart` node
+/// with no positioning wrapper — e.g. a synthetic/non-OOXML-sourced chart),
+/// this falls back to a fixed default anchor (same values `emit_table`
+/// above uses for its own default placement).
+fn pending_chart_for_node(
+    chart_node: &Node,
+    container: Option<&Node>,
+    z_order: i64,
+) -> PendingChart {
     let chart_xml: Vec<u8> = match chart_node.props.get_str(prop::OOXML_CHART_XML) {
         Some(xml) => xml.as_bytes().to_vec(),
         None => crate::chart::build_minimal_chart_xml(chart_node).into_bytes(),
     };
-    slide.embed_chart(chart_xml, 457200, 1600200, 8229600, 4000000);
+    let (x, y, cx, cy, rot) = match container {
+        Some(c) => (
+            c.props.get_int(prop::POSITION_X).unwrap_or(457200),
+            c.props.get_int(prop::POSITION_Y).unwrap_or(1600200),
+            c.props.get_int(prop::POSITION_WIDTH).unwrap_or(8229600),
+            c.props.get_int(prop::POSITION_HEIGHT).unwrap_or(4000000),
+            c.props.get_int(prop::POSITION_ROTATION).map(|r| r as i32),
+        ),
+        None => (457200, 1600200, 8229600, 4000000, None),
+    };
+    PendingChart {
+        z_order,
+        xml: chart_xml,
+        x,
+        y,
+        cx,
+        cy,
+        rot,
+    }
 }
 
 fn emit_list(slide: &mut ooxml_pml::SlideBuilder, list_node: &Node) {

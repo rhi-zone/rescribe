@@ -281,4 +281,65 @@ mod tests {
         assert!(!result.value.is_empty());
         assert_eq!(&result.value[0..2], b"PK");
     }
+
+    /// A `chart` node wrapped in a `positioned_container` (ADR 0015/0016)
+    /// must round-trip its real x/y/width/height/rotation/z_order through
+    /// write → read, closing the "chart anchor position isn't captured"
+    /// gap: the write side must place the `p:graphicFrame` at the IR's
+    /// `position:*` values (not the old fixed default anchor), and the
+    /// read side must recover those same values from the anchor it wrote.
+    #[test]
+    fn test_chart_position_round_trips_through_write_and_read() {
+        use rescribe_core::Document as RescribeDocument;
+        use rescribe_std::Node as RescribeNode;
+        use rescribe_std::prop;
+
+        let raw_chart_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:layout/><c:barChart><c:ser><c:idx val="0"/><c:order val="0"/><c:cat><c:strRef><c:f>Sheet1!$A$2:$A$3</c:f><c:strCache><c:ptCount val="2"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt></c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#;
+
+        let chart = RescribeNode::new(node::CHART).prop(prop::OOXML_CHART_XML, raw_chart_xml);
+        let container = RescribeNode::new(node::POSITIONED_CONTAINER)
+            .prop(prop::POSITION_X, 914_400_i64) // 1 inch
+            .prop(prop::POSITION_Y, 457_200_i64) // 0.5 inch
+            .prop(prop::POSITION_WIDTH, 5_000_000_i64)
+            .prop(prop::POSITION_HEIGHT, 3_000_000_i64)
+            .prop(prop::POSITION_ROTATION, 5_400_000_i64) // 90 degrees
+            .prop(prop::POSITION_Z_ORDER, 0_i64)
+            .child(chart);
+        let slide_div = RescribeNode::new(node::DIV)
+            .prop("slide", 1i64)
+            .child(container);
+        let root = RescribeNode::new(node::DOCUMENT).child(slide_div);
+        let document = RescribeDocument::new().with_content(root);
+
+        let written = emit(&document).unwrap();
+        let reread = parse(&written.value).unwrap();
+
+        let reread_container = &reread.value.content.children[0].children[0];
+        assert_eq!(reread_container.kind.as_str(), node::POSITIONED_CONTAINER);
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_X),
+            Some(914_400)
+        );
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_Y),
+            Some(457_200)
+        );
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_WIDTH),
+            Some(5_000_000)
+        );
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_HEIGHT),
+            Some(3_000_000)
+        );
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_ROTATION),
+            Some(5_400_000)
+        );
+        assert_eq!(
+            reread_container.props.get_int(prop::POSITION_Z_ORDER),
+            Some(0)
+        );
+        assert_eq!(reread_container.children[0].kind.as_str(), node::CHART);
+    }
 }
