@@ -8808,3 +8808,49 @@ Still to implement, all separate follow-up work:
    `table_header`/`table_cell` reuse onto the new `sheet`/`sheet_row`/`sheet_cell` shape.
 4. Verify ODF rotation/z-order semantics before trusting `positioned_container`'s
    `position:rotation`/`position:z_order` properties for ODF round-tripping.
+
+## Chart IR shape (ADR 0016) — decided, not implemented (2026-08-16)
+
+**Decision recorded, implementation not started.** Charts (XLSX/PPTX via OOXML
+DrawingML's chart schema, ODS/ODP via ODF's `office:chart`) are currently dropped from
+the IR entirely — no `chart` node kind exists. Both OOXML backends already emit an
+explicit fidelity warning rather than silently dropping (`rescribe-fmt-ooxml/src/xlsx.rs`
+and `pptx/read.rs`, "chart data not represented in IR"), which is correct per CLAUDE.md,
+but the underlying gap remains open. Full design and reasoning:
+`docs/adr/0016-chart-ir-shape.md`.
+
+Decided:
+
+- New `rescribe-std` node kinds (not yet added to
+  `crates/nodes/rescribe-std/src/lib.rs`): `chart` (block-level) with `chart_series`
+  children.
+- Cell-range reference is a structured property, not a new node kind:
+  `chart:values-ref`/`chart:categories-ref` (`PropValue::String`, verbatim range-formula
+  string) on `chart_series`, following the same "leaf value on the owning node, not a
+  child node" precedent ADR 0015 Decision 2 set for `sheet_cell`'s typed value.
+- OOXML's cached snapshot (`numCache`/`StrCache`) is preserved: `chart:values`/
+  `chart:categories` (`PropValue::List`) hold either the literal data (no `-ref` set) or
+  the cached snapshot paired with a `-ref` (reference-backed). ODF has no cache
+  equivalent — an ODF-sourced series legitimately has `-ref` with no cache.
+- `chart:type` is an open string (`PropValue::String`), not a closed enum — matches the
+  one existing convention checked across all of `rescribe-std` (`NodeKind` and
+  `value:type` are both open strings with documented known values, no closed enum
+  anywhere in the crate for a similarly finite category).
+- v1 semantic scope: `chart` node's `title`, `chart:type`, `chart:legend`/
+  `chart:legend-position`, `chart:has-category-axis`/`chart:has-value-axis`;
+  `chart_series`'s `title` plus the values/categories properties above. Everything
+  beyond v1 (3D variants, combo charts, trendlines, error bars, per-point styling) is
+  **not** dropped — the `chart` node always also carries the full verbatim chart-part
+  XML as a raw property (`ooxml:chart-xml`/`odf:chart-xml`), so v1 is a correct partial
+  implementation (lossless round-trip via the raw blob) rather than a lossy one.
+
+Not implemented, all separate follow-up work:
+
+1. Add the new node kinds and `chart:*` properties to `rescribe-std`.
+2. Wire `rescribe-fmt-ooxml/src/xlsx.rs` and `pptx/read.rs` (plus write sides) onto
+   `ooxml-dml`'s `dml-charts`-gated generated types (already codegen'd,
+   `crates/formats/ooxml-dml/src/generated.rs`) rather than `ooxml-sml/src/
+   workbook.rs`'s existing ad hoc chart XML walk.
+3. Wire `odf-fmt`'s `rescribe` module for `office:chart`.
+4. Add `fixtures/xlsx/`, `fixtures/pptx/`, `fixtures/ods/`, `fixtures/odp/` chart
+   fixtures per CLAUDE.md's "no new feature without a fixture" rule.
