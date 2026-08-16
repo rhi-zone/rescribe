@@ -1593,22 +1593,62 @@ impl PageSetupOptions {
 // Chart embedding (sml-charts feature)
 // ============================================================================
 
+/// How a [`ChartEntry`] is anchored to the sheet.
+///
+/// Two independent shapes, not derived from one another — see
+/// [`build_drawing_xml`]'s doc comment for why each is written as a
+/// different `xdr:*Anchor` element.
+#[cfg(feature = "sml-charts")]
+#[derive(Debug)]
+enum ChartAnchorKind {
+    /// Cell-unit anchor (the original [`SheetBuilder::embed_chart`] API):
+    /// both corners specified directly in whole cells, zero offset.
+    /// Written as `xdr:twoCellAnchor` — unchanged wire format, so charts
+    /// embedded via `embed_chart` keep byte-for-byte the same drawing XML
+    /// this crate has always produced.
+    Cell {
+        /// Column index (0-based) of the top-left anchor cell.
+        x: u32,
+        /// Row index (0-based) of the top-left anchor cell.
+        y: u32,
+        /// Width in cells.
+        width: u32,
+        /// Height in cells.
+        height: u32,
+    },
+    /// EMU-precise anchor (the new [`SheetBuilder::embed_chart_at_emu`]
+    /// API): a single anchor cell + EMU offset (resolved from the sheet's
+    /// own column-width/row-height state via the `anchor` module), with
+    /// size carried directly in EMU. Written as `xdr:oneCellAnchor`.
+    Emu {
+        /// 0-based anchor column.
+        col: u32,
+        /// EMU offset within the anchor column.
+        col_off: i64,
+        /// 0-based anchor row.
+        row: u32,
+        /// EMU offset within the anchor row.
+        row_off: i64,
+        /// Width, in EMU.
+        width_emu: i64,
+        /// Height, in EMU.
+        height_emu: i64,
+        /// Rotation, in OOXML's native 60,000ths-of-a-degree, when present.
+        rot: Option<i32>,
+    },
+}
+
 /// A chart embedded in a worksheet.
 ///
-/// Created by [`SheetBuilder::embed_chart`].
+/// Created by [`SheetBuilder::embed_chart`] or
+/// [`SheetBuilder::embed_chart_at_emu`].
 #[cfg(feature = "sml-charts")]
 #[derive(Debug)]
 struct ChartEntry {
     /// Raw chart XML bytes.
     chart_xml: Vec<u8>,
-    /// Column index (0-based) of the top-left anchor cell.
-    x: u32,
-    /// Row index (0-based) of the top-left anchor cell.
-    y: u32,
-    /// Width in cells.
-    width: u32,
-    /// Height in cells.
-    height: u32,
+    /// How this chart is anchored to the sheet.
+    anchor: ChartAnchorKind,
 }
 
 // ============================================================================
@@ -2689,13 +2729,92 @@ impl SheetBuilder {
         #[cfg(feature = "sml-charts")]
         self.charts.push(ChartEntry {
             chart_xml: chart_xml.to_vec(),
-            x,
-            y,
-            width,
-            height,
+            anchor: ChartAnchorKind::Cell {
+                x,
+                y,
+                width,
+                height,
+            },
         });
         #[cfg(not(feature = "sml-charts"))]
         let _ = (chart_xml, x, y, width, height);
+        self
+    }
+
+    /// Embed a chart at a precise EMU position and size (ADR 0015
+    /// `positioned_container` applied to ADR 0016 chart placement), rather
+    /// than [`embed_chart`](Self::embed_chart)'s whole-cell units.
+    ///
+    /// `(x_emu, y_emu)` is the top-left corner and `(width_emu, height_emu)`
+    /// the size, all in EMU (914,400 per inch). `rot`, when present, is
+    /// OOXML's native 60,000ths-of-a-degree rotation
+    /// (`xdr:graphicFrame/xdr:xfrm/@rot`).
+    ///
+    /// The EMU position is resolved to a single anchor cell + EMU offset
+    /// using the sheet's *own* column-width/row-height state (whatever
+    /// `set_column_width`/`set_column_width_range`/`set_row_height` have
+    /// already set on this `SheetBuilder`, falling back to the same
+    /// defaults [`crate::anchor`] documents when unset) — so call the
+    /// column/row setters first if precise placement matters. The chart is
+    /// written as `xdr:oneCellAnchor` (see [`build_drawing_xml`]'s doc
+    /// comment for why, over `xdr:twoCellAnchor`): the size travels
+    /// directly in EMU via `xdr:ext`, so only the anchor corner needs
+    /// resolving, not a second "to" corner — one resolution instead of two,
+    /// and the width/height round-trip exactly regardless of column-width
+    /// resolution rounding.
+    ///
+    /// Requires the `sml-charts` feature.
+    pub fn embed_chart_at_emu(
+        &mut self,
+        chart_xml: &[u8],
+        x_emu: i64,
+        y_emu: i64,
+        width_emu: i64,
+        height_emu: i64,
+        rot: Option<i32>,
+    ) -> &mut Self {
+        #[cfg(feature = "sml-charts")]
+        {
+            #[cfg(feature = "sml-styling")]
+            let cols: &[types::Columns] = &self.worksheet.cols;
+            #[cfg(not(feature = "sml-styling"))]
+            let cols: &[types::Columns] = &[];
+            #[cfg(feature = "sml-styling")]
+            let sheet_format = self.worksheet.sheet_format.as_deref();
+            #[cfg(not(feature = "sml-styling"))]
+            let sheet_format: Option<&types::SheetFormat> = None;
+            // `set_row_height` stores into `self.row_heights`, only
+            // materialized into `self.worksheet.sheet_data.row` at write
+            // time (see `build_rows`) — synthesize the equivalent `Row`
+            // list here so the resolver sees row heights set before this
+            // call.
+            let synth_rows: Vec<types::Row> = self
+                .row_heights
+                .iter()
+                .map(|(r, h)| types::Row {
+                    reference: Some(*r),
+                    height: Some(*h),
+                    ..Default::default()
+                })
+                .collect();
+
+            let (col, col_off) = crate::anchor::emu_to_col_marker(x_emu, cols, sheet_format);
+            let (row, row_off) = crate::anchor::emu_to_row_marker(y_emu, &synth_rows, sheet_format);
+            self.charts.push(ChartEntry {
+                chart_xml: chart_xml.to_vec(),
+                anchor: ChartAnchorKind::Emu {
+                    col,
+                    col_off,
+                    row,
+                    row_off,
+                    width_emu,
+                    height_emu,
+                    rot,
+                },
+            });
+        }
+        #[cfg(not(feature = "sml-charts"))]
+        let _ = (chart_xml, x_emu, y_emu, width_emu, height_emu, rot);
         self
     }
 
@@ -4545,8 +4664,27 @@ impl WorkbookBuilder {
 
 /// Build the `<xdr:wsDr>` drawing XML for a set of chart entries.
 ///
-/// Each chart gets a `<xdr:twoCellAnchor>` referencing `rId{n}` where `n` is
-/// the 1-based index into the drawing part's own relationship list.
+/// Each chart gets a `rId{n}` referencing the 1-based index into the
+/// drawing part's own relationship list. The anchor element written per
+/// entry depends on [`ChartAnchorKind`]:
+///
+/// - [`ChartAnchorKind::Cell`] (the original `embed_chart` cell-unit API)
+///   is written as `xdr:twoCellAnchor` — unchanged from this crate's
+///   original wire format.
+/// - [`ChartAnchorKind::Emu`] (the EMU-precise `embed_chart_at_emu` API,
+///   ADR 0015 `positioned_container` applied to ADR 0016 chart placement)
+///   is written as `xdr:oneCellAnchor`. **Design choice**: `oneCellAnchor`
+///   was chosen over `twoCellAnchor` for this path because its `xdr:ext`
+///   carries width/height directly in EMU — only the anchor (`from`)
+///   corner needs resolving to cell+offset, not a second "to" corner, so
+///   the chart's size round-trips exactly (no column-width-resolution
+///   rounding compounding across two resolved corners) while its position
+///   is still cell-relative (move-with-cells, matching Excel's own
+///   default `editAs` behavior for either anchor type). Both anchor types
+///   are legal per `EG_Anchor` (ECMA-376 Part 1 §20.5.2.35) for a
+///   `graphicFrame`, and real-world Excel accepts either for a chart — this
+///   is an implementation-shape choice, not a spec or compatibility
+///   requirement.
 ///
 /// ECMA-376 Part 1, §20.5 (SpreadsheetDrawingML).
 #[cfg(feature = "sml-charts")]
@@ -4563,32 +4701,71 @@ fn build_drawing_xml(charts: &[ChartEntry], _first_chart_num: usize) -> String {
 
     for (idx, chart) in charts.iter().enumerate() {
         let rel_id = idx + 1; // 1-based within the drawing .rels
-        let to_col = chart.x + chart.width;
-        let to_row = chart.y + chart.height;
-        xml.push_str(&format!(
-            r#"
+        let nv_pr_id = idx + 2; // must be >= 2 to avoid conflicts
+        let name_n = idx + 1;
+
+        match &chart.anchor {
+            ChartAnchorKind::Cell {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                let to_col = x + width;
+                let to_row = y + height;
+                xml.push_str(&format!(
+                    r#"
 <xdr:twoCellAnchor>
-  <xdr:from><xdr:col>{}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-  <xdr:to><xdr:col>{}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+  <xdr:from><xdr:col>{x}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{y}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+  <xdr:to><xdr:col>{to_col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{to_row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
   <xdr:graphicFrame macro="">
     <xdr:nvGraphicFramePr>
-      <xdr:cNvPr id="{}" name="Chart {}"/>
+      <xdr:cNvPr id="{nv_pr_id}" name="Chart {name_n}"/>
       <xdr:cNvGraphicFramePr/>
     </xdr:nvGraphicFramePr>
     <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
     <a:graphic>
       <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
-        <c:chart r:id="rId{}"/>
+        <c:chart r:id="rId{rel_id}"/>
       </a:graphicData>
     </a:graphic>
   </xdr:graphicFrame>
   <xdr:clientData/>
-</xdr:twoCellAnchor>"#,
-            chart.x, chart.y, to_col, to_row,
-            idx + 2, // nvPr id (must be >= 2 to avoid conflicts)
-            idx + 1,
-            rel_id,
-        ));
+</xdr:twoCellAnchor>"#
+                ));
+            }
+            ChartAnchorKind::Emu {
+                col,
+                col_off,
+                row,
+                row_off,
+                width_emu,
+                height_emu,
+                rot,
+            } => {
+                let rot_attr = rot.map(|r| format!(" rot=\"{r}\"")).unwrap_or_default();
+                xml.push_str(&format!(
+                    r#"
+<xdr:oneCellAnchor>
+  <xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>{col_off}</xdr:colOff><xdr:row>{row}</xdr:row><xdr:rowOff>{row_off}</xdr:rowOff></xdr:from>
+  <xdr:ext cx="{width_emu}" cy="{height_emu}"/>
+  <xdr:graphicFrame macro="">
+    <xdr:nvGraphicFramePr>
+      <xdr:cNvPr id="{nv_pr_id}" name="Chart {name_n}"/>
+      <xdr:cNvGraphicFramePr/>
+    </xdr:nvGraphicFramePr>
+    <xdr:xfrm{rot_attr}><a:off x="0" y="0"/><a:ext cx="{width_emu}" cy="{height_emu}"/></xdr:xfrm>
+    <a:graphic>
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+        <c:chart r:id="rId{rel_id}"/>
+      </a:graphicData>
+    </a:graphic>
+  </xdr:graphicFrame>
+  <xdr:clientData/>
+</xdr:oneCellAnchor>"#
+                ));
+            }
+        }
     }
 
     xml.push_str("\n</xdr:wsDr>");
@@ -6894,6 +7071,67 @@ mod tests {
             v
         };
         assert_eq!(chart_bytes, chart_xml);
+    }
+
+    /// `embed_chart_at_emu` writes a `oneCellAnchor` (not `twoCellAnchor`),
+    /// and its EMU position/size/rotation round-trips through
+    /// `Workbook::resolved_sheet`'s anchor resolution — exercising the
+    /// write-side resolver (EMU -> cell+offset) against the read-side
+    /// resolver (cell+offset -> EMU) end to end, including a non-trivial
+    /// rotation (90°, OOXML's 60,000ths-of-a-degree units: `90 * 60000`).
+    #[cfg(feature = "sml-charts")]
+    #[test]
+    fn test_embed_chart_at_emu_round_trips_through_write_and_read() {
+        use std::io::Cursor;
+
+        let chart_xml = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart/>
+</c:chartSpace>"#;
+
+        let mut wb = WorkbookBuilder::new();
+        let sheet = wb.add_sheet("Sheet1");
+        sheet.set_column_width_range("D", "L", 10.0);
+        sheet.embed_chart_at_emu(
+            chart_xml,
+            1_600_200,
+            0,
+            5_334_000,
+            2_857_500,
+            Some(90 * 60_000),
+        );
+
+        let mut buffer = Cursor::new(Vec::new());
+        wb.write(&mut buffer).unwrap();
+        buffer.set_position(0);
+
+        // Drawing XML uses `oneCellAnchor`, not `twoCellAnchor`.
+        let mut zip = zip::ZipArchive::new(buffer.clone()).unwrap();
+        let drawing_bytes = {
+            let mut f = zip.by_name("xl/drawings/drawing1.xml").unwrap();
+            let mut v = Vec::new();
+            std::io::Read::read_to_end(&mut f, &mut v).unwrap();
+            v
+        };
+        let drawing_str = String::from_utf8_lossy(&drawing_bytes);
+        assert!(
+            drawing_str.contains("oneCellAnchor"),
+            "expected oneCellAnchor, got: {drawing_str}"
+        );
+        assert!(!drawing_str.contains("twoCellAnchor"));
+        assert!(drawing_str.contains(r#"rot="5400000""#));
+
+        // Read it back and confirm the resolved anchor matches what was written.
+        buffer.set_position(0);
+        let mut workbook = crate::workbook::Workbook::from_reader(buffer).unwrap();
+        let resolved = workbook.resolved_sheet(0).unwrap();
+        let chart = &resolved.charts()[0];
+        assert_eq!(chart.x, Some(1_600_200));
+        assert_eq!(chart.y, Some(0));
+        assert_eq!(chart.width, Some(5_334_000));
+        assert_eq!(chart.height, Some(2_857_500));
+        assert_eq!(chart.rotation, Some(90 * 60_000));
+        assert_eq!(chart.z_order, 0);
     }
 
     /// Two charts in the same sheet should get separate rId/chart numbers.
