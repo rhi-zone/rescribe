@@ -95,6 +95,9 @@ covers — see `docs/format-audit.md`'s `CC` column.
 - [ ] Unicode escape (`\u` + fallback) — (missing; `\u8364?€` pattern)
 - [ ] picture (`\pict`) — (missing; embedded image data)
 - [ ] object (`\object`) — (missing; OLE object)
+- [x] drawing shape position/size/z-order/named property (`\shp`/`\shpinst`) — `shape` (maps to `positioned_container`; see ADR 0015 and `rescribe.rs`'s module doc comment for sourcing — twips unit corroborated but not spec-text-confirmed for the shape words specifically, no rotation control word exists so `position:rotation` is never set)
+- [ ] legacy `\do` drawing object standalone at top level — (missing; no real-world sample found showing this outside a `\shp` group's `\shprslt` fallback — see `rescribe.rs`'s "`\do` is not modeled as its own `positioned_container` producer" note)
+- [ ] shape old-reader fallback content (`\shprslt`) round-trip fixture — (missing a dedicated fixture; captured verbatim as `rtf:shprslt` but not exercised by a fixture yet)
 
 ## Composition (integration)
 

@@ -1,0 +1,22 @@
+{
+  "description": "RTF drawing shape (\\shp/\\shpinst) — position/size/z-order/named property, with \\shptxt text content, embedded inline in a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Body text " } },
+    {
+      "path": "/0/1",
+      "kind": "positioned_container",
+      "props": {
+        "position:x": 0,
+        "position:y": 0,
+        "position:width": 2000250,
+        "position:height": 1000125,
+        "position:z_order": 2
+      }
+    },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Shape text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " more body." } }
+  ]
+}
