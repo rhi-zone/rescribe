@@ -150,13 +150,16 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
             }))
         }
         OdfBody::Spreadsheet(body) => {
-            let doc = convert_spreadsheet_body(body, &ctx);
-            Ok(ConversionResult::ok(Document {
-                content: doc,
-                resources,
-                metadata,
-                source: None,
-            }))
+            let (doc, warnings) = convert_spreadsheet_body(body, &ctx);
+            Ok(ConversionResult::with_warnings(
+                Document {
+                    content: doc,
+                    resources,
+                    metadata,
+                    source: None,
+                },
+                warnings,
+            ))
         }
         OdfBody::Presentation(body) => {
             let (doc, warnings) = convert_presentation_body(body, &ctx);
@@ -208,8 +211,12 @@ fn convert_text_body(body_blocks: &[TextBlock], ctx: &StyleCtx<'_>) -> Node {
 
 // ── Spreadsheet body conversion (ADR 0015) ─────────────────────────────────────
 
-fn convert_spreadsheet_body(body: &SpreadsheetBody, ctx: &StyleCtx<'_>) -> Node {
+fn convert_spreadsheet_body(
+    body: &SpreadsheetBody,
+    ctx: &StyleCtx<'_>,
+) -> (Node, Vec<FidelityWarning>) {
     let mut doc = Node::new(node::DOCUMENT);
+    let mut warnings = Vec::new();
     for sheet in &body.sheets {
         let mut sheet_node = Node::new(node::SHEET);
         if let Some(name) = &sheet.name {
@@ -234,9 +241,17 @@ fn convert_spreadsheet_body(body: &SpreadsheetBody, ctx: &StyleCtx<'_>) -> Node 
             }
             sheet_node = sheet_node.child(row_node);
         }
+        // Floating shapes anchored to the sheet (`<table:shapes>`), e.g. an
+        // embedded chart (ADR 0016) — siblings of the `sheet_row` children,
+        // reusing the same `positioned_container` shape conversion as ODP.
+        for (i, shape) in sheet.shapes.iter().enumerate() {
+            let (shape_node, mut w) = convert_draw_shape(shape, i as i64, ctx);
+            warnings.append(&mut w);
+            sheet_node = sheet_node.child(shape_node);
+        }
         doc = doc.child(sheet_node);
     }
-    doc
+    (doc, warnings)
 }
 
 fn convert_sheet_cell(cell: &SheetCell, ctx: &StyleCtx<'_>) -> Node {
@@ -436,10 +451,53 @@ fn convert_draw_shape(
                     .prop(prop::CONTENT, raw.as_str()),
             );
         }
+        DrawShapeContent::Chart { chart, .. } => {
+            n = n.child(convert_chart(chart));
+        }
         DrawShapeContent::Empty => {}
     }
 
     (n, warnings)
+}
+
+/// Convert an embedded `Chart` (ADR 0016) to a `chart` IR node.
+fn convert_chart(chart: &crate::ast::Chart) -> Node {
+    let mut n = Node::new(node::CHART);
+    if let Some(title) = &chart.title {
+        n = n.prop(prop::TITLE, title.as_str());
+    }
+    if let Some(class) = &chart.chart_class {
+        n = n.prop(prop::CHART_TYPE, class.as_str());
+    }
+    n = n.prop(prop::CHART_LEGEND, chart.legend);
+    if chart.legend
+        && let Some(pos) = &chart.legend_position
+    {
+        n = n.prop(prop::CHART_LEGEND_POSITION, pos.as_str());
+    }
+    n = n.prop(prop::CHART_HAS_CATEGORY_AXIS, chart.has_category_axis);
+    n = n.prop(prop::CHART_HAS_VALUE_AXIS, chart.has_value_axis);
+    // Unconditional raw fallback (ADR 0016 Decision 4) — the v1 semantic
+    // fields above are a subset, not a lossy projection; this is what keeps
+    // read/write round-trippable regardless of what the subset doesn't cover.
+    n = n.prop(prop::ODF_CHART_XML, chart.raw_xml.as_str());
+
+    for series in &chart.series {
+        let mut s = Node::new(node::CHART_SERIES);
+        if let Some(vref) = &series.values_cell_range_address {
+            s = s.prop(prop::CHART_VALUES_REF, vref.as_str());
+        }
+        if let Some(cref) = &series.categories_cell_range_address {
+            s = s.prop(prop::CHART_CATEGORIES_REF, cref.as_str());
+        }
+        // ODF has no per-series title text (only a cell reference via
+        // `chart:label-cell-address`, and ODF has no cached-value snapshot
+        // to resolve it against — see `ast::ChartSeries`'s doc comment), so
+        // `TITLE` is intentionally left unset here.
+        n = n.child(s);
+    }
+
+    n
 }
 
 /// Parse an ODF `svg:length`/`text:coordinate` attribute (a decimal number

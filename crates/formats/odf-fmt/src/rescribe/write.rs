@@ -42,6 +42,7 @@ struct WriteCtx<'a> {
     resources: &'a ResourceMap,
     images: HashMap<String, Vec<u8>>,
     next_image: usize,
+    next_chart: usize,
 }
 
 impl<'a> WriteCtx<'a> {
@@ -50,6 +51,7 @@ impl<'a> WriteCtx<'a> {
             resources,
             images: HashMap::new(),
             next_image: 0,
+            next_chart: 0,
         }
     }
 
@@ -63,6 +65,19 @@ impl<'a> WriteCtx<'a> {
         let path = format!("Pictures/image{}{ext}", self.next_image);
         self.images.insert(path.clone(), resource.data.clone());
         Some((path, Some(resource.mime_type.clone())))
+    }
+
+    /// Allocate an embedded-object directory name for a chart (ADR 0016),
+    /// e.g. `"Object 1"` (no `./` prefix, no trailing slash). The chart's
+    /// `content.xml` bytes themselves are built by `writer::emit` (which
+    /// walks the final `OdfDocument` AST directly), not staged here — a
+    /// chart embedded via a directly-constructed AST (bypassing this
+    /// `rescribe` module entirely) must round-trip identically, so that
+    /// content-building logic lives in the crate's core writer, not this
+    /// IR-adapter layer.
+    fn resolve_chart(&mut self) -> String {
+        self.next_chart += 1;
+        format!("Object {}", self.next_chart)
     }
 }
 
@@ -127,7 +142,11 @@ fn convert_document(doc: &Document) -> (OdfDocument, Vec<FidelityWarning>) {
     let (mimetype, body) = match detect_body_kind(&doc.content) {
         BodyKind::Spreadsheet => (
             "application/vnd.oasis.opendocument.spreadsheet",
-            OdfBody::Spreadsheet(convert_spreadsheet_document(&doc.content, &mut ctx)),
+            OdfBody::Spreadsheet(convert_spreadsheet_document(
+                &doc.content,
+                &mut ctx,
+                &mut warnings,
+            )),
         ),
         BodyKind::Presentation => (
             "application/vnd.oasis.opendocument.presentation",
@@ -157,29 +176,39 @@ fn convert_document(doc: &Document) -> (OdfDocument, Vec<FidelityWarning>) {
 
 // ── Spreadsheet document conversion (ADR 0015) ─────────────────────────────────
 
-fn convert_spreadsheet_document(content: &Node, ctx: &mut WriteCtx<'_>) -> SpreadsheetBody {
+fn convert_spreadsheet_document(
+    content: &Node,
+    ctx: &mut WriteCtx<'_>,
+    warnings: &mut Vec<FidelityWarning>,
+) -> SpreadsheetBody {
     let mut sheets = Vec::new();
     for sheet_node in &content.children {
         if sheet_node.kind.as_str() != node::SHEET {
             continue;
         }
         let mut rows = Vec::new();
-        for row_node in &sheet_node.children {
-            if row_node.kind.as_str() != node::SHEET_ROW {
-                continue;
+        let mut shapes = Vec::new();
+        for (i, child) in sheet_node.children.iter().enumerate() {
+            if child.kind.as_str() == node::SHEET_ROW {
+                let cells = child
+                    .children
+                    .iter()
+                    .filter(|c| c.kind.as_str() == node::SHEET_CELL)
+                    .map(|c| convert_sheet_cell_node(c, ctx))
+                    .collect();
+                rows.push(SheetRow {
+                    style_name: child.props.get_str("odf:style-name").map(str::to_owned),
+                    default_cell_style_name: None,
+                    repeated: child.props.get_int("odf:repeated").map(|v| v as u32),
+                    cells,
+                });
+            } else if child.kind.as_str() == node::POSITIONED_CONTAINER {
+                // Floating shapes anchored to the sheet (`<table:shapes>`),
+                // e.g. an embedded chart (ADR 0016) — siblings of
+                // `sheet_row` in the IR, same `positioned_container` shape
+                // ODP uses.
+                shapes.push(convert_positioned_container(child, ctx, i as i64, warnings));
             }
-            let cells = row_node
-                .children
-                .iter()
-                .filter(|c| c.kind.as_str() == node::SHEET_CELL)
-                .map(|c| convert_sheet_cell_node(c, ctx))
-                .collect();
-            rows.push(SheetRow {
-                style_name: row_node.props.get_str("odf:style-name").map(str::to_owned),
-                default_cell_style_name: None,
-                repeated: row_node.props.get_int("odf:repeated").map(|v| v as u32),
-                cells,
-            });
         }
         sheets.push(Sheet {
             name: sheet_node.props.get_str("odf:name").map(str::to_owned),
@@ -190,6 +219,7 @@ fn convert_spreadsheet_document(content: &Node, ctx: &mut WriteCtx<'_>) -> Sprea
             print: sheet_node.props.get_bool("odf:print").unwrap_or(false),
             columns: Vec::new(),
             rows,
+            shapes,
         });
     }
     SpreadsheetBody {
@@ -340,6 +370,13 @@ fn convert_positioned_container(
                 .unwrap_or_default()
                 .to_owned(),
         )
+    } else if n.children.len() == 1 && n.children[0].kind.as_str() == node::CHART {
+        let chart_ast = convert_chart_node_to_ast(&n.children[0]);
+        let href = ctx.resolve_chart();
+        DrawShapeContent::Chart {
+            href,
+            chart: chart_ast,
+        }
     } else if n.children.is_empty() {
         DrawShapeContent::Empty
     } else {
@@ -371,6 +408,52 @@ fn resolve_length(n: &Node, raw_key: &str, emu_key: &str) -> Option<String> {
     n.props
         .get_int(emu_key)
         .map(|emu| format!("{}cm", emu as f64 / 360_000.0))
+}
+
+// ── Chart conversion (ADR 0016) ─────────────────────────────────────────────
+
+/// Convert a `chart` IR node back into `ast::Chart`.
+fn convert_chart_node_to_ast(n: &Node) -> crate::ast::Chart {
+    let series = n
+        .children
+        .iter()
+        .filter(|c| c.kind.as_str() == node::CHART_SERIES)
+        .map(|c| crate::ast::ChartSeries {
+            series_class: None,
+            values_cell_range_address: c.props.get_str(prop::CHART_VALUES_REF).map(str::to_owned),
+            categories_cell_range_address: c
+                .props
+                .get_str(prop::CHART_CATEGORIES_REF)
+                .map(str::to_owned),
+        })
+        .collect();
+    crate::ast::Chart {
+        chart_class: n.props.get_str(prop::CHART_TYPE).map(str::to_owned),
+        title: n.props.get_str(prop::TITLE).map(str::to_owned),
+        legend: n.props.get_bool(prop::CHART_LEGEND).unwrap_or(false),
+        legend_position: n
+            .props
+            .get_str(prop::CHART_LEGEND_POSITION)
+            .map(str::to_owned),
+        has_category_axis: n
+            .props
+            .get_bool(prop::CHART_HAS_CATEGORY_AXIS)
+            .unwrap_or(false),
+        has_value_axis: n
+            .props
+            .get_bool(prop::CHART_HAS_VALUE_AXIS)
+            .unwrap_or(false),
+        series,
+        // Present unconditionally on every ODF-sourced chart (ADR 0016
+        // Decision 4); absent for a chart constructed synthetically (e.g.
+        // projected from another format's IR) — `build_chart_content_xml`
+        // synthesizes a minimal chart body in that case.
+        raw_xml: n
+            .props
+            .get_str(prop::ODF_CHART_XML)
+            .unwrap_or("")
+            .to_owned(),
+    }
 }
 
 /// Build a minimal set of named styles for the IR constructs the writer emits.
@@ -970,6 +1053,148 @@ mod tests {
         assert_eq!(
             reread_cell.props.get_str(prop::VALUE_FORMULA),
             Some("of:=1+41")
+        );
+    }
+
+    // ── Chart translation (ADR 0016) ─────────────────────────────────────
+
+    #[test]
+    fn synthesized_chart_round_trips_through_ast_and_reader() {
+        let series = Node::new(rescribe_std::node::CHART_SERIES)
+            .prop(prop::CHART_VALUES_REF, "Sales.B2:B3")
+            .prop(prop::CHART_CATEGORIES_REF, "Sales.A2:A3");
+        let chart = Node::new(rescribe_std::node::CHART)
+            .prop(prop::TITLE, "Revenue")
+            .prop(prop::CHART_TYPE, "bar")
+            .prop(prop::CHART_LEGEND, true)
+            .prop(prop::CHART_LEGEND_POSITION, "end")
+            .prop(prop::CHART_HAS_CATEGORY_AXIS, true)
+            .prop(prop::CHART_HAS_VALUE_AXIS, true)
+            .child(series);
+        let shape = Node::new(rescribe_std::node::POSITIONED_CONTAINER)
+            .prop(prop::POSITION_X, 0_i64)
+            .prop(prop::POSITION_Y, 0_i64)
+            .prop(prop::POSITION_WIDTH, 3_600_000_i64)
+            .prop(prop::POSITION_HEIGHT, 2_400_000_i64)
+            .prop(prop::POSITION_Z_ORDER, 0_i64)
+            .child(chart);
+        let sheet = Node::new(rescribe_std::node::SHEET)
+            .prop("odf:name", "Sales")
+            .child(
+                Node::new(rescribe_std::node::SHEET_ROW).child(
+                    Node::new(rescribe_std::node::SHEET_CELL)
+                        .prop(prop::VALUE_TYPE, "string")
+                        .prop(prop::VALUE, "Widget"),
+                ),
+            )
+            .child(shape);
+        let document = Document {
+            content: Node::new(rescribe_std::node::DOCUMENT).child(sheet),
+            resources: Default::default(),
+            metadata: Default::default(),
+            source: None,
+        };
+
+        let result = emit(&document).unwrap();
+        let bytes = result.value;
+        assert_eq!(&bytes[0..2], b"PK");
+
+        let parsed = crate::parser::parse(&bytes).expect("parse failed");
+        let crate::ast::OdfBody::Spreadsheet(body) = &parsed.value.body else {
+            panic!("expected Spreadsheet body, got {:?}", parsed.value.body);
+        };
+        let ast_sheet = &body.sheets[0];
+        assert_eq!(ast_sheet.shapes.len(), 1, "chart shape not written");
+        let crate::ast::DrawShapeContent::Chart { href, chart } = &ast_sheet.shapes[0].content
+        else {
+            panic!(
+                "expected Chart shape content, got {:?}",
+                ast_sheet.shapes[0].content
+            );
+        };
+        assert_eq!(href, "Object 1");
+        assert_eq!(chart.chart_class.as_deref(), Some("bar"));
+        assert_eq!(chart.title.as_deref(), Some("Revenue"));
+        assert!(chart.legend);
+        assert_eq!(chart.legend_position.as_deref(), Some("end"));
+        assert!(chart.has_category_axis);
+        assert!(chart.has_value_axis);
+        assert_eq!(
+            chart.series[0].values_cell_range_address.as_deref(),
+            Some("Sales.B2:B3")
+        );
+        assert_eq!(
+            chart.series[0].categories_cell_range_address.as_deref(),
+            Some("Sales.A2:A3")
+        );
+
+        // Full cycle back through the rescribe reader.
+        let reread = crate::rescribe::read::parse(&bytes).unwrap();
+        let reread_sheet = &reread.value.content.children[0];
+        let reread_chart_container = reread_sheet
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == rescribe_std::node::POSITIONED_CONTAINER)
+            .expect("no positioned_container in reread sheet");
+        let reread_chart = &reread_chart_container.children[0];
+        assert_eq!(reread_chart.kind.as_str(), rescribe_std::node::CHART);
+        assert_eq!(reread_chart.props.get_str(prop::TITLE), Some("Revenue"));
+        assert_eq!(reread_chart.props.get_str(prop::CHART_TYPE), Some("bar"));
+        assert_eq!(reread_chart.props.get_bool(prop::CHART_LEGEND), Some(true));
+        assert!(reread_chart.props.get_str(prop::ODF_CHART_XML).is_some());
+        let reread_series = &reread_chart.children[0];
+        assert_eq!(
+            reread_series.kind.as_str(),
+            rescribe_std::node::CHART_SERIES
+        );
+        assert_eq!(
+            reread_series.props.get_str(prop::CHART_VALUES_REF),
+            Some("Sales.B2:B3")
+        );
+        assert_eq!(
+            reread_series.props.get_str(prop::CHART_CATEGORIES_REF),
+            Some("Sales.A2:A3")
+        );
+    }
+
+    #[test]
+    fn raw_odf_chart_xml_round_trips_verbatim() {
+        // A chart with `odf:chart-xml` set (as if read from a real ODF
+        // file) must re-emit that exact blob rather than synthesizing one
+        // (ADR 0016 Decision 4).
+        let raw = "<office:chart><chart:chart chart:class=\"chart:pie\">\
+                    <chart:title><text:p>Custom</text:p></chart:title>\
+                    </chart:chart></office:chart>";
+        let chart = Node::new(rescribe_std::node::CHART)
+            .prop(prop::ODF_CHART_XML, raw)
+            .prop(prop::CHART_LEGEND, false)
+            .prop(prop::CHART_HAS_CATEGORY_AXIS, false)
+            .prop(prop::CHART_HAS_VALUE_AXIS, false);
+        let shape = Node::new(rescribe_std::node::POSITIONED_CONTAINER)
+            .prop(prop::POSITION_Z_ORDER, 0_i64)
+            .child(chart);
+        let sheet = Node::new(rescribe_std::node::SHEET)
+            .prop("odf:name", "S1")
+            .child(shape);
+        let document = Document {
+            content: Node::new(rescribe_std::node::DOCUMENT).child(sheet),
+            resources: Default::default(),
+            metadata: Default::default(),
+            source: None,
+        };
+
+        let bytes = emit(&document).unwrap().value;
+        let parsed = crate::parser::parse(&bytes).expect("parse failed");
+        let crate::ast::OdfBody::Spreadsheet(body) = &parsed.value.body else {
+            panic!("expected Spreadsheet body");
+        };
+        let crate::ast::DrawShapeContent::Chart { chart, .. } = &body.sheets[0].shapes[0].content
+        else {
+            panic!("expected Chart shape content");
+        };
+        assert_eq!(
+            chart.raw_xml, raw,
+            "raw chart XML did not round-trip verbatim"
         );
     }
 
